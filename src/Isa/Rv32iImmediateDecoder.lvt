@@ -1,0 +1,46 @@
+namespace Eccelerators.RiscV.Isa
+
+/**
+ * Decodes RV32I immediates and returns sign-extended 32-bit values.
+ */
+component Rv32iImmediateDecoder
+{
+	public fn DecodeI(instruction: uint) uint
+	{
+		var imm: uint = (instruction >> 20) & (0xfff as uint)
+		return Rv32iWord.SignExtend(imm, 12)
+	}
+
+	public fn DecodeS(instruction: uint) uint
+	{
+		var lowBits: uint = (instruction >> 7) & (0x1f as uint)
+		var highBits: uint = (instruction >> 25) & (0x7f as uint)
+		var imm: uint = (highBits << 5) | lowBits
+		return Rv32iWord.SignExtend(imm, 12)
+	}
+
+	public fn DecodeB(instruction: uint) uint
+	{
+		var bit12: uint = (instruction >> 31) & (0x1 as uint)
+		var bit11: uint = (instruction >> 7) & (0x1 as uint)
+		var bits10To5: uint = (instruction >> 25) & (0x3f as uint)
+		var bits4To1: uint = (instruction >> 8) & (0x0f as uint)
+		var imm: uint = (bit12 << 12) | (bit11 << 11) | (bits10To5 << 5) | (bits4To1 << 1)
+		return Rv32iWord.SignExtend(imm, 13)
+	}
+
+	public fn DecodeU(instruction: uint) uint
+	{
+		return instruction & (0xfffff000 as uint)
+	}
+
+	public fn DecodeJ(instruction: uint) uint
+	{
+		var bit20: uint = (instruction >> 31) & (0x1 as uint)
+		var bits10To1: uint = (instruction >> 21) & (0x03ff as uint)
+		var bit11: uint = (instruction >> 20) & (0x1 as uint)
+		var bits19To12: uint = (instruction >> 12) & (0xff as uint)
+		var imm: uint = (bit20 << 20) | (bits19To12 << 12) | (bit11 << 11) | (bits10To1 << 1)
+		return Rv32iWord.SignExtend(imm, 21)
+	}
+}

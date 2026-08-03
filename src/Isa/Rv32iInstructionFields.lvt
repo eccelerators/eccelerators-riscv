@@ -1,0 +1,37 @@
+namespace Eccelerators.RiscV.Isa
+
+/**
+ * Extracts fields from 32-bit RV32I instruction words.
+ */
+component Rv32iInstructionFields
+{
+	public fn GetOpcode(instruction: uint) int
+	{
+		return (instruction & (0x7f as uint)) as int
+	}
+
+	public fn GetRd(instruction: uint) int
+	{
+		return ((instruction >> 7) & (0x1f as uint)) as int
+	}
+
+	public fn GetFunct3(instruction: uint) int
+	{
+		return ((instruction >> 12) & (0x07 as uint)) as int
+	}
+
+	public fn GetRs1(instruction: uint) int
+	{
+		return ((instruction >> 15) & (0x1f as uint)) as int
+	}
+
+	public fn GetRs2(instruction: uint) int
+	{
+		return ((instruction >> 20) & (0x1f as uint)) as int
+	}
+
+	public fn GetFunct7(instruction: uint) int
+	{
+		return ((instruction >> 25) & (0x7f as uint)) as int
+	}
+}

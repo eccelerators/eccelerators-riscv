@@ -1,0 +1,260 @@
+namespace Eccelerators.RiscV.Bus
+
+using Eccelerators.RiscV.Core
+using Livt.IO
+
+/**
+ * Demo data bus that maps data RAM and a tiny UART MMIO window.
+ */
+component Rv32UartMmioDataBus: IRv32DataBus
+{
+	public const RAM_BASE: uint = 0x00010000
+
+	public const RAM_LIMIT: uint = 0x00010100
+
+	public const UART_TX_ADDRESS: uint = 0x40000000
+
+	public const UART_STATUS_ADDRESS: uint = 0x40000004
+
+	public const CAPTURE_BYTES: int = 64
+
+	ram: Rv32SimpleDataRam
+
+	uart: Uart
+
+	loopbackLine: logic = 0b1
+
+	captured: byte[64]
+
+	captureCount: int
+
+	error: bool
+
+	readData: uint
+
+	new()
+	{
+		this.ram = new Rv32SimpleDataRam()
+		this.uart = new Uart(this.loopbackLine, this.loopbackLine)
+		this.Clear()
+	}
+
+	public fn Clear()
+	{
+		var index: int = 0
+		this.ram.Clear()
+		this.uart.ClearReceiveBuffer()
+		this.uart.ClearTransmitBuffer()
+		this.uart.ClearFrameErrors()
+
+		while (index < CAPTURE_BYTES) {
+			this.captured[index] = 0x00
+			index++
+		}
+
+		this.captureCount = 0
+		this.error = false
+		this.readData = 0
+	}
+
+	public fn LoadDataByte(address: int, value: byte)
+	{
+		this.ram.LoadDataByte(address, value)
+	}
+
+	public fn ReadDataByte(address: int) byte
+	{
+		return this.ram.ReadDataByte(address)
+	}
+
+	public fn LoadMappedDataByte(address: uint, value: byte)
+	{
+		var translatedAddress: uint = 0
+
+		if (this.IsRamAddressValid(address, Rv32iLoadStoreUnit.WIDTH_BYTE) == false) {
+			return
+		}
+
+		translatedAddress = address - RAM_BASE
+		this.ram.LoadDataByte(translatedAddress as int, value)
+	}
+
+	public fn ReadMappedDataByte(address: uint) byte
+	{
+		var translatedAddress: uint = 0
+
+		if (this.IsRamAddressValid(address, Rv32iLoadStoreUnit.WIDTH_BYTE) == false) {
+			return 0x00
+		}
+
+		translatedAddress = address - RAM_BASE
+		return this.ram.ReadDataByte(translatedAddress as int)
+	}
+
+	public fn GetCapturedByte(index: int) byte
+	{
+		if (index < 0) {
+			return 0x00
+		}
+
+		if (index >= this.captureCount) {
+			return 0x00
+		}
+
+		return this.captured[index]
+	}
+
+	public fn GetCapturedCount() int
+	{
+		return this.captureCount
+	}
+
+	public fn GetUartTransmitSpace() int
+	{
+		return this.uart.GetTransmitSpace()
+	}
+
+	public fn GetUartAvailableBytes() int
+	{
+		return this.uart.GetAvailableBytes()
+	}
+
+	public fn ReceiveUartByte() byte
+	{
+		return this.uart.Receive()
+	}
+
+	override fn Load(address: uint, width: int, signedLoad: bool)
+	{
+		var translatedAddress: uint = 0
+		this.error = false
+		this.readData = 0
+
+		if (address == UART_STATUS_ADDRESS) {
+			if (width != Rv32iLoadStoreUnit.WIDTH_WORD) {
+				this.error = true
+				return
+			}
+
+			if (this.uart.GetTransmitSpace() > 0) {
+				this.readData = 1
+				return
+			}
+
+			this.readData = 0
+			return
+		}
+
+		if (this.IsRamAddressValid(address, width) == true) {
+			translatedAddress = address - RAM_BASE
+			this.ram.Load(translatedAddress, width, signedLoad)
+			this.readData = this.ram.GetReadData()
+
+			if (this.ram.HasError() == true) {
+				this.error = true
+			}
+
+			return
+		}
+
+		this.error = true
+	}
+
+	override fn Store(address: uint, width: int, value: uint)
+	{
+		var translatedAddress: uint = 0
+		var byteValue: byte = (value & (0xff as uint)) as byte
+		var accepted: bool = false
+		var captureIndex: int = this.captureCount
+		this.error = false
+		this.readData = 0
+
+		if (address == UART_TX_ADDRESS) {
+			if (width != Rv32iLoadStoreUnit.WIDTH_BYTE) {
+				this.error = true
+				return
+			}
+
+			if (this.captureCount >= CAPTURE_BYTES) {
+				this.error = true
+				return
+			}
+
+			accepted = this.uart.Transmit(byteValue)
+
+			if (accepted == false) {
+				this.error = true
+				return
+			}
+
+			this.captured[captureIndex] = byteValue
+			this.captureCount++
+			return
+		}
+
+		if (this.IsRamAddressValid(address, width) == true) {
+			translatedAddress = address - RAM_BASE
+			this.ram.Store(translatedAddress, width, value)
+
+			if (this.ram.HasError() == true) {
+				this.error = true
+			}
+
+			return
+		}
+
+		this.error = true
+	}
+
+	override fn GetReadData() uint
+	{
+		return this.readData
+	}
+
+	override fn HasError() bool
+	{
+		return this.error
+	}
+
+	fn IsRamAddressValid(address: uint, width: int) bool
+	{
+		var endAddress: uint = 0
+
+		if (this.IsWidthValid(width) == false) {
+			return false
+		}
+
+		endAddress = address + (width as uint)
+
+		if (address < RAM_BASE) {
+			return false
+		}
+
+		if (address >= RAM_LIMIT) {
+			return false
+		}
+
+		if (endAddress > RAM_LIMIT) {
+			return false
+		}
+
+		return true
+	}
+
+	fn IsWidthValid(width: int) bool
+	{
+		if (width == Rv32iLoadStoreUnit.WIDTH_BYTE) {
+			return true
+		}
+
+		if (width == Rv32iLoadStoreUnit.WIDTH_HALF) {
+			return true
+		}
+
+		if (width == Rv32iLoadStoreUnit.WIDTH_WORD) {
+			return true
+		}
+
+		return false
+	}
+}

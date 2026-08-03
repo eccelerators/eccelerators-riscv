@@ -1,0 +1,85 @@
+namespace Eccelerators.RiscV.Platform
+
+using Eccelerators.RiscV.Core
+
+/**
+ * Minimal RV32I system wrapper with zero-based local program/data memories.
+ */
+component Rv32iMinimalSystem
+{
+	public const PROGRAM_WORDS: int = 64
+
+	public const DATA_BYTES: int = 256
+
+	core: Rv32iReferenceCore
+
+	new()
+	{
+		this.core = new Rv32iReferenceCore()
+	}
+
+	public fn Reset()
+	{
+		this.core.Reset()
+	}
+
+	public fn ClearProgram()
+	{
+		this.core.ClearProgram()
+	}
+
+	public fn ClearData()
+	{
+		this.core.ClearData()
+	}
+
+	public fn LoadInstruction(index: int, instruction: uint)
+	{
+		this.core.LoadInstruction(index, instruction)
+	}
+
+	public fn LoadDataByte(address: int, value: byte)
+	{
+		this.core.LoadDataByte(address, value)
+	}
+
+	public fn Run(maxSteps: int)
+	{
+		this.core.Run(maxSteps)
+	}
+
+	public fn Step()
+	{
+		this.core.Step()
+	}
+
+	public fn ReadDataByte(address: int) byte
+	{
+		return this.core.ReadDataByte(address)
+	}
+
+	public fn ReadRegister(index: int) uint
+	{
+		return this.core.ReadRegister(index)
+	}
+
+	public fn GetPc() uint
+	{
+		return this.core.GetPc()
+	}
+
+	public fn IsHalted() bool
+	{
+		return this.core.IsHalted()
+	}
+
+	public fn GetTrapCause() int
+	{
+		return this.core.GetTrapCause()
+	}
+
+	public fn GetTrapPc() uint
+	{
+		return this.core.GetTrapPc()
+	}
+}

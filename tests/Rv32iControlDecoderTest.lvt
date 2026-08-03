@@ -1,0 +1,36 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
+
+@Test
+component Rv32iControlDecoderTest
+{
+	decoder: Rv32iControlDecoder
+
+	new()
+	{
+		this.decoder = new Rv32iControlDecoder()
+	}
+
+	@Test
+	fn TestDecodesRepresentativeInstructions()
+	{
+		this.decoder.Decode(0x123450b7)
+		assert this.decoder.IsLegal() == true
+		assert this.decoder.GetInstructionClass() == Rv32iControlDecoder.CLASS_LUI
+		this.decoder.Decode(0x00208463)
+		assert this.decoder.IsLegal() == true
+		assert this.decoder.GetBranchKind() == Rv32iBranchUnit.BRANCH_BEQ
+		this.decoder.Decode(0x4010d113)
+		assert this.decoder.IsLegal() == true
+		assert this.decoder.GetAluOperation() == Rv32iAlu.OP_SRA
+	}
+
+	@Test
+	fn TestRejectsIllegalInstruction()
+	{
+		this.decoder.Decode(0xffffffff)
+		assert this.decoder.IsLegal() == false
+	}
+}

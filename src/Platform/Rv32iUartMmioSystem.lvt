@@ -1,0 +1,123 @@
+namespace Eccelerators.RiscV.Platform
+
+using Eccelerators.RiscV.Bus
+using Eccelerators.RiscV.Core
+
+/**
+ * UART-MMIO system that composes the canonical RV32I execution engine with the
+ * package's mapped RAM/UART data bus.
+ */
+component Rv32iUartMmioSystem
+{
+	instructionBus: Rv32SimpleInstructionRom
+
+	dataBus: Rv32UartMmioDataBus
+
+	core: Rv32iInjectedBusCore
+
+	new()
+	{
+		this.instructionBus = new Rv32SimpleInstructionRom()
+		this.dataBus = new Rv32UartMmioDataBus()
+		this.core = new Rv32iInjectedBusCore(this.instructionBus, this.dataBus)
+	}
+
+	public fn Reset()
+	{
+		this.core.Reset()
+	}
+
+	public fn ClearProgram()
+	{
+		this.instructionBus.Clear()
+	}
+
+	public fn ClearData()
+	{
+		this.dataBus.Clear()
+	}
+
+	public fn LoadInstruction(index: int, instruction: uint)
+	{
+		this.instructionBus.LoadInstruction(index, instruction)
+	}
+
+	public fn LoadDataByte(address: int, value: byte)
+	{
+		this.dataBus.LoadDataByte(address, value)
+	}
+
+	public fn Run(maxSteps: int)
+	{
+		this.core.Run(maxSteps)
+	}
+
+	public fn Step()
+	{
+		this.core.Step()
+	}
+
+	public fn ReadDataByte(address: int) byte
+	{
+		return this.dataBus.ReadDataByte(address)
+	}
+
+	public fn LoadMappedDataByte(address: uint, value: byte)
+	{
+		this.dataBus.LoadMappedDataByte(address, value)
+	}
+
+	public fn ReadMappedDataByte(address: uint) byte
+	{
+		return this.dataBus.ReadMappedDataByte(address)
+	}
+
+	public fn ReadRegister(index: int) uint
+	{
+		return this.core.ReadRegister(index)
+	}
+
+	public fn GetPc() uint
+	{
+		return this.core.GetPc()
+	}
+
+	public fn IsHalted() bool
+	{
+		return this.core.IsHalted()
+	}
+
+	public fn GetTrapCause() int
+	{
+		return this.core.GetTrapCause()
+	}
+
+	public fn GetTrapPc() uint
+	{
+		return this.core.GetTrapPc()
+	}
+
+	public fn GetCapturedUartByte(index: int) byte
+	{
+		return this.dataBus.GetCapturedByte(index)
+	}
+
+	public fn GetCapturedUartCount() int
+	{
+		return this.dataBus.GetCapturedCount()
+	}
+
+	public fn GetUartStatus() uint
+	{
+		if (this.dataBus.GetUartTransmitSpace() > 0) {
+			return 1
+		}
+
+		return 0
+	}
+
+	public fn HasDataBusError() bool
+	{
+		return this.core.HasDataBusError()
+	}
+}

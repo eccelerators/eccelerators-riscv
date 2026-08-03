@@ -1,0 +1,45 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * RV32I register file with x0 hardwired to zero.
+ */
+component Rv32iRegisterFile
+{
+	registers: uint[32]
+
+	public fn Reset()
+	{
+		var index: int = 0
+
+		while (index < 32) {
+			this.registers[index] = 0
+			index++
+		}
+	}
+
+	public fn Read(index: int) uint
+	{
+		if (index <= 0) {
+			return 0
+		}
+
+		if (index >= 32) {
+			return 0
+		}
+
+		return this.registers[index]
+	}
+
+	public fn Write(index: int, value: uint)
+	{
+		if (index <= 0) {
+			return
+		}
+
+		if (index >= 32) {
+			return
+		}
+
+		this.registers[index] = value
+	}
+}

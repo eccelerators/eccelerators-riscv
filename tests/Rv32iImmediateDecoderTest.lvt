@@ -1,0 +1,41 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+
+@Test
+component Rv32iImmediateDecoderTest
+{
+	decoder: Rv32iImmediateDecoder
+
+	new()
+	{
+		this.decoder = new Rv32iImmediateDecoder()
+	}
+
+	@Test
+	fn TestIImmediatePositiveAndNegative()
+	{
+		assert this.decoder.DecodeI(0x00500093) == 5
+		assert this.decoder.DecodeI(0xfff00093) == (0xffffffff as uint)
+	}
+
+	@Test
+	fn TestSImmediate()
+	{
+		assert this.decoder.DecodeS(0x00102023) == 0
+		assert this.decoder.DecodeS(0xfe102e23) == (0xfffffffc as uint)
+	}
+
+	@Test
+	fn TestBImmediate()
+	{
+		assert this.decoder.DecodeB(0x00208463) == 8
+	}
+
+	@Test
+	fn TestUAndJImmediate()
+	{
+		assert this.decoder.DecodeU(0x123450b7) == (0x12345000 as uint)
+		assert this.decoder.DecodeJ(0x008000ef) == 8
+	}
+}

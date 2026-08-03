@@ -1,0 +1,180 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Isa
+
+@Test
+component Rv32iFullCoreInstructionMatrixTest
+{
+	core: Rv32iReferenceCore
+
+	new()
+	{
+		this.core = new Rv32iReferenceCore()
+	}
+
+	fn Prepare()
+	{
+		this.core.ClearProgram()
+		this.core.ClearData()
+		this.core.Reset()
+	}
+
+	@Test
+	fn TestImmediateAluInstructions()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00500093) // addi x1, x0, 5
+		this.core.LoadInstruction(1, 0x0060a113) // slti x2, x1, 6
+		this.core.LoadInstruction(2, 0x0060b193) // sltiu x3, x1, 6
+		this.core.LoadInstruction(3, 0x0030c213) // xori x4, x1, 3
+		this.core.LoadInstruction(4, 0x0020e293) // ori x5, x1, 2
+		this.core.LoadInstruction(5, 0x0070f313) // andi x6, x1, 7
+		this.core.LoadInstruction(6, 0x00209393) // slli x7, x1, 2
+		this.core.LoadInstruction(7, 0x0013d413) // srli x8, x7, 1
+		this.core.LoadInstruction(8, 0xff800513) // addi x10, x0, -8
+		this.core.LoadInstruction(9, 0x40155493) // srai x9, x10, 1
+		this.core.LoadInstruction(10, 0x00100073) // ebreak
+		this.core.Run(16)
+		assert this.core.ReadRegister(1) == 5
+		assert this.core.ReadRegister(2) == 1
+		assert this.core.ReadRegister(3) == 1
+		assert this.core.ReadRegister(4) == 6
+		assert this.core.ReadRegister(5) == 7
+		assert this.core.ReadRegister(6) == 5
+		assert this.core.ReadRegister(7) == 20
+		assert this.core.ReadRegister(8) == 10
+		assert this.core.ReadRegister(9) == (0xfffffffc as uint)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+
+	@Test
+	fn TestRegisterAluInstructions()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00800093) // addi x1, x0, 8
+		this.core.LoadInstruction(1, 0x00300113) // addi x2, x0, 3
+		this.core.LoadInstruction(2, 0x002081b3) // add x3, x1, x2
+		this.core.LoadInstruction(3, 0x40208233) // sub x4, x1, x2
+		this.core.LoadInstruction(4, 0x002092b3) // sll x5, x1, x2
+		this.core.LoadInstruction(5, 0x0020a333) // slt x6, x1, x2
+		this.core.LoadInstruction(6, 0x0020b3b3) // sltu x7, x1, x2
+		this.core.LoadInstruction(7, 0x0020c433) // xor x8, x1, x2
+		this.core.LoadInstruction(8, 0x0020d4b3) // srl x9, x1, x2
+		this.core.LoadInstruction(9, 0x4020d533) // sra x10, x1, x2
+		this.core.LoadInstruction(10, 0x0020e5b3) // or x11, x1, x2
+		this.core.LoadInstruction(11, 0x0020f633) // and x12, x1, x2
+		this.core.LoadInstruction(12, 0x00100073) // ebreak
+		this.core.Run(18)
+		assert this.core.ReadRegister(3) == 11
+		assert this.core.ReadRegister(4) == 5
+		assert this.core.ReadRegister(5) == 64
+		assert this.core.ReadRegister(6) == 0
+		assert this.core.ReadRegister(7) == 0
+		assert this.core.ReadRegister(8) == 11
+		assert this.core.ReadRegister(9) == 1
+		assert this.core.ReadRegister(10) == 1
+		assert this.core.ReadRegister(11) == 11
+		assert this.core.ReadRegister(12) == 0
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+
+	@Test
+	fn TestLoadStoreEdges()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0xfff00093) // addi x1, x0, -1
+		this.core.LoadInstruction(1, 0x00100023) // sb x1, 0(x0)
+		this.core.LoadInstruction(2, 0x00000103) // lb x2, 0(x0)
+		this.core.LoadInstruction(3, 0x00004183) // lbu x3, 0(x0)
+		this.core.LoadInstruction(4, 0xfff00213) // addi x4, x0, -1
+		this.core.LoadInstruction(5, 0x00401123) // sh x4, 2(x0)
+		this.core.LoadInstruction(6, 0x00201283) // lh x5, 2(x0)
+		this.core.LoadInstruction(7, 0x00205303) // lhu x6, 2(x0)
+		this.core.LoadInstruction(8, 0x00100073) // ebreak
+		this.core.Run(14)
+		assert this.core.ReadRegister(2) == (0xffffffff as uint)
+		assert this.core.ReadRegister(3) == 0xff
+		assert this.core.ReadRegister(5) == (0xffffffff as uint)
+		assert this.core.ReadRegister(6) == 0xffff
+		assert this.core.ReadDataByte(0) == 0xff
+		assert this.core.ReadDataByte(2) == 0xff
+		assert this.core.ReadDataByte(3) == 0xff
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+
+	@Test
+	fn TestNegativeBranchAndJalrLowBitClear()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00000093) // addi x1, x0, 0
+		this.core.LoadInstruction(1, 0x00300113) // addi x2, x0, 3
+		this.core.LoadInstruction(2, 0x00108093) // addi x1, x1, 1
+		this.core.LoadInstruction(3, 0xfe209ee3) // bne x1, x2, -4
+		this.core.LoadInstruction(4, 0x01800093) // addi x1, x0, 24
+		this.core.LoadInstruction(5, 0x001082e7) // jalr x5, 1(x1)
+		this.core.LoadInstruction(6, 0x04d00313) // addi x6, x0, 77
+		this.core.LoadInstruction(7, 0x00100073) // ebreak
+		this.core.Run(24)
+		assert this.core.ReadRegister(1) == 24
+		assert this.core.ReadRegister(5) == 24
+		assert this.core.ReadRegister(6) == 77
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+
+	@Test
+	fn TestSignedAndUnsignedBranchInstructions()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0xfff00093) // addi x1, x0, -1
+		this.core.LoadInstruction(1, 0x00100113) // addi x2, x0, 1
+		this.core.LoadInstruction(2, 0x0020c463) // blt x1, x2, +8
+		this.core.LoadInstruction(3, 0x00100073) // ebreak: reached only if branch is not taken
+		this.core.LoadInstruction(4, 0x00700193) // addi x3, x0, 7
+		this.core.LoadInstruction(5, 0x00100073) // ebreak
+		this.core.Run(8)
+		assert this.core.ReadRegister(3) == 7
+
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00100093) // addi x1, x0, 1
+		this.core.LoadInstruction(1, 0xfff00113) // addi x2, x0, -1
+		this.core.LoadInstruction(2, 0x0020d463) // bge x1, x2, +8
+		this.core.LoadInstruction(3, 0x00100073) // ebreak: reached only if branch is not taken
+		this.core.LoadInstruction(4, 0x00700193) // addi x3, x0, 7
+		this.core.LoadInstruction(5, 0x00100073) // ebreak
+		this.core.Run(8)
+		assert this.core.ReadRegister(3) == 7
+
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00100093) // addi x1, x0, 1
+		this.core.LoadInstruction(1, 0xfff00113) // addi x2, x0, -1
+		this.core.LoadInstruction(2, 0x0020e463) // bltu x1, x2, +8
+		this.core.LoadInstruction(3, 0x00100073) // ebreak: reached only if branch is not taken
+		this.core.LoadInstruction(4, 0x00700193) // addi x3, x0, 7
+		this.core.LoadInstruction(5, 0x00100073) // ebreak
+		this.core.Run(8)
+		assert this.core.ReadRegister(3) == 7
+
+		this.Prepare()
+		this.core.LoadInstruction(0, 0xfff00093) // addi x1, x0, -1
+		this.core.LoadInstruction(1, 0x00100113) // addi x2, x0, 1
+		this.core.LoadInstruction(2, 0x0020f463) // bgeu x1, x2, +8
+		this.core.LoadInstruction(3, 0x00100073) // ebreak: reached only if branch is not taken
+		this.core.LoadInstruction(4, 0x00700193) // addi x3, x0, 7
+		this.core.LoadInstruction(5, 0x00100073) // ebreak
+		this.core.Run(8)
+		assert this.core.ReadRegister(3) == 7
+	}
+
+	@Test
+	fn TestFenceAndMemoryRangeTrap()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x0000000f) // fence
+		this.core.LoadInstruction(1, 0x12c00093) // addi x1, x0, 300
+		this.core.LoadInstruction(2, 0x00100113) // addi x2, x0, 1
+		this.core.LoadInstruction(3, 0x0020a023) // sw x2, 0(x1)
+		this.core.Run(8)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_BUS_ERROR
+	}
+}

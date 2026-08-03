@@ -1,0 +1,31 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Core
+
+@Test
+component Rv32iBranchUnitTest
+{
+	branches: Rv32iBranchUnit
+
+	new()
+	{
+		this.branches = new Rv32iBranchUnit()
+	}
+
+	@Test
+	fn TestEqualityBranches()
+	{
+		assert this.branches.IsTaken(Rv32iBranchUnit.BRANCH_BEQ, 5, 5) == true
+		assert this.branches.IsTaken(Rv32iBranchUnit.BRANCH_BNE, 5, 6) == true
+		assert this.branches.IsTaken(Rv32iBranchUnit.BRANCH_BEQ, 5, 6) == false
+	}
+
+	@Test
+	fn TestSignedAndUnsignedBranches()
+	{
+		assert this.branches.IsTaken(Rv32iBranchUnit.BRANCH_BLT, (0xffffffff as uint), 1) == true
+		assert this.branches.IsTaken(Rv32iBranchUnit.BRANCH_BGE, 1, (0xffffffff as uint)) == true
+		assert this.branches.IsTaken(Rv32iBranchUnit.BRANCH_BLTU, (0xffffffff as uint), 1) == false
+		assert this.branches.IsTaken(Rv32iBranchUnit.BRANCH_BGEU, (0xffffffff as uint), 1) == true
+	}
+}

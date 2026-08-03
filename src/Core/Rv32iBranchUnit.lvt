@@ -1,0 +1,52 @@
+namespace Eccelerators.RiscV.Core
+
+using Eccelerators.RiscV.Isa
+
+/**
+ * Evaluates RV32I branch conditions.
+ */
+component Rv32iBranchUnit
+{
+	public const BRANCH_NONE: int = 0
+
+	public const BRANCH_BEQ: int = 1
+
+	public const BRANCH_BNE: int = 2
+
+	public const BRANCH_BLT: int = 3
+
+	public const BRANCH_BGE: int = 4
+
+	public const BRANCH_BLTU: int = 5
+
+	public const BRANCH_BGEU: int = 6
+
+	public fn IsTaken(branchKind: int, leftValue: uint, rightValue: uint) bool
+	{
+		if (branchKind == BRANCH_BEQ) {
+			return leftValue == rightValue
+		}
+
+		if (branchKind == BRANCH_BNE) {
+			return leftValue != rightValue
+		}
+
+		if (branchKind == BRANCH_BLT) {
+			return Rv32iWord.IsSignedLessThan(leftValue, rightValue)
+		}
+
+		if (branchKind == BRANCH_BGE) {
+			return Rv32iWord.IsSignedLessThan(leftValue, rightValue) == false
+		}
+
+		if (branchKind == BRANCH_BLTU) {
+			return leftValue < rightValue
+		}
+
+		if (branchKind == BRANCH_BGEU) {
+			return leftValue >= rightValue
+		}
+
+		return false
+	}
+}

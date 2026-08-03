@@ -1,0 +1,31 @@
+[project]
+name = "Eccelerators.RiscV"
+version = "0.1.0"
+path = "src"
+outdir = "out"
+
+[tests]
+path = "tests"
+components = [
+    "Rv32iConstantsTest",
+    "Rv32iInstructionFieldsTest",
+    "Rv32iImmediateDecoderTest",
+    "Rv32iRegisterFileTest",
+    "Rv32iAluTest",
+    "Rv32iBranchUnitTest",
+    "Rv32iLoadStoreUnitTest",
+    "Rv32iControlDecoderTest",
+    "Rv32iCoreInstructionTest",
+    "Rv32SimpleMemoryTest",
+    "Rv32iMinimalSystemTest",
+    "Rv32iFullDecodeMatrixTest",
+    "Rv32iFullCoreInstructionMatrixTest",
+    "Rv32iBusCoreTest",
+    "Rv32iInjectedBusApiTest",
+    "Rv32iInjectedBusParityTest",
+    "Rv32iPackageApiTest",
+    "Rv32iUartHelloWorldTest"
+]
+
+[dependencies]
+"Livt.IO" = "0.2.0"

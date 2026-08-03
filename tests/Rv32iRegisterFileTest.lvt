@@ -1,0 +1,33 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Core
+
+@Test
+component Rv32iRegisterFileTest
+{
+	registers: Rv32iRegisterFile
+
+	new()
+	{
+		this.registers = new Rv32iRegisterFile()
+	}
+
+	@Test
+	fn TestX0IsHardwiredZero()
+	{
+		this.registers.Reset()
+		this.registers.Write(0, 99)
+		assert this.registers.Read(0) == 0
+	}
+
+	@Test
+	fn TestWriteAndReadRegisters()
+	{
+		this.registers.Reset()
+		this.registers.Write(1, 11)
+		this.registers.Write(31, 31)
+		assert this.registers.Read(1) == 11
+		assert this.registers.Read(31) == 31
+		assert this.registers.Read(2) == 0
+	}
+}

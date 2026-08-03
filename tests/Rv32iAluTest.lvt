@@ -1,0 +1,34 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Core
+
+@Test
+component Rv32iAluTest
+{
+	alu: Rv32iAlu
+
+	new()
+	{
+		this.alu = new Rv32iAlu()
+	}
+
+	@Test
+	fn TestArithmeticAndLogic()
+	{
+		assert this.alu.Execute(Rv32iAlu.OP_ADD, 7, 5) == 12
+		assert this.alu.Execute(Rv32iAlu.OP_SUB, 7, 5) == 2
+		assert this.alu.Execute(Rv32iAlu.OP_AND, 0x0f, 0x33) == 0x03
+		assert this.alu.Execute(Rv32iAlu.OP_OR, 0x0f, 0x30) == 0x3f
+		assert this.alu.Execute(Rv32iAlu.OP_XOR, 0x0f, 0x33) == 0x3c
+	}
+
+	@Test
+	fn TestShiftsAndComparisons()
+	{
+		assert this.alu.Execute(Rv32iAlu.OP_SLL, 1, 3) == 8
+		assert this.alu.Execute(Rv32iAlu.OP_SRL, 8, 1) == 4
+		assert this.alu.Execute(Rv32iAlu.OP_SRA, (0x80000000 as uint), 1) == (0xc0000000 as uint)
+		assert this.alu.Execute(Rv32iAlu.OP_SLT, (0xffffffff as uint), 1) == 1
+		assert this.alu.Execute(Rv32iAlu.OP_SLTU, (0xffffffff as uint), 1) == 0
+	}
+}

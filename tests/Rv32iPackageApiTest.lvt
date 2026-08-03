@@ -1,0 +1,71 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Bus
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Platform
+using Eccelerators.RiscV.Isa
+
+@Test
+component Rv32iPackageApiTest
+{
+	system: Rv32iMinimalSystem
+
+	busCore: Rv32iBusCore
+
+	uartSystem: Rv32iUartMmioSystem
+
+	rom: Rv32SimpleInstructionRom
+
+	ram: Rv32SimpleDataRam
+
+	new()
+	{
+		this.system = new Rv32iMinimalSystem()
+		this.busCore = new Rv32iBusCore()
+		this.uartSystem = new Rv32iUartMmioSystem()
+		this.rom = new Rv32SimpleInstructionRom()
+		this.ram = new Rv32SimpleDataRam()
+	}
+
+	@Test
+	fn TestDocumentedEntryPointsAreUsable()
+	{
+		this.system.ClearProgram()
+		this.system.ClearData()
+		this.system.Reset()
+		assert Rv32iMinimalSystem.PROGRAM_WORDS == 64
+		assert Rv32iMinimalSystem.DATA_BYTES == 256
+		this.system.LoadInstruction(0, 0x04400093)
+		this.system.LoadInstruction(1, 0x00100073)
+		this.system.Run(4)
+		assert this.system.ReadRegister(1) == 0x44
+		assert this.system.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+		this.rom.Clear()
+		this.rom.LoadInstruction(0, 0x00100073)
+		this.rom.Request(0)
+		assert this.rom.GetInstruction() == (0x00100073 as uint)
+		this.ram.Clear()
+		this.ram.Store(0, 4, 0x00000044)
+		this.ram.Load(0, 4, false)
+		assert this.ram.GetReadData() == 0x44
+		this.busCore.ClearProgram()
+		this.busCore.ClearData()
+		this.busCore.Reset()
+		this.busCore.LoadInstruction(0, 0x05500093)
+		this.busCore.LoadInstruction(1, 0x00100073)
+		this.busCore.Run(4)
+		assert this.busCore.ReadRegister(1) == 0x55
+		assert this.busCore.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+		this.uartSystem.ClearProgram()
+		this.uartSystem.ClearData()
+		this.uartSystem.Reset()
+		this.uartSystem.LoadInstruction(0, 0x400000b7)
+		this.uartSystem.LoadInstruction(1, 0x05a00113)
+		this.uartSystem.LoadInstruction(2, 0x00208023)
+		this.uartSystem.LoadInstruction(3, 0x00100073)
+		this.uartSystem.Run(8)
+		assert this.uartSystem.GetCapturedUartCount() == 1
+		assert this.uartSystem.GetCapturedUartByte(0) == 0x5a
+		assert this.uartSystem.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+}

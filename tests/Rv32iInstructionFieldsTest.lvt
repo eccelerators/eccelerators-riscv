@@ -1,0 +1,36 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+
+@Test
+component Rv32iInstructionFieldsTest
+{
+	fields: Rv32iInstructionFields
+
+	new()
+	{
+		this.fields = new Rv32iInstructionFields()
+	}
+
+	@Test
+	fn TestRTypeFields()
+	{
+		var instruction: uint = 0x002081b3
+		assert this.fields.GetOpcode(instruction) == Rv32iConstants.OPCODE_OP
+		assert this.fields.GetRd(instruction) == 3
+		assert this.fields.GetRs1(instruction) == 1
+		assert this.fields.GetRs2(instruction) == 2
+		assert this.fields.GetFunct3(instruction) == 0
+		assert this.fields.GetFunct7(instruction) == 0
+	}
+
+	@Test
+	fn TestITypeFields()
+	{
+		var instruction: uint = 0x00500093
+		assert this.fields.GetOpcode(instruction) == Rv32iConstants.OPCODE_OP_IMM
+		assert this.fields.GetRd(instruction) == 1
+		assert this.fields.GetRs1(instruction) == 0
+		assert this.fields.GetFunct3(instruction) == 0
+	}
+}

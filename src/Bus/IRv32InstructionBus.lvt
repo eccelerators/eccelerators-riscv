@@ -1,0 +1,14 @@
+namespace Eccelerators.RiscV.Bus
+
+/**
+ * Synchronous RISC-V instruction fetch contract for 32-bit instruction words.
+ * Request completes before returning; result and error state are then available.
+ */
+interface IRv32InstructionBus
+{
+	fn Request(address: uint)
+
+	fn GetInstruction() uint
+
+	fn HasError() bool
+}

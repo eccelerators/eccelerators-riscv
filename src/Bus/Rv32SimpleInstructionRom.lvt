@@ -1,0 +1,82 @@
+namespace Eccelerators.RiscV.Bus
+
+/**
+ * Small synchronous instruction ROM for tests and minimal systems.
+ */
+component Rv32SimpleInstructionRom: IRv32InstructionBus
+{
+	public const WORD_COUNT: int = 64
+
+	words: uint[64]
+
+	error: bool
+
+	instruction: uint
+
+	new()
+	{
+		this.Clear()
+	}
+
+	public fn Clear()
+	{
+		var index: int = 0
+
+		while (index < WORD_COUNT) {
+			this.words[index] = 0
+			index++
+		}
+
+		this.error = false
+		this.instruction = 0
+	}
+
+	public fn LoadInstruction(index: int, instruction: uint)
+	{
+		if (index < 0) {
+			return
+		}
+
+		if (index >= WORD_COUNT) {
+			return
+		}
+
+		this.words[index] = instruction
+	}
+
+	override fn Request(address: uint)
+	{
+		var index: int = 0
+		this.error = false
+		this.instruction = 0
+
+		if ((address & (3 as uint)) != (0 as uint)) {
+			this.error = true
+			return
+		}
+
+		index = (address >> 2) as int
+
+		if (index < 0) {
+			this.error = true
+			return
+		}
+
+		if (index >= WORD_COUNT) {
+			this.error = true
+			return
+		}
+
+		this.instruction = this.words[index]
+	}
+
+	override fn GetInstruction() uint
+	{
+		return this.instruction
+	}
+
+	override fn HasError() bool
+	{
+		return this.error
+	}
+}

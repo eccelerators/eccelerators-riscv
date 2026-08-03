@@ -1,0 +1,186 @@
+namespace Eccelerators.RiscV.Bus
+
+using Eccelerators.RiscV.Core
+
+/**
+ * Small synchronous data RAM for tests and minimal systems.
+ */
+component Rv32SimpleDataRam: IRv32DataBus
+{
+	public const BYTE_COUNT: int = 256
+
+	data: byte[256]
+
+	loadStore: Rv32iLoadStoreUnit
+
+	error: bool
+
+	readData: uint
+
+	new()
+	{
+		this.loadStore = new Rv32iLoadStoreUnit()
+		this.Clear()
+	}
+
+	public fn Clear()
+	{
+		var index: int = 0
+
+		while (index < BYTE_COUNT) {
+			this.data[index] = 0x00
+			index++
+		}
+
+		this.error = false
+		this.readData = 0
+	}
+
+	public fn LoadDataByte(address: int, value: byte)
+	{
+		if (address < 0) {
+			return
+		}
+
+		if (address >= BYTE_COUNT) {
+			return
+		}
+
+		this.data[address] = value
+	}
+
+	public fn ReadDataByte(address: int) byte
+	{
+		if (address < 0) {
+			return 0x00
+		}
+
+		if (address >= BYTE_COUNT) {
+			return 0x00
+		}
+
+		return this.data[address]
+	}
+
+	override fn Load(address: uint, width: int, signedLoad: bool)
+	{
+		var memoryWord: uint = 0
+		var offset: int = (address & (3 as uint)) as int
+		this.error = false
+		this.readData = 0
+
+		if (this.IsRangeValid(address, width) == false) {
+			this.error = true
+			return
+		}
+
+		if (this.loadStore.IsMisaligned(address, width) == true) {
+			this.error = true
+			return
+		}
+
+		memoryWord = this.ReadWord(address)
+		this.readData = this.loadStore.ExtractLoad(memoryWord, offset, width, signedLoad)
+	}
+
+	override fn Store(address: uint, width: int, value: uint)
+	{
+		this.error = false
+		this.readData = 0
+
+		if (this.IsRangeValid(address, width) == false) {
+			this.error = true
+			return
+		}
+
+		if (this.loadStore.IsMisaligned(address, width) == true) {
+			this.error = true
+			return
+		}
+
+		this.WriteValue(address, value, width)
+	}
+
+	override fn GetReadData() uint
+	{
+		return this.readData
+	}
+
+	override fn HasError() bool
+	{
+		return this.error
+	}
+
+	fn IsRangeValid(address: uint, width: int) bool
+	{
+		var endAddress: uint = 0
+
+		if (this.IsWidthValid(width) == false) {
+			return false
+		}
+
+		endAddress = address + (width as uint)
+
+		if (address >= (BYTE_COUNT as uint)) {
+			return false
+		}
+
+		if (endAddress > (BYTE_COUNT as uint)) {
+			return false
+		}
+
+		return true
+	}
+
+	fn IsWidthValid(width: int) bool
+	{
+		if (width == Rv32iLoadStoreUnit.WIDTH_BYTE) {
+			return true
+		}
+
+		if (width == Rv32iLoadStoreUnit.WIDTH_HALF) {
+			return true
+		}
+
+		if (width == Rv32iLoadStoreUnit.WIDTH_WORD) {
+			return true
+		}
+
+		return false
+	}
+
+	fn ReadWord(address: uint) uint
+	{
+		var baseAddress: int = (address & (0xfffffffc as uint)) as int
+		var b0: uint = this.data[baseAddress] as uint
+		var b1Index: int = baseAddress + 1
+		var b2Index: int = baseAddress + 2
+		var b3Index: int = baseAddress + 3
+		var b1: uint = this.data[b1Index] as uint
+		var b2: uint = this.data[b2Index] as uint
+		var b3: uint = this.data[b3Index] as uint
+		return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+	}
+
+	fn WriteValue(address: uint, value: uint, width: int)
+	{
+		var baseAddress: int = address as int
+		var byteValue: byte = (value & (0xff as uint)) as byte
+		var secondAddress: int = baseAddress + 1
+		var secondByte: byte = ((value >> 8) & (0xff as uint)) as byte
+		var thirdAddress: int = baseAddress + 2
+		var thirdByte: byte = ((value >> 16) & (0xff as uint)) as byte
+		var fourthAddress: int = baseAddress + 3
+		var fourthByte: byte = ((value >> 24) & (0xff as uint)) as byte
+		this.data[baseAddress] = byteValue
+
+		if (width >= 2) {
+			this.data[secondAddress] = secondByte
+		}
+
+		if (width >= 4) {
+			this.data[thirdAddress] = thirdByte
+			this.data[fourthAddress] = fourthByte
+		}
+	}
+}

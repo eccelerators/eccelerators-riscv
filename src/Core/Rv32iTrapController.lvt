@@ -1,0 +1,42 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * Stores the simple halt/trap state used by the first RV32I core.
+ */
+component Rv32iTrapController
+{
+	halted: bool
+
+	trapCause: int
+
+	trapPc: uint
+
+	public fn Reset()
+	{
+		this.halted = false
+		this.trapCause = 0
+		this.trapPc = 0
+	}
+
+	public fn Trap(cause: int, pc: uint)
+	{
+		this.halted = true
+		this.trapCause = cause
+		this.trapPc = pc
+	}
+
+	public fn IsHalted() bool
+	{
+		return this.halted
+	}
+
+	public fn GetTrapCause() int
+	{
+		return this.trapCause
+	}
+
+	public fn GetTrapPc() uint
+	{
+		return this.trapPc
+	}
+}

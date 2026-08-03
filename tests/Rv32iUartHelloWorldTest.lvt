@@ -1,0 +1,132 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Bus
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Platform
+
+@Test
+component Rv32iUartHelloWorldTest
+{
+	system: Rv32iUartMmioSystem
+
+	bus: Rv32UartMmioDataBus
+
+	new()
+	{
+		this.system = new Rv32iUartMmioSystem()
+		this.bus = new Rv32UartMmioDataBus()
+	}
+
+	fn Prepare()
+	{
+		this.system.ClearProgram()
+		this.system.ClearData()
+		this.system.Reset()
+	}
+
+	fn LoadHelloProgram()
+	{
+		this.system.LoadInstruction(0, 0x400000b7)
+		this.system.LoadInstruction(1, 0x04800113)
+		this.system.LoadInstruction(2, 0x00208023)
+		this.system.LoadInstruction(3, 0x06500113)
+		this.system.LoadInstruction(4, 0x00208023)
+		this.system.LoadInstruction(5, 0x06c00113)
+		this.system.LoadInstruction(6, 0x00208023)
+		this.system.LoadInstruction(7, 0x06c00113)
+		this.system.LoadInstruction(8, 0x00208023)
+		this.system.LoadInstruction(9, 0x06f00113)
+		this.system.LoadInstruction(10, 0x00208023)
+		this.system.LoadInstruction(11, 0x00a00113)
+		this.system.LoadInstruction(12, 0x00208023)
+		this.system.LoadInstruction(13, 0x00100073)
+	}
+
+	@Test
+	fn TestHelloWorldWritesCharactersToUartMmio()
+	{
+		this.Prepare()
+		this.LoadHelloProgram()
+		this.system.Run(32)
+		assert this.system.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+		assert this.system.IsHalted() == true
+		assert this.system.GetCapturedUartCount() == 6
+		assert this.system.GetCapturedUartByte(0) == 0x48
+		assert this.system.GetCapturedUartByte(1) == 0x65
+		assert this.system.GetCapturedUartByte(2) == 0x6c
+		assert this.system.GetCapturedUartByte(3) == 0x6c
+		assert this.system.GetCapturedUartByte(4) == 0x6f
+		assert this.system.GetCapturedUartByte(5) == 0x0a
+		assert this.system.GetUartStatus() == 1
+		assert this.system.HasDataBusError() == false
+	}
+
+	@Test
+	fn TestUartPlatformRunsAuipcJalrStyleProgram()
+	{
+		this.Prepare()
+		this.system.LoadInstruction(0, 0x00000297)
+		this.system.LoadInstruction(1, 0x00c28067)
+		this.system.LoadInstruction(2, 0x02100113)
+		this.system.LoadInstruction(3, 0x400000b7)
+		this.system.LoadInstruction(4, 0x04100113)
+		this.system.LoadInstruction(5, 0x00208023)
+		this.system.LoadInstruction(6, 0x00100073)
+		this.system.Run(16)
+		assert this.system.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+		assert this.system.IsHalted() == true
+		assert this.system.GetCapturedUartCount() == 1
+		assert this.system.GetCapturedUartByte(0) == 0x41
+		assert this.system.ReadRegister(2) == 0x41
+		assert this.system.HasDataBusError() == false
+	}
+
+	@Test
+	fn TestUartMmioRejectsUnsupportedAccesses()
+	{
+		this.bus.Clear()
+		this.bus.Store(Rv32UartMmioDataBus.UART_TX_ADDRESS, Rv32iLoadStoreUnit.WIDTH_WORD, 0x41)
+		assert this.bus.HasError() == true
+		this.bus.Load(Rv32UartMmioDataBus.UART_TX_ADDRESS, Rv32iLoadStoreUnit.WIDTH_BYTE, false)
+		assert this.bus.HasError() == true
+		this.bus.Load(Rv32UartMmioDataBus.UART_STATUS_ADDRESS, Rv32iLoadStoreUnit.WIDTH_WORD, false)
+		assert this.bus.HasError() == false
+		assert this.bus.GetReadData() == 1
+		this.bus.Store(0x50000000, Rv32iLoadStoreUnit.WIDTH_BYTE, 0x41)
+		assert this.bus.HasError() == true
+		this.bus.LoadDataByte(0, 0x5a)
+		this.bus.Load(Rv32UartMmioDataBus.RAM_BASE, -1, false)
+		assert this.bus.HasError() == true
+		this.bus.Store(Rv32UartMmioDataBus.RAM_BASE, 0, 0xaa)
+		assert this.bus.HasError() == true
+		assert this.bus.ReadDataByte(0) == 0x5a
+		this.bus.Store(Rv32UartMmioDataBus.RAM_BASE, 3, 0xccbbaa)
+		assert this.bus.HasError() == true
+		assert this.bus.ReadDataByte(0) == 0x5a
+	}
+
+	@Test
+	fn TestMappedRamUsesDocumentedDataBase()
+	{
+		this.bus.Clear()
+		this.bus.Store(Rv32UartMmioDataBus.RAM_BASE, Rv32iLoadStoreUnit.WIDTH_WORD, 0x44332211)
+		assert this.bus.HasError() == false
+		assert this.bus.ReadDataByte(0) == 0x11
+		assert this.bus.ReadDataByte(1) == 0x22
+		assert this.bus.ReadDataByte(2) == 0x33
+		assert this.bus.ReadDataByte(3) == 0x44
+		this.bus.Load(Rv32UartMmioDataBus.RAM_BASE, Rv32iLoadStoreUnit.WIDTH_WORD, false)
+		assert this.bus.GetReadData() == (0x44332211 as uint)
+		assert this.bus.HasError() == false
+	}
+
+	@Test
+	fn TestUartSystemMappedDataHelpersUseDocumentedDataBase()
+	{
+		this.Prepare()
+		this.system.LoadMappedDataByte(Rv32UartMmioDataBus.RAM_BASE, 0x5a)
+		assert this.system.ReadMappedDataByte(Rv32UartMmioDataBus.RAM_BASE) == 0x5a
+		assert this.system.ReadDataByte(0) == 0x5a
+	}
+}

@@ -1,0 +1,80 @@
+namespace Eccelerators.RiscV.Core
+
+using Eccelerators.RiscV.Isa
+
+/**
+ * Provides RV32I load extraction, extension, and store lane update helpers.
+ */
+component Rv32iLoadStoreUnit
+{
+	public const WIDTH_BYTE: int = 1
+
+	public const WIDTH_HALF: int = 2
+
+	public const WIDTH_WORD: int = 4
+
+	public fn IsMisaligned(address: uint, width: int) bool
+	{
+		if (width == WIDTH_HALF) {
+			return (address & (1 as uint)) != (0 as uint)
+		}
+
+		if (width == WIDTH_WORD) {
+			return (address & (3 as uint)) != (0 as uint)
+		}
+
+		return false
+	}
+
+	public fn ExtractLoad(memoryWord: uint, byteOffset: int, width: int, signedLoad: bool) uint
+	{
+		var shifted: uint = memoryWord >> (byteOffset * 8)
+		var value: uint = shifted
+
+		if (width == WIDTH_BYTE) {
+			value = shifted & (0xff as uint)
+
+			if (signedLoad == true) {
+				return Rv32iWord.SignExtend(value, 8)
+			}
+
+			return value
+		}
+
+		if (width == WIDTH_HALF) {
+			value = shifted & (0xffff as uint)
+
+			if (signedLoad == true) {
+				return Rv32iWord.SignExtend(value, 16)
+			}
+
+			return value
+		}
+
+		return memoryWord
+	}
+
+	public fn MergeStore(memoryWord: uint, byteOffset: int, width: int, value: uint) uint
+	{
+		var shiftBits: int = byteOffset * 8
+		var mask: uint = 0
+		var cleared: uint = memoryWord
+		var shiftedValue: uint = value
+
+		if (width == WIDTH_BYTE) {
+			mask = (0xff as uint) << shiftBits
+			cleared = memoryWord & (mask ^ (0xffffffff as uint))
+			shiftedValue = (value & (0xff as uint)) << shiftBits
+			return cleared | shiftedValue
+		}
+
+		if (width == WIDTH_HALF) {
+			mask = (0xffff as uint) << shiftBits
+			cleared = memoryWord & (mask ^ (0xffffffff as uint))
+			shiftedValue = (value & (0xffff as uint)) << shiftBits
+			return cleared | shiftedValue
+		}
+
+		return value
+	}
+}

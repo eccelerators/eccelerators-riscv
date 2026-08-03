@@ -1,0 +1,95 @@
+namespace Eccelerators.RiscV.Core
+
+using Eccelerators.RiscV.Bus
+
+/**
+ * Full RV32I core composed with the package's synchronous ROM/RAM fixtures.
+ *
+ * Instruction execution is provided by Rv32iInjectedBusCore; this component
+ * adds convenient program and data setup helpers for simple integrations.
+ */
+component Rv32iBusCore
+{
+	instructionBus: Rv32SimpleInstructionRom
+
+	dataBus: Rv32SimpleDataRam
+
+	core: Rv32iInjectedBusCore
+
+	new()
+	{
+		this.instructionBus = new Rv32SimpleInstructionRom()
+		this.dataBus = new Rv32SimpleDataRam()
+		this.core = new Rv32iInjectedBusCore(this.instructionBus, this.dataBus)
+	}
+
+	public fn Reset()
+	{
+		this.core.Reset()
+	}
+
+	public fn ClearProgram()
+	{
+		this.instructionBus.Clear()
+	}
+
+	public fn ClearData()
+	{
+		this.dataBus.Clear()
+	}
+
+	public fn LoadInstruction(index: int, instruction: uint)
+	{
+		this.instructionBus.LoadInstruction(index, instruction)
+	}
+
+	public fn LoadDataByte(address: int, value: byte)
+	{
+		this.dataBus.LoadDataByte(address, value)
+	}
+
+	public fn ReadDataByte(address: int) byte
+	{
+		return this.dataBus.ReadDataByte(address)
+	}
+
+	public fn ReadRegister(index: int) uint
+	{
+		return this.core.ReadRegister(index)
+	}
+
+	public fn GetPc() uint
+	{
+		return this.core.GetPc()
+	}
+
+	public fn IsHalted() bool
+	{
+		return this.core.IsHalted()
+	}
+
+	public fn GetTrapCause() int
+	{
+		return this.core.GetTrapCause()
+	}
+
+	public fn GetTrapPc() uint
+	{
+		return this.core.GetTrapPc()
+	}
+
+	public fn HasDataBusError() bool
+	{
+		return this.core.HasDataBusError()
+	}
+
+	public fn Run(maxSteps: int)
+	{
+		this.core.Run(maxSteps)
+	}
+
+	public fn Step()
+	{
+		this.core.Step()
+	}
+}

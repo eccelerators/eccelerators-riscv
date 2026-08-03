@@ -1,0 +1,24 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+
+@Test
+component Rv32iConstantsTest
+{
+	@Test
+	fn TestOpcodeConstants()
+	{
+		assert Rv32iConstants.OPCODE_LUI == 0x37
+		assert Rv32iConstants.OPCODE_OP_IMM == 0x13
+		assert Rv32iConstants.OPCODE_OP == 0x33
+		assert Rv32iConstants.OPCODE_SYSTEM == 0x73
+	}
+
+	@Test
+	fn TestTrapConstants()
+	{
+		assert Rv32iConstants.TRAP_NONE == 0
+		assert Rv32iConstants.TRAP_ECALL == 2
+		assert Rv32iConstants.TRAP_EBREAK == 3
+	}
+}

@@ -1,0 +1,169 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Bus
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Isa
+
+component Rv32TestDataBus: IRv32DataBus
+{
+	storedValue: uint
+
+	loadCount: int
+
+	storeCount: int
+
+	error: bool
+
+	readData: uint
+
+	new()
+	{
+		this.Clear()
+	}
+
+	public fn Clear()
+	{
+		this.storedValue = 0
+		this.loadCount = 0
+		this.storeCount = 0
+		this.error = false
+		this.readData = 0
+	}
+
+	override fn Load(address: uint, width: int, signedLoad: bool)
+	{
+		this.error = false
+		this.loadCount++
+		this.readData = this.storedValue
+	}
+
+	override fn Store(address: uint, width: int, value: uint)
+	{
+		this.error = false
+		this.storeCount++
+		this.storedValue = value
+		this.readData = 0
+	}
+
+	override fn GetReadData() uint
+	{
+		return this.readData
+	}
+
+	override fn HasError() bool
+	{
+		return this.error
+	}
+
+	public fn GetStoredValue() uint
+	{
+		return this.storedValue
+	}
+
+	public fn GetLoadCount() int
+	{
+		return this.loadCount
+	}
+
+	public fn GetStoreCount() int
+	{
+		return this.storeCount
+	}
+}
+
+@Test
+component Rv32iInjectedBusApiTest
+{
+	core: Rv32iInjectedBusCore
+
+	instructionBus: Rv32SimpleInstructionRom
+
+	dataBus: Rv32TestDataBus
+
+	new()
+	{
+		this.instructionBus = new Rv32SimpleInstructionRom()
+		this.dataBus = new Rv32TestDataBus()
+		this.core = new Rv32iInjectedBusCore(this.instructionBus, this.dataBus)
+	}
+
+	fn LoadStoreProgram()
+	{
+		this.instructionBus.Clear()
+		this.instructionBus.LoadInstruction(0, 0x02a00093)
+		this.instructionBus.LoadInstruction(1, 0x00102023)
+		this.instructionBus.LoadInstruction(2, 0x00002103)
+		this.instructionBus.LoadInstruction(3, 0x00100073)
+	}
+
+	@Test
+	fn TestCoreRunsWithCallerOwnedDataBus()
+	{
+		this.dataBus.Clear()
+		this.LoadStoreProgram()
+		this.core.Reset()
+		this.core.Run(8)
+		assert this.dataBus.GetStoreCount() == 1
+		assert this.dataBus.GetLoadCount() == 1
+		assert this.dataBus.GetStoredValue() == 0x2a
+		assert this.core.ReadRegister(1) == 0x2a
+		assert this.core.ReadRegister(2) == 0x2a
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+
+	@Test
+	fn TestMisalignedDataAccessTrapsBeforeBusRequest()
+	{
+		this.instructionBus.Clear()
+		this.dataBus.Clear()
+		this.core.Reset()
+		this.instructionBus.LoadInstruction(0, 0x00102103) // lw x2, 1(x0)
+		this.core.Run(2)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_LOAD_STORE_MISALIGNED
+		assert this.core.GetTrapPc() == 0
+		assert this.dataBus.GetLoadCount() == 0
+
+		this.instructionBus.Clear()
+		this.dataBus.Clear()
+		this.core.Reset()
+		this.instructionBus.LoadInstruction(0, 0x001010a3) // sh x1, 1(x0)
+		this.core.Run(2)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_LOAD_STORE_MISALIGNED
+		assert this.core.GetTrapPc() == 0
+		assert this.dataBus.GetStoreCount() == 0
+	}
+
+	@Test
+	fn TestMisalignedControlTransferTargetsTrapAtSource()
+	{
+		this.instructionBus.Clear()
+		this.dataBus.Clear()
+		this.core.Reset()
+		this.instructionBus.LoadInstruction(0, 0x002000ef)
+		this.core.Run(2)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED
+		assert this.core.GetTrapPc() == 0
+		assert this.core.GetPc() == 0
+		assert this.core.ReadRegister(1) == 0
+
+		this.instructionBus.Clear()
+		this.dataBus.Clear()
+		this.core.Reset()
+		this.instructionBus.LoadInstruction(0, 0x00200093)
+		this.instructionBus.LoadInstruction(1, 0x00008167)
+		this.core.Run(3)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED
+		assert this.core.GetTrapPc() == 4
+		assert this.core.GetPc() == 4
+		assert this.core.ReadRegister(2) == 0
+
+		this.instructionBus.Clear()
+		this.dataBus.Clear()
+		this.core.Reset()
+		this.instructionBus.LoadInstruction(0, 0x00000163)
+		this.core.Run(2)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED
+		assert this.core.GetTrapPc() == 0
+		assert this.core.GetPc() == 0
+	}
+}

@@ -1,0 +1,421 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+
+/**
+ * Decodes RV32I control information into control outputs used by the cores.
+ */
+component Rv32iControlDecoder
+{
+	public const CLASS_ILLEGAL: int = 0
+
+	public const CLASS_LUI: int = 1
+
+	public const CLASS_AUIPC: int = 2
+
+	public const CLASS_JAL: int = 3
+
+	public const CLASS_JALR: int = 4
+
+	public const CLASS_BRANCH: int = 5
+
+	public const CLASS_LOAD: int = 6
+
+	public const CLASS_STORE: int = 7
+
+	public const CLASS_ALU_IMM: int = 8
+
+	public const CLASS_ALU_REG: int = 9
+
+	public const CLASS_FENCE: int = 10
+
+	public const CLASS_ECALL: int = 11
+
+	public const CLASS_EBREAK: int = 12
+
+	public const LOAD_LB: int = 1
+
+	public const LOAD_LH: int = 2
+
+	public const LOAD_LW: int = 3
+
+	public const LOAD_LBU: int = 4
+
+	public const LOAD_LHU: int = 5
+
+	public const STORE_SB: int = 1
+
+	public const STORE_SH: int = 2
+
+	public const STORE_SW: int = 3
+
+	fields: Rv32iInstructionFields
+
+	instructionClass: int
+
+	aluOperation: int
+
+	branchKind: int
+
+	loadKind: int
+
+	storeKind: int
+
+	legal: bool
+
+	new()
+	{
+		this.fields = new Rv32iInstructionFields()
+		this.Reset()
+	}
+
+	fn Reset()
+	{
+		this.instructionClass = CLASS_ILLEGAL
+		this.aluOperation = 0
+		this.branchKind = 0
+		this.loadKind = 0
+		this.storeKind = 0
+		this.legal = false
+	}
+
+	public fn Decode(instruction: uint)
+	{
+		var opcode: int = this.fields.GetOpcode(instruction)
+		var funct3: int = this.fields.GetFunct3(instruction)
+		var funct7: int = this.fields.GetFunct7(instruction)
+		this.Reset()
+
+		if (opcode == Rv32iConstants.OPCODE_LUI) {
+			this.instructionClass = CLASS_LUI
+			this.legal = true
+			return
+		}
+
+		if (opcode == Rv32iConstants.OPCODE_AUIPC) {
+			this.instructionClass = CLASS_AUIPC
+			this.legal = true
+			return
+		}
+
+		if (opcode == Rv32iConstants.OPCODE_JAL) {
+			this.instructionClass = CLASS_JAL
+			this.legal = true
+			return
+		}
+
+		if (opcode == Rv32iConstants.OPCODE_JALR) {
+			if (funct3 == 0) {
+				this.instructionClass = CLASS_JALR
+				this.legal = true
+			}
+
+			return
+		}
+
+		if (opcode == Rv32iConstants.OPCODE_BRANCH) {
+			this.DecodeBranch(funct3)
+			return
+		}
+
+		if (opcode == Rv32iConstants.OPCODE_LOAD) {
+			this.DecodeLoad(funct3)
+			return
+		}
+
+		if (opcode == Rv32iConstants.OPCODE_STORE) {
+			this.DecodeStore(funct3)
+			return
+		}
+
+		if (opcode == Rv32iConstants.OPCODE_OP_IMM) {
+			this.DecodeAluImmediate(funct3, funct7)
+			return
+		}
+
+		if (opcode == Rv32iConstants.OPCODE_OP) {
+			this.DecodeAluRegister(funct3, funct7)
+			return
+		}
+
+		if (opcode == Rv32iConstants.OPCODE_MISC_MEM) {
+			if (funct3 == 0) {
+				this.instructionClass = CLASS_FENCE
+				this.legal = true
+			}
+
+			return
+		}
+
+		if (opcode == Rv32iConstants.OPCODE_SYSTEM) {
+			if (instruction == (0x00000073 as uint)) {
+				this.instructionClass = CLASS_ECALL
+				this.legal = true
+				return
+			}
+
+			if (instruction == (0x00100073 as uint)) {
+				this.instructionClass = CLASS_EBREAK
+				this.legal = true
+				return
+			}
+		}
+	}
+
+	fn DecodeBranch(funct3: int)
+	{
+		this.instructionClass = CLASS_BRANCH
+		if (funct3 == 0) {
+			this.branchKind = Rv32iBranchUnit.BRANCH_BEQ
+			this.legal = true
+			return
+		}
+
+		if (funct3 == 1) {
+			this.branchKind = Rv32iBranchUnit.BRANCH_BNE
+			this.legal = true
+			return
+		}
+
+		if (funct3 == 4) {
+			this.branchKind = Rv32iBranchUnit.BRANCH_BLT
+			this.legal = true
+			return
+		}
+
+		if (funct3 == 5) {
+			this.branchKind = Rv32iBranchUnit.BRANCH_BGE
+			this.legal = true
+			return
+		}
+
+		if (funct3 == 6) {
+			this.branchKind = Rv32iBranchUnit.BRANCH_BLTU
+			this.legal = true
+			return
+		}
+
+		if (funct3 == 7) {
+			this.branchKind = Rv32iBranchUnit.BRANCH_BGEU
+			this.legal = true
+			return
+		}
+	}
+
+	fn DecodeLoad(funct3: int)
+	{
+		this.instructionClass = CLASS_LOAD
+		if (funct3 == 0) {
+			this.loadKind = LOAD_LB
+			this.legal = true
+			return
+		}
+
+		if (funct3 == 1) {
+			this.loadKind = LOAD_LH
+			this.legal = true
+			return
+		}
+
+		if (funct3 == 2) {
+			this.loadKind = LOAD_LW
+			this.legal = true
+			return
+		}
+
+		if (funct3 == 4) {
+			this.loadKind = LOAD_LBU
+			this.legal = true
+			return
+		}
+
+		if (funct3 == 5) {
+			this.loadKind = LOAD_LHU
+			this.legal = true
+			return
+		}
+	}
+
+	fn DecodeStore(funct3: int)
+	{
+		this.instructionClass = CLASS_STORE
+		if (funct3 == 0) {
+			this.storeKind = STORE_SB
+			this.legal = true
+			return
+		}
+
+		if (funct3 == 1) {
+			this.storeKind = STORE_SH
+			this.legal = true
+			return
+		}
+
+		if (funct3 == 2) {
+			this.storeKind = STORE_SW
+			this.legal = true
+			return
+		}
+	}
+
+	fn DecodeAluImmediate(funct3: int, funct7: int)
+	{
+		this.instructionClass = CLASS_ALU_IMM
+		if (funct3 == Rv32iConstants.FUNCT3_ADD_SUB) {
+			this.aluOperation = Rv32iAlu.OP_ADD
+			this.legal = true
+			return
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_SLL) {
+			if (funct7 == Rv32iConstants.FUNCT7_BASE) {
+				this.aluOperation = Rv32iAlu.OP_SLL
+				this.legal = true
+			}
+
+			return
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_SLT) {
+			this.aluOperation = Rv32iAlu.OP_SLT
+			this.legal = true
+			return
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_SLTU) {
+			this.aluOperation = Rv32iAlu.OP_SLTU
+			this.legal = true
+			return
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_XOR) {
+			this.aluOperation = Rv32iAlu.OP_XOR
+			this.legal = true
+			return
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_SRL_SRA) {
+			if (funct7 == Rv32iConstants.FUNCT7_BASE) {
+				this.aluOperation = Rv32iAlu.OP_SRL
+				this.legal = true
+				return
+			}
+
+			if (funct7 == Rv32iConstants.FUNCT7_SUB_SRA) {
+				this.aluOperation = Rv32iAlu.OP_SRA
+				this.legal = true
+				return
+			}
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_OR) {
+			this.aluOperation = Rv32iAlu.OP_OR
+			this.legal = true
+			return
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_AND) {
+			this.aluOperation = Rv32iAlu.OP_AND
+			this.legal = true
+			return
+		}
+	}
+
+	fn DecodeAluRegister(funct3: int, funct7: int)
+	{
+		this.instructionClass = CLASS_ALU_REG
+		if (funct3 == Rv32iConstants.FUNCT3_ADD_SUB) {
+			if (funct7 == Rv32iConstants.FUNCT7_BASE) {
+				this.aluOperation = Rv32iAlu.OP_ADD
+				this.legal = true
+				return
+			}
+
+			if (funct7 == Rv32iConstants.FUNCT7_SUB_SRA) {
+				this.aluOperation = Rv32iAlu.OP_SUB
+				this.legal = true
+				return
+			}
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_SLL && funct7 == Rv32iConstants.FUNCT7_BASE) {
+			this.aluOperation = Rv32iAlu.OP_SLL
+			this.legal = true
+			return
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_SLT && funct7 == Rv32iConstants.FUNCT7_BASE) {
+			this.aluOperation = Rv32iAlu.OP_SLT
+			this.legal = true
+			return
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_SLTU && funct7 == Rv32iConstants.FUNCT7_BASE) {
+			this.aluOperation = Rv32iAlu.OP_SLTU
+			this.legal = true
+			return
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_XOR && funct7 == Rv32iConstants.FUNCT7_BASE) {
+			this.aluOperation = Rv32iAlu.OP_XOR
+			this.legal = true
+			return
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_SRL_SRA) {
+			if (funct7 == Rv32iConstants.FUNCT7_BASE) {
+				this.aluOperation = Rv32iAlu.OP_SRL
+				this.legal = true
+				return
+			}
+
+			if (funct7 == Rv32iConstants.FUNCT7_SUB_SRA) {
+				this.aluOperation = Rv32iAlu.OP_SRA
+				this.legal = true
+				return
+			}
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_OR && funct7 == Rv32iConstants.FUNCT7_BASE) {
+			this.aluOperation = Rv32iAlu.OP_OR
+			this.legal = true
+			return
+		}
+
+		if (funct3 == Rv32iConstants.FUNCT3_AND && funct7 == Rv32iConstants.FUNCT7_BASE) {
+			this.aluOperation = Rv32iAlu.OP_AND
+			this.legal = true
+			return
+		}
+	}
+
+	public fn IsLegal() bool
+	{
+		return this.legal
+	}
+
+	public fn GetInstructionClass() int
+	{
+		return this.instructionClass
+	}
+
+	public fn GetAluOperation() int
+	{
+		return this.aluOperation
+	}
+
+	public fn GetBranchKind() int
+	{
+		return this.branchKind
+	}
+
+	public fn GetLoadKind() int
+	{
+		return this.loadKind
+	}
+
+	public fn GetStoreKind() int
+	{
+		return this.storeKind
+	}
+}

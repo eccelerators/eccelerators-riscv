@@ -1,0 +1,90 @@
+namespace Eccelerators.RiscV.Core
+
+using Eccelerators.RiscV.Isa
+
+/**
+ * RV32I integer ALU.
+ */
+component Rv32iAlu
+{
+	public const OP_ADD: int = 1
+
+	public const OP_SUB: int = 2
+
+	public const OP_SLL: int = 3
+
+	public const OP_SLT: int = 4
+
+	public const OP_SLTU: int = 5
+
+	public const OP_XOR: int = 6
+
+	public const OP_SRL: int = 7
+
+	public const OP_SRA: int = 8
+
+	public const OP_OR: int = 9
+
+	public const OP_AND: int = 10
+
+	public const OP_PASS_RIGHT: int = 11
+
+	public fn Execute(operation: int, leftValue: uint, rightValue: uint) uint
+	{
+		var shiftAmount: int = (rightValue & (0x1f as uint)) as int
+
+		if (operation == OP_ADD) {
+			return leftValue + rightValue
+		}
+
+		if (operation == OP_SUB) {
+			return leftValue - rightValue
+		}
+
+		if (operation == OP_SLL) {
+			return leftValue << shiftAmount
+		}
+
+		if (operation == OP_SLT) {
+			if (Rv32iWord.IsSignedLessThan(leftValue, rightValue) == true) {
+				return 1
+			}
+
+			return 0
+		}
+
+		if (operation == OP_SLTU) {
+			if (leftValue < rightValue) {
+				return 1
+			}
+
+			return 0
+		}
+
+		if (operation == OP_XOR) {
+			return leftValue ^ rightValue
+		}
+
+		if (operation == OP_SRL) {
+			return leftValue >> shiftAmount
+		}
+
+		if (operation == OP_SRA) {
+			return Rv32iWord.ArithmeticShiftRight(leftValue, shiftAmount)
+		}
+
+		if (operation == OP_OR) {
+			return leftValue | rightValue
+		}
+
+		if (operation == OP_AND) {
+			return leftValue & rightValue
+		}
+
+		if (operation == OP_PASS_RIGHT) {
+			return rightValue
+		}
+
+		return 0
+	}
+}

@@ -1,0 +1,355 @@
+namespace Eccelerators.RiscV.Core
+
+using Eccelerators.RiscV.Bus
+using Eccelerators.RiscV.Isa
+
+/**
+ * Full RV32I core with constructor-provided instruction and data buses.
+ *
+ * Use this component when a system owns the bus implementations and passes them into the core.
+ */
+component Rv32iInjectedBusCore
+{
+	instructionBus: IRv32InstructionBus
+
+	dataBus: IRv32DataBus
+
+	fields: Rv32iInstructionFields
+
+	immediates: Rv32iImmediateDecoder
+
+	control: Rv32iControlDecoder
+
+	registerFile: Rv32iRegisterFile
+
+	alu: Rv32iAlu
+
+	branchUnit: Rv32iBranchUnit
+
+	loadStore: Rv32iLoadStoreUnit
+
+	traps: Rv32iTrapController
+
+	pc: uint
+
+	new(instructionBus: IRv32InstructionBus, dataBus: IRv32DataBus)
+	{
+		this.instructionBus = instructionBus
+		this.dataBus = dataBus
+		this.fields = new Rv32iInstructionFields()
+		this.immediates = new Rv32iImmediateDecoder()
+		this.control = new Rv32iControlDecoder()
+		this.registerFile = new Rv32iRegisterFile()
+		this.alu = new Rv32iAlu()
+		this.branchUnit = new Rv32iBranchUnit()
+		this.loadStore = new Rv32iLoadStoreUnit()
+		this.traps = new Rv32iTrapController()
+		this.Reset()
+	}
+
+	public fn Reset()
+	{
+		this.pc = Rv32iConstants.RESET_VECTOR
+		this.registerFile.Reset()
+		this.traps.Reset()
+	}
+
+	public fn ReadRegister(index: int) uint
+	{
+		return this.registerFile.Read(index)
+	}
+
+	public fn GetPc() uint
+	{
+		return this.pc
+	}
+
+	public fn IsHalted() bool
+	{
+		return this.traps.IsHalted()
+	}
+
+	public fn GetTrapCause() int
+	{
+		return this.traps.GetTrapCause()
+	}
+
+	public fn GetTrapPc() uint
+	{
+		return this.traps.GetTrapPc()
+	}
+
+	public fn HasDataBusError() bool
+	{
+		return this.dataBus.HasError()
+	}
+
+	public fn Run(maxSteps: int)
+	{
+		var stepIndex: int = 0
+
+		while (stepIndex < maxSteps) {
+			if (this.IsHalted() == true) {
+				return
+			}
+
+			this.Step()
+			stepIndex++
+		}
+	}
+
+	public fn Step()
+	{
+		var instruction: uint = 0
+		var instructionClass: int = 0
+		var rd: int = 0
+		var rs1: int = 0
+		var rs2: int = 0
+		var leftValue: uint = 0
+		var rightValue: uint = 0
+		var immediate: uint = 0
+		var result: uint = 0
+		var nextPc: uint = this.pc + 4
+		var address: uint = 0
+		var branchKind: int = 0
+		var loadKind: int = 0
+		var storeKind: int = 0
+		var aluOperation: int = 0
+		var accessWidth: int = 0
+
+		if (this.IsHalted() == true) {
+			return
+		}
+
+		if ((this.pc & (3 as uint)) != (0 as uint)) {
+			this.traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, this.pc)
+			return
+		}
+
+		this.instructionBus.Request(this.pc)
+
+		if (this.instructionBus.HasError() == true) {
+			this.traps.Trap(Rv32iConstants.TRAP_BUS_ERROR, this.pc)
+			return
+		}
+
+		instruction = this.instructionBus.GetInstruction()
+		this.control.Decode(instruction)
+
+		if (this.control.IsLegal() == false) {
+			this.traps.Trap(Rv32iConstants.TRAP_ILLEGAL_INSTRUCTION, this.pc)
+			return
+		}
+
+		instructionClass = this.control.GetInstructionClass()
+		rd = this.fields.GetRd(instruction)
+		rs1 = this.fields.GetRs1(instruction)
+		rs2 = this.fields.GetRs2(instruction)
+		leftValue = this.registerFile.Read(rs1)
+		rightValue = this.registerFile.Read(rs2)
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_LUI) {
+			immediate = this.immediates.DecodeU(instruction)
+			this.registerFile.Write(rd, immediate)
+			this.pc = nextPc
+			return
+		}
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_AUIPC) {
+			immediate = this.immediates.DecodeU(instruction)
+			this.registerFile.Write(rd, this.pc + immediate)
+			this.pc = nextPc
+			return
+		}
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_JAL) {
+			immediate = this.immediates.DecodeJ(instruction)
+			result = this.pc + immediate
+
+			if ((result & (3 as uint)) != (0 as uint)) {
+				this.traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, this.pc)
+				return
+			}
+
+			this.registerFile.Write(rd, nextPc)
+			this.pc = result
+			return
+		}
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_JALR) {
+			immediate = this.immediates.DecodeI(instruction)
+			result = (leftValue + immediate) & (0xfffffffe as uint)
+
+			if ((result & (3 as uint)) != (0 as uint)) {
+				this.traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, this.pc)
+				return
+			}
+
+			this.registerFile.Write(rd, nextPc)
+			this.pc = result
+			return
+		}
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_BRANCH) {
+			branchKind = this.control.GetBranchKind()
+			immediate = this.immediates.DecodeB(instruction)
+
+			if (this.branchUnit.IsTaken(branchKind, leftValue, rightValue) == true) {
+				result = this.pc + immediate
+
+				if ((result & (3 as uint)) != (0 as uint)) {
+					this.traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, this.pc)
+					return
+				}
+
+				this.pc = result
+				return
+			}
+
+			this.pc = nextPc
+			return
+		}
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_LOAD) {
+			loadKind = this.control.GetLoadKind()
+			immediate = this.immediates.DecodeI(instruction)
+			address = leftValue + immediate
+			accessWidth = this.GetLoadWidth(loadKind)
+
+			if (this.loadStore.IsMisaligned(address, accessWidth) == true) {
+				this.traps.Trap(Rv32iConstants.TRAP_LOAD_STORE_MISALIGNED, this.pc)
+				return
+			}
+
+			this.ExecuteBusLoad(address, loadKind)
+
+			if (this.HasDataBusError() == true) {
+				this.traps.Trap(Rv32iConstants.TRAP_BUS_ERROR, this.pc)
+				return
+			}
+
+			this.registerFile.Write(rd, this.GetBusReadData())
+			this.pc = nextPc
+			return
+		}
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_STORE) {
+			storeKind = this.control.GetStoreKind()
+			immediate = this.immediates.DecodeS(instruction)
+			address = leftValue + immediate
+			accessWidth = this.GetStoreWidth(storeKind)
+
+			if (this.loadStore.IsMisaligned(address, accessWidth) == true) {
+				this.traps.Trap(Rv32iConstants.TRAP_LOAD_STORE_MISALIGNED, this.pc)
+				return
+			}
+
+			this.ExecuteBusStore(address, rightValue, storeKind)
+
+			if (this.HasDataBusError() == true) {
+				this.traps.Trap(Rv32iConstants.TRAP_BUS_ERROR, this.pc)
+				return
+			}
+
+			this.pc = nextPc
+			return
+		}
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_ALU_IMM) {
+			aluOperation = this.control.GetAluOperation()
+			immediate = this.immediates.DecodeI(instruction)
+
+			if (aluOperation == Rv32iAlu.OP_SLL || aluOperation == Rv32iAlu.OP_SRL || aluOperation == Rv32iAlu.OP_SRA) {
+				immediate = immediate & (0x1f as uint)
+			}
+
+			result = this.alu.Execute(aluOperation, leftValue, immediate)
+			this.registerFile.Write(rd, result)
+			this.pc = nextPc
+			return
+		}
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_ALU_REG) {
+			aluOperation = this.control.GetAluOperation()
+			result = this.alu.Execute(aluOperation, leftValue, rightValue)
+			this.registerFile.Write(rd, result)
+			this.pc = nextPc
+			return
+		}
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_FENCE) {
+			this.pc = nextPc
+			return
+		}
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_ECALL) {
+			this.traps.Trap(Rv32iConstants.TRAP_ECALL, this.pc)
+			return
+		}
+
+		if (instructionClass == Rv32iControlDecoder.CLASS_EBREAK) {
+			this.traps.Trap(Rv32iConstants.TRAP_EBREAK, this.pc)
+			return
+		}
+
+		this.traps.Trap(Rv32iConstants.TRAP_ILLEGAL_INSTRUCTION, this.pc)
+	}
+
+	fn ExecuteBusLoad(address: uint, loadKind: int)
+	{
+		var width: int = this.GetLoadWidth(loadKind)
+		var signedLoad: bool = this.IsSignedLoad(loadKind)
+		this.dataBus.Load(address, width, signedLoad)
+	}
+
+	fn ExecuteBusStore(address: uint, value: uint, storeKind: int)
+	{
+		var width: int = this.GetStoreWidth(storeKind)
+		this.dataBus.Store(address, width, value)
+	}
+
+	fn GetBusReadData() uint
+	{
+		return this.dataBus.GetReadData()
+	}
+
+
+	fn GetLoadWidth(loadKind: int) int
+	{
+		if (loadKind == Rv32iControlDecoder.LOAD_LH || loadKind == Rv32iControlDecoder.LOAD_LHU) {
+			return Rv32iLoadStoreUnit.WIDTH_HALF
+		}
+
+		if (loadKind == Rv32iControlDecoder.LOAD_LW) {
+			return Rv32iLoadStoreUnit.WIDTH_WORD
+		}
+
+		return Rv32iLoadStoreUnit.WIDTH_BYTE
+	}
+
+	fn GetStoreWidth(storeKind: int) int
+	{
+		if (storeKind == Rv32iControlDecoder.STORE_SH) {
+			return Rv32iLoadStoreUnit.WIDTH_HALF
+		}
+
+		if (storeKind == Rv32iControlDecoder.STORE_SW) {
+			return Rv32iLoadStoreUnit.WIDTH_WORD
+		}
+
+		return Rv32iLoadStoreUnit.WIDTH_BYTE
+	}
+
+	fn IsSignedLoad(loadKind: int) bool
+	{
+		if (loadKind == Rv32iControlDecoder.LOAD_LB) {
+			return true
+		}
+
+		if (loadKind == Rv32iControlDecoder.LOAD_LH) {
+			return true
+		}
+
+		return false
+	}
+}

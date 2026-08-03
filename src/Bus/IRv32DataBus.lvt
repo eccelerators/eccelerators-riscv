@@ -1,0 +1,19 @@
+namespace Eccelerators.RiscV.Bus
+
+/**
+ * Synchronous RISC-V data load/store contract for byte, halfword, and word
+ * accesses. Load and Store complete before returning.
+ *
+ * Width must be WIDTH_BYTE, WIDTH_HALF, or WIDTH_WORD from Rv32iLoadStoreUnit.
+ * Implementations report unsupported widths through HasError().
+ */
+interface IRv32DataBus
+{
+	fn Load(address: uint, width: int, signedLoad: bool)
+
+	fn Store(address: uint, width: int, value: uint)
+
+	fn GetReadData() uint
+
+	fn HasError() bool
+}

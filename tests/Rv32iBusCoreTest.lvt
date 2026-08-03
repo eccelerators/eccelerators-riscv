@@ -1,0 +1,216 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Isa
+
+@Test
+component Rv32iBusCoreTest
+{
+	core: Rv32iBusCore
+
+	new()
+	{
+		this.core = new Rv32iBusCore()
+	}
+
+	fn Prepare()
+	{
+		this.core.ClearProgram()
+		this.core.ClearData()
+		this.core.Reset()
+	}
+
+	@Test
+	fn TestRunsThroughInstructionAndDataBuses()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x04400093)
+		this.core.LoadInstruction(1, 0x00102023)
+		this.core.LoadInstruction(2, 0x00002103)
+		this.core.LoadInstruction(3, 0x00100073)
+		this.core.Run(8)
+		assert this.core.ReadRegister(1) == 0x44
+		assert this.core.ReadRegister(2) == 0x44
+		assert this.core.ReadDataByte(0) == 0x44
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+
+	@Test
+	fn TestBranchAndBusErrorPaths()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00100093)
+		this.core.LoadInstruction(1, 0x00100113)
+		this.core.LoadInstruction(2, 0x00208463)
+		this.core.LoadInstruction(3, 0x06300193)
+		this.core.LoadInstruction(4, 0x00100073)
+		this.core.Run(8)
+		assert this.core.ReadRegister(3) == 0
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x12c00093)
+		this.core.LoadInstruction(1, 0x00100113)
+		this.core.LoadInstruction(2, 0x0020a023)
+		this.core.Run(8)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_BUS_ERROR
+	}
+
+	@Test
+	fn TestAuipcAndJal()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00001097)
+		this.core.LoadInstruction(1, 0x0080016f)
+		this.core.LoadInstruction(2, 0x06300193)
+		this.core.LoadInstruction(3, 0x00700213)
+		this.core.LoadInstruction(4, 0x00100073)
+		this.core.Run(10)
+		assert this.core.ReadRegister(1) == 0x1000
+		assert this.core.ReadRegister(2) == 8
+		assert this.core.ReadRegister(3) == 0
+		assert this.core.ReadRegister(4) == 7
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+
+	@Test
+	fn TestImmediateAluInstructions()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00500093)
+		this.core.LoadInstruction(1, 0x0060a113)
+		this.core.LoadInstruction(2, 0x0060b193)
+		this.core.LoadInstruction(3, 0x0030c213)
+		this.core.LoadInstruction(4, 0x0020e293)
+		this.core.LoadInstruction(5, 0x0070f313)
+		this.core.LoadInstruction(6, 0x00209393)
+		this.core.LoadInstruction(7, 0x0013d413)
+		this.core.LoadInstruction(8, 0xff800513)
+		this.core.LoadInstruction(9, 0x40155493)
+		this.core.LoadInstruction(10, 0x00100073)
+		this.core.Run(16)
+		assert this.core.ReadRegister(1) == 5
+		assert this.core.ReadRegister(2) == 1
+		assert this.core.ReadRegister(3) == 1
+		assert this.core.ReadRegister(4) == 6
+		assert this.core.ReadRegister(5) == 7
+		assert this.core.ReadRegister(6) == 5
+		assert this.core.ReadRegister(7) == 20
+		assert this.core.ReadRegister(8) == 10
+		assert this.core.ReadRegister(9) == (0xfffffffc as uint)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+
+	@Test
+	fn TestRegisterAluInstructions()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00800093)
+		this.core.LoadInstruction(1, 0x00300113)
+		this.core.LoadInstruction(2, 0x002081b3)
+		this.core.LoadInstruction(3, 0x40208233)
+		this.core.LoadInstruction(4, 0x002092b3)
+		this.core.LoadInstruction(5, 0x0020a333)
+		this.core.LoadInstruction(6, 0x0020b3b3)
+		this.core.LoadInstruction(7, 0x0020c433)
+		this.core.LoadInstruction(8, 0x0020d4b3)
+		this.core.LoadInstruction(9, 0x4020d533)
+		this.core.LoadInstruction(10, 0x0020e5b3)
+		this.core.LoadInstruction(11, 0x0020f633)
+		this.core.LoadInstruction(12, 0x00100073)
+		this.core.Run(18)
+		assert this.core.ReadRegister(3) == 11
+		assert this.core.ReadRegister(4) == 5
+		assert this.core.ReadRegister(5) == 64
+		assert this.core.ReadRegister(6) == 0
+		assert this.core.ReadRegister(7) == 0
+		assert this.core.ReadRegister(8) == 11
+		assert this.core.ReadRegister(9) == 1
+		assert this.core.ReadRegister(10) == 1
+		assert this.core.ReadRegister(11) == 11
+		assert this.core.ReadRegister(12) == 0
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+
+	@Test
+	fn TestLoadStoreEdges()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0xfff00093)
+		this.core.LoadInstruction(1, 0x00100023)
+		this.core.LoadInstruction(2, 0x00000103)
+		this.core.LoadInstruction(3, 0x00004183)
+		this.core.LoadInstruction(4, 0xfff00213)
+		this.core.LoadInstruction(5, 0x00401123)
+		this.core.LoadInstruction(6, 0x00201283)
+		this.core.LoadInstruction(7, 0x00205303)
+		this.core.LoadInstruction(8, 0x00100073)
+		this.core.Run(14)
+		assert this.core.ReadRegister(2) == (0xffffffff as uint)
+		assert this.core.ReadRegister(3) == 0xff
+		assert this.core.ReadRegister(5) == (0xffffffff as uint)
+		assert this.core.ReadRegister(6) == 0xffff
+		assert this.core.ReadDataByte(0) == 0xff
+		assert this.core.ReadDataByte(2) == 0xff
+		assert this.core.ReadDataByte(3) == 0xff
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+
+	@Test
+	fn TestNegativeBranchAndJalrLowBitClear()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00000093)
+		this.core.LoadInstruction(1, 0x00300113)
+		this.core.LoadInstruction(2, 0x00108093)
+		this.core.LoadInstruction(3, 0xfe209ee3)
+		this.core.LoadInstruction(4, 0x01800093)
+		this.core.LoadInstruction(5, 0x001082e7)
+		this.core.LoadInstruction(6, 0x04d00313)
+		this.core.LoadInstruction(7, 0x00100073)
+		this.core.Run(24)
+		assert this.core.ReadRegister(1) == 24
+		assert this.core.ReadRegister(5) == 24
+		assert this.core.ReadRegister(6) == 77
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
+
+	@Test
+	fn TestFenceAndMisalignedLoadTrap()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x0000000f)
+		this.core.LoadInstruction(1, 0x00100093)
+		this.core.LoadInstruction(2, 0x00009103)
+		this.core.Run(8)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_LOAD_STORE_MISALIGNED
+		assert this.core.GetTrapPc() == 8
+	}
+
+	@Test
+	fn TestMisalignedControlTransferTargetsTrapAtSource()
+	{
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x002000ef)
+		this.core.Run(2)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED
+		assert this.core.GetTrapPc() == 0
+		assert this.core.GetPc() == 0
+		assert this.core.ReadRegister(1) == 0
+
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00200093)
+		this.core.LoadInstruction(1, 0x00008167)
+		this.core.Run(3)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED
+		assert this.core.GetTrapPc() == 4
+		assert this.core.GetPc() == 4
+		assert this.core.ReadRegister(2) == 0
+
+		this.Prepare()
+		this.core.LoadInstruction(0, 0x00000163)
+		this.core.Run(2)
+		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED
+		assert this.core.GetTrapPc() == 0
+		assert this.core.GetPc() == 0
+	}
+}
