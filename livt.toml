@@ -1,6 +1,6 @@
 [project]
 name = "Eccelerators.RiscV"
-version = "0.1.1"
+version = "0.1.2"
 path = "src"
 outdir = "out"
 
@@ -11,6 +11,8 @@ components = [
     "Rv32iInstructionFieldsTest",
     "Rv32iImmediateDecoderTest",
     "Rv32iRegisterFileTest",
+    "Rv32iRegisterStorageTest",
+    "Rv32iRamCoreTest",
     "Rv32iAluTest",
     "Rv32iBranchUnitTest",
     "Rv32iLoadStoreUnitTest",

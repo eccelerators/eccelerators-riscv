@@ -1,0 +1,41 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Core
+
+/**
+ * Verifies the supported storage configurations independently.
+ */
+@Test
+component Rv32iRamCoreTest
+{
+	// Independently owned subjects; each Check explicitly resets its state.
+	distributedRamChecks: RamCoreChecks<Rv32iRegisterStorage.DistributedRam>
+	blockRamChecks: RamCoreChecks<Rv32iRegisterStorage.BlockRam>
+
+	/**
+	 * Constructs the supported configurations.
+	 */
+	new()
+	{
+		this.distributedRamChecks = new RamCoreChecks<Rv32iRegisterStorage.DistributedRam>()
+		this.blockRamChecks = new RamCoreChecks<Rv32iRegisterStorage.BlockRam>()
+	}
+
+	/**
+	 * Checks architectural behavior with DistributedRam storage.
+	 */
+	@Test
+	fn PreservesBehaviorWithDistributedRam()
+	{
+		this.distributedRamChecks.Check()
+	}
+
+	/**
+	 * Checks architectural behavior with BlockRam storage.
+	 */
+	@Test
+	fn PreservesBehaviorWithBlockRam()
+	{
+		this.blockRamChecks.Check()
+	}
+}

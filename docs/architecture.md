@@ -42,7 +42,7 @@ MMIO platform.
 `Rv32UartMmioDataBus`. Compact refers to its fixed memory map and small
 peripheral set, not to a reduced instruction subset. It keeps the core
 instruction flow ordinary while binding the `0x4000_0000` MMIO address to a
-`Livt.IO.Uart` transmit register. This shows the intended composition model:
+`Livt.IO.LoopbackUart<64, 64>` transmit register. This shows the intended composition model:
 parent applications change system behavior by choosing data-bus and MMIO
 components, not by changing the execution engine or ISA primitives.
 
@@ -76,3 +76,12 @@ The core uses a minimal trap model:
 | 6 | bus or memory range error |
 
 This is not full privileged exception handling.
+
+## Register Storage Boundary
+
+`IRv32iRegisterFile` defines the shared architectural contract. The injected
+core constructs either the original array-backed `Rv32iRegisterFile` or a
+`Rv32iRamRegisterFile<STYLE>`, selected by its `REGISTER_STORAGE` parameter.
+It owns this instance and resets it before execution. Storage selection does
+not duplicate the instruction engine or introduce runtime dispatch between
+implementations; calls retain scheduled completion semantics.

@@ -1,0 +1,24 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * Serialized architectural register access. Reads/writes complete before return;
+ * latency is implementation-dependent. Reset zeros all registers, x0 reads zero,
+ * invalid reads return zero, and writes outside x1..x31 are ignored.
+ */
+interface IRv32iRegisterFile
+{
+	/**
+	 * Initializes all registers before execution, including after hardware reset.
+	 */
+	fn Reset()
+
+	/**
+	 * Returns x1..x31, or zero for x0 and invalid indices.
+	 */
+	fn Read(index: int) uint
+
+	/**
+	 * Writes x1..x31 before returning; ignores all other indices.
+	 */
+	fn Write(index: int, value: uint)
+}

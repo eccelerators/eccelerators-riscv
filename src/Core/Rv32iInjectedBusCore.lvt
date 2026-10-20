@@ -2,13 +2,18 @@ namespace Eccelerators.RiscV.Core
 
 using Eccelerators.RiscV.Bus
 using Eccelerators.RiscV.Isa
+using Livt.IO
 
 /**
  * Full RV32I core with constructor-provided instruction and data buses.
  *
- * Use this component when a system owns the bus implementations and passes them into the core.
+ * Borrows parent-owned buses and owns its execution state. REGISTER_STORAGE selects
+ * the register implementation at compile time; existing callers default to Array.
+ * Construction and Reset zero registers. Serialize loading/reset/Step/Run in one
+ * controlling process. Scheduled calls complete before return, with no fixed-cycle
+ * promise; storage selection may change latency without changing ISA behavior.
  */
-component Rv32iInjectedBusCore
+component Rv32iInjectedBusCore<REGISTER_STORAGE: Rv32iRegisterStorage = Rv32iRegisterStorage.Array>
 {
 	instructionBus: IRv32InstructionBus
 
@@ -20,7 +25,7 @@ component Rv32iInjectedBusCore
 
 	control: Rv32iControlDecoder
 
-	registerFile: Rv32iRegisterFile
+	registerFile: IRv32iRegisterFile
 
 	alu: Rv32iAlu
 
@@ -39,7 +44,20 @@ component Rv32iInjectedBusCore
 		this.fields = new Rv32iInstructionFields()
 		this.immediates = new Rv32iImmediateDecoder()
 		this.control = new Rv32iControlDecoder()
-		this.registerFile = new Rv32iRegisterFile()
+
+		static if (REGISTER_STORAGE == Rv32iRegisterStorage.Array)
+		{
+			this.registerFile = new Rv32iRegisterFile()
+		}
+		elif (REGISTER_STORAGE == Rv32iRegisterStorage.DistributedRam)
+		{
+			this.registerFile = new Rv32iRamRegisterFile<MemoryStyle.Distributed>()
+		}
+		else
+		{
+			this.registerFile = new Rv32iRamRegisterFile<MemoryStyle.Block>()
+		}
+
 		this.alu = new Rv32iAlu()
 		this.branchUnit = new Rv32iBranchUnit()
 		this.loadStore = new Rv32iLoadStoreUnit()

@@ -31,3 +31,8 @@ of two bytes (including zero), receive occupancy, and empty-receive behavior.
 The three README examples were also extracted into an isolated consumer project
 and checked for their documented local-memory, UART enqueue, and borrowed-bus
 behavior: three passed, zero failed or skipped.
+
+Release 0.1.2 adds checks for all three register-storage configurations and CPU
+execution/reset with both RAM styles: 67 package tests pass, with zero failures
+or skips. RAM checks cover all registers, high bits, x0, invalid indices, and
+reset, followed by dependent ALU/load/store/branch instructions and restart.

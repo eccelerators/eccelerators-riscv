@@ -2,6 +2,26 @@
 
 All notable changes to `Eccelerators.RiscV` are recorded here.
 
+## [0.1.2] - 2026-10-20
+
+### Added
+
+- Compile-time `Rv32iRegisterStorage.Array`, `DistributedRam`, and `BlockRam`
+  configuration on `Rv32iInjectedBusCore`.
+- `IRv32iRegisterFile` and `Rv32iRamRegisterFile<STYLE>` with explicit runtime
+  clearing and the same x0, bounds, and read/write completion contract.
+- Register-storage tests across all three configurations and CPU execution/reset
+  tests with both RAM styles. All 67 package tests pass.
+
+### Compatibility
+
+- Existing core constructors and wrappers retain array storage by default.
+- Select `Rv32iInjectedBusCore<Rv32iRegisterStorage.DistributedRam>` in a parent
+  application to request the RAM-backed implementation without patching sources.
+- Register storage may change execution latency; no fixed-cycle guarantee is
+  introduced. Synthesis determines actual RAM mapping from the requested style.
+- The dependency remains registry `Livt.IO 1.2.0`.
+
 ## [0.1.1] - 2026-10-20
 
 ### Changed

@@ -1,13 +1,19 @@
 namespace Eccelerators.RiscV.Core
 
 /**
- * RV32I register file with x0 hardwired to zero.
+ * Original array-backed architectural register file. Owns 32 words in the
+ * inherited context; x0 reads zero and ignores writes. Serialize calls with
+ * instruction execution and use Reset to initialize runtime processor state.
  */
-component Rv32iRegisterFile
+component Rv32iRegisterFile: IRv32iRegisterFile
 {
+	// Expected: original array storage; no particular RAM mapping is promised.
 	registers: uint[32]
 
-	public fn Reset()
+	/**
+	 * Zeros every register before returning.
+	 */
+	override fn Reset()
 	{
 		var index: int = 0
 
@@ -17,7 +23,10 @@ component Rv32iRegisterFile
 		}
 	}
 
-	public fn Read(index: int) uint
+	/**
+	 * Returns x1..x31, or zero for x0 and invalid indices.
+	 */
+	override fn Read(index: int) uint
 	{
 		if (index <= 0) {
 			return 0
@@ -30,7 +39,10 @@ component Rv32iRegisterFile
 		return this.registers[index]
 	}
 
-	public fn Write(index: int, value: uint)
+	/**
+	 * Writes x1..x31 before returning; ignores x0 and invalid indices.
+	 */
+	override fn Write(index: int, value: uint)
 	{
 		if (index <= 0) {
 			return

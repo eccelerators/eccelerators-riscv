@@ -54,3 +54,11 @@ an optimized soft CPU.
 - Add wait-state-aware bus timing once real external memory integrations need it.
 - Add a separate pipelined core only after the RV32I reference behavior remains
   fully green.
+
+## Register Storage (0.1.2)
+
+The injected core accepts `Rv32iRegisterStorage.Array` (default),
+`DistributedRam`, or `BlockRam` as a compile-time parameter. The RAM-backed
+implementations explicitly clear all registers on CPU reset and complete reads
+and writes before returning. Their timing may differ from array access.
+Physical resource mapping must be checked for the selected FPGA and tool flow.

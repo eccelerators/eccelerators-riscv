@@ -52,7 +52,7 @@ instruction-by-instruction support matrix are available in
 
 ```toml
 [dependencies]
-"Eccelerators.RiscV" = "0.1.1"
+"Eccelerators.RiscV" = "0.1.2"
 ```
 
 `Eccelerators.RiscV` depends on registry package `Livt.IO` version `1.2.0` for
@@ -60,13 +60,12 @@ its UART MMIO demonstration platform. Pure local-memory examples do not require 
 user application to interact with UART APIs. The UART demo uses
 `LoopbackUart<64, 64>` and the scheduled `IBufferedUart` API.
 
-Run `livt sync` after adding the dependency. The version above is the release
-target; this repository does not establish whether it has been published.
-See [CHANGELOG.md](CHANGELOG.md) for release changes.
+Run `livt sync` after adding the dependency to resolve the published package
+and its dependencies. See [CHANGELOG.md](CHANGELOG.md) for release changes.
 
 ## 🧩 Package API Shape
 
-The supported 0.1.1 surface is intentionally small and explicit:
+The supported 0.1.2 surface is intentionally small and explicit:
 
 - `Eccelerators.RiscV.Isa`: RV32I constants, instruction field extraction,
   immediate decoding, control decoding, and word helpers.
@@ -175,6 +174,34 @@ executes at most that many instruction steps and returns early on a halt.
 Neither method promises a fixed cycle count or one instruction per clock.
 The parent decides when the processor advances, which lets Livt control boot,
 firmware provisioning, single stepping, and restart.
+
+### Register Storage Selection
+
+`Rv32iInjectedBusCore<REGISTER_STORAGE>` selects its register-file implementation
+at compile time. Omitting the argument preserves the original `Array` default;
+existing constructors and platform wrappers remain source-compatible.
+
+| `Rv32iRegisterStorage` | Owned implementation | Intended mapping |
+|---|---|---|
+| `Array` | `Rv32iRegisterFile` | Original array; no specific RAM resource promised |
+| `DistributedRam` | `Rv32iRamRegisterFile<MemoryStyle.Distributed>` | Synchronous RAM requesting distributed storage |
+| `BlockRam` | `Rv32iRamRegisterFile<MemoryStyle.Block>` | Synchronous RAM requesting block storage |
+
+For example, declare and construct the injected core with
+`Rv32iInjectedBusCore<Rv32iRegisterStorage.DistributedRam>`. Only the selected
+register-file component is constructed. All implementations satisfy
+`IRv32iRegisterFile`: x0 reads zero, writes to x0/invalid indices are ignored,
+invalid reads return zero, and `Reset()` zeros all 32 cells before returning.
+The core invokes register reset during construction and every CPU reset.
+A standalone RAM register file also requires `Reset()` before use, including
+after hardware reset, because its underlying RAM retains cells across reset.
+
+RAM-backed access is scheduled and may change instruction latency. The style
+expresses implementation intent; synthesis decides the final physical resource.
+In particular, synchronous distributed-style RAM may map to block RAM on a
+specific FPGA/tool flow. Use implementation reports to establish actual mapping.
+Select the injected core when a platform needs this configuration; the convenience
+wrappers continue using the default array-backed core.
 
 ### UART Acceptance And Completion
 
@@ -294,7 +321,7 @@ component InjectedRv32iExample
 {
 	// Owned program fixture and execution engine.
 	instructionBus: Rv32SimpleInstructionRom
-	core: Rv32iInjectedBusCore
+	core: Rv32iInjectedBusCore<Rv32iRegisterStorage.DistributedRam>
 
 	// Borrowed from the parent; must remain available while the core is used.
 	dataBus: IRv32DataBus
@@ -306,7 +333,7 @@ component InjectedRv32iExample
 	{
 		this.instructionBus = new Rv32SimpleInstructionRom()
 		this.dataBus = dataBus
-		this.core = new Rv32iInjectedBusCore(this.instructionBus, this.dataBus)
+		this.core = new Rv32iInjectedBusCore<Rv32iRegisterStorage.DistributedRam>(this.instructionBus, this.dataBus)
 	}
 
 	/**
@@ -436,7 +463,7 @@ livt clean
 livt test
 ```
 
-Release validation on 2026-10-20: **62 tests passed, zero failed or skipped**,
+Release validation on 2026-10-20: **67 tests passed, zero failed or skipped**,
 using registry dependency `Livt.IO 1.2.0`. All three README examples also
 compiled and passed behavior checks in an isolated consumer project. Coverage
 includes the instruction
@@ -466,8 +493,9 @@ Additional notes:
 - Treat `Rv32UartMmioDataBus` as a demo MMIO fixture until a parent application
   supplies its own mapped bus.
 
-The packaged register file and simple memory fixtures use arrays; this release
-does not promise block-RAM or distributed-RAM mapping. Choose explicit memory
+The default register file and simple memory fixtures use arrays. Explicit RAM
+register storage is available on the injected core; final physical mapping
+remains a synthesis result. Choose explicit memory
 components in application-owned buses where storage mapping is a requirement,
 and check synthesis reports for the resulting hardware.
 
