@@ -52,16 +52,21 @@ instruction-by-instruction support matrix are available in
 
 ```toml
 [dependencies]
-"Eccelerators.RiscV" = "0.1.0"
+"Eccelerators.RiscV" = "0.1.1"
 ```
 
-`Eccelerators.RiscV` currently depends on `Livt.IO` because the package ships a
-UART MMIO demonstration platform. Pure local-memory examples do not require a
-user application to interact with UART APIs.
+`Eccelerators.RiscV` depends on registry package `Livt.IO` version `1.2.0` for
+its UART MMIO demonstration platform. Pure local-memory examples do not require a
+user application to interact with UART APIs. The UART demo uses
+`LoopbackUart<64, 64>` and the scheduled `IBufferedUart` API.
+
+Run `livt sync` after adding the dependency. The version above is the release
+target; this repository does not establish whether it has been published.
+See [CHANGELOG.md](CHANGELOG.md) for release changes.
 
 ## 🧩 Package API Shape
 
-The supported 0.1.0 surface is intentionally small and explicit:
+The supported 0.1.1 surface is intentionally small and explicit:
 
 - `Eccelerators.RiscV.Isa`: RV32I constants, instruction field extraction,
   immediate decoding, control decoding, and word helpers.
@@ -120,7 +125,9 @@ It does not apply the mapped RAM/MMIO addresses used by the UART platform.
 `IRv32InstructionBus` and `IRv32DataBus` define synchronous, same-call completion
 contracts: requests finish before their methods return, after which result and
 error state can be read. `Rv32SimpleInstructionRom` and `Rv32SimpleDataRam` are
-fixed-size fixtures for tests, examples, and simple integrations.
+fixed-size fixtures for tests, examples, and simple integrations. Here,
+“same-call completion” means a result is ready when the scheduled call returns;
+it does not promise completion in one FPGA clock cycle.
 
 `Rv32iBusCore` provides convenient program/data setup and inspection around an
 `Rv32iInjectedBusCore` connected to the simple ROM/RAM fixtures.
@@ -150,6 +157,46 @@ For test setup and inspection, `Rv32iUartMmioSystem` provides mapped helpers
 such as `LoadMappedDataByte` and `ReadMappedDataByte` in addition to raw RAM
 offset helpers.
 
+### Ownership, Initialization, And Execution
+
+The parent application owns the buses supplied to `Rv32iInjectedBusCore`; the
+core borrows those instances and owns its execution state. Keep each bus alive
+for the core's lifetime. The core and peripherals inherit the selected Livt
+clock/reset context. The UART baud calculation must use the actual clock rate.
+
+Use one controlling process to load program/data memory, reset the processor,
+and call `Step()` or `Run(maxSteps)`. Do not reload shared memories or reset the
+core concurrently with instruction execution. `Reset()` resets the PC, register
+file, and trap state; it does not clear or reload the supplied memories. Use
+`ClearProgram()`, `ClearData()`, and the loading helpers explicitly as needed.
+
+`Step()` executes one instruction unless the core is halted. `Run(maxSteps)`
+executes at most that many instruction steps and returns early on a halt.
+Neither method promises a fixed cycle count or one instruction per clock.
+The parent decides when the processor advances, which lets Livt control boot,
+firmware provisioning, single stepping, and restart.
+
+### UART Acceptance And Completion
+
+The packaged UART platform is an **internal loopback fixture** with no external
+RX/TX pins. `GetCapturedUartByte()` inspects bytes accepted for transmission;
+it does not prove that a frame has finished on the serial wire. Applications
+that need a physical UART provide a pin-bound bus adapter to the injected core.
+
+The fixture has 64-byte receive/transmit queues and a 64-byte capture buffer.
+A byte store to the TX register attempts to enqueue one byte. A full transmit
+queue or capture buffer rejects the store and sets the bus error; the core
+handles that error through its trap model. The status register reports a
+snapshot of transmit queue space, not a reservation or capture-buffer space.
+`GetUartAvailableBytes()` reports receive occupancy. `ReceiveUartByte()` removes
+one received byte, or returns zero when empty; check occupancy to distinguish
+an empty receive from a received zero byte.
+
+`ClearData()` on the UART system clears mapped RAM, captured output, queued
+UART data, and receive error counters. Clearing queued transmit data does not
+truncate an active or already committed frame, so its loopback byte may still
+arrive afterward. Coordinate clearing with the application's UART activity.
+
 ### ISA Simplifications
 
 `FENCE` is a no-op except for PC advance. `ECALL` and `EBREAK` enter the
@@ -163,7 +210,8 @@ the instruction-by-instruction support matrix.
 ### Minimal Local-Memory System
 
 This example loads a tiny program that writes `0x44` to data byte `0` and halts
-with `EBREAK`:
+with `EBREAK`. A parent calls `LoadProgram()` and then `Run()`; construction
+only creates the owned system:
 
 ```livt
 namespace Example
@@ -171,32 +219,59 @@ namespace Example
 using Eccelerators.RiscV.Isa
 using Eccelerators.RiscV.Platform
 
+/**
+ * Owns a local-memory system whose program is provisioned explicitly at runtime.
+ */
 component TinyRv32iExample
 {
-    system: Rv32iMinimalSystem
+	// Owned processor, program memory, and data/peripheral fixtures.
+	system: Rv32iMinimalSystem
 
-    new()
-    {
-        this.system = new Rv32iMinimalSystem()
-        this.system.LoadInstruction(0, 0x04400093) // ADDI x1, x0, 0x44
-        this.system.LoadInstruction(1, 0x00102023) // SW x1, 0(x0)
-        this.system.LoadInstruction(2, 0x00100073) // EBREAK
-    }
+	/**
+	 * Creates the owned system; LoadProgram supplies its executable content.
+	 */
+	new()
+	{
+		this.system = new Rv32iMinimalSystem()
+	}
 
-    public fn Run()
-    {
-        this.system.Run(8)
-    }
+	/**
+	 * Clears program/data fixtures, resets the CPU, and loads the demonstration.
+	 * Call only while the parent is not running the processor.
+	 */
+	public fn LoadProgram()
+	{
+		this.system.ClearProgram()
+		this.system.ClearData()
+		this.system.Reset()
+		this.system.LoadInstruction(0, 0x04400093) // ADDI x1, x0, 0x44
+		this.system.LoadInstruction(1, 0x00102023) // SW x1, 0(x0)
+		this.system.LoadInstruction(2, 0x00100073) // EBREAK
+	}
 
-    public fn GetResult() byte
-    {
-        return this.system.ReadDataByte(0)
-    }
+	/**
+	 * Executes at most eight instructions after LoadProgram; returns on halt.
+	 */
+	public fn Run()
+	{
+		this.system.Run(8)
+	}
 
-    public fn HaltedOnEbreak() bool
-    {
-        return this.system.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
-    }
+	/**
+	 * Reads data byte zero; the completed example leaves 0x44 here.
+	 */
+	public fn GetResult() byte
+	{
+		return this.system.ReadDataByte(0)
+	}
+
+	/**
+	 * Reports whether execution stopped at the program's EBREAK instruction.
+	 */
+	public fn HaltedOnEbreak() bool
+	{
+		return this.system.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
 }
 ```
 
@@ -212,29 +287,59 @@ namespace Example
 using Eccelerators.RiscV.Bus
 using Eccelerators.RiscV.Core
 
+/**
+ * Owns instruction memory and borrows the parent's data bus for instruction execution.
+ */
 component InjectedRv32iExample
 {
-    instructionBus: Rv32SimpleInstructionRom
-    dataBus: IRv32DataBus
-    core: Rv32iInjectedBusCore
+	// Owned program fixture and execution engine.
+	instructionBus: Rv32SimpleInstructionRom
+	core: Rv32iInjectedBusCore
 
-    new(dataBus: IRv32DataBus)
-    {
-        this.instructionBus = new Rv32SimpleInstructionRom()
-        this.dataBus = dataBus
-        this.core = new Rv32iInjectedBusCore(this.instructionBus, this.dataBus)
-    }
+	// Borrowed from the parent; must remain available while the core is used.
+	dataBus: IRv32DataBus
 
-    public fn Run(maxSteps: int)
-    {
-        this.core.Run(maxSteps)
-    }
+	/**
+	 * Creates program memory and binds the core to the parent-owned data bus.
+	 */
+	new(dataBus: IRv32DataBus)
+	{
+		this.instructionBus = new Rv32SimpleInstructionRom()
+		this.dataBus = dataBus
+		this.core = new Rv32iInjectedBusCore(this.instructionBus, this.dataBus)
+	}
+
+	/**
+	 * Loads one instruction at word index 0..63 while execution is stopped.
+	 */
+	public fn LoadInstruction(index: int, instruction: uint)
+	{
+		this.instructionBus.LoadInstruction(index, instruction)
+	}
+
+	/**
+	 * Restarts CPU state at address zero, preserving both bus memories.
+	 */
+	public fn Reset()
+	{
+		this.core.Reset()
+	}
+
+	/**
+	 * Executes at most maxSteps instructions; nonpositive bounds do no work.
+	 * The parent must provision program/data content before calling this.
+	 */
+	public fn Run(maxSteps: int)
+	{
+		this.core.Run(maxSteps)
+	}
 }
 ```
 
 ### UART MMIO Platform
 
-This example sends one byte by executing RV32I stores to the UART MMIO address:
+This example enqueues one byte by executing RV32I stores to the UART MMIO
+address. A parent calls `LoadProgram()` and then `Run()`:
 
 ```livt
 namespace Example
@@ -242,33 +347,60 @@ namespace Example
 using Eccelerators.RiscV.Isa
 using Eccelerators.RiscV.Platform
 
+/**
+ * Owns an internal UART-loopback system for an MMIO transmission example.
+ */
 component TinyUartExample
 {
-    system: Rv32iUartMmioSystem
+	// Owned processor, program memory, and data/peripheral fixtures.
+	system: Rv32iUartMmioSystem
 
-    new()
-    {
-        this.system = new Rv32iUartMmioSystem()
-        this.system.LoadInstruction(0, 0x400000b7) // LUI x1, 0x40000
-        this.system.LoadInstruction(1, 0x04100113) // ADDI x2, x0, 0x41 ('A')
-        this.system.LoadInstruction(2, 0x00208023) // SB x2, 0(x1)
-        this.system.LoadInstruction(3, 0x00100073) // EBREAK
-    }
+	/**
+	 * Creates the owned system; LoadProgram supplies its executable content.
+	 */
+	new()
+	{
+		this.system = new Rv32iUartMmioSystem()
+	}
 
-    public fn Run()
-    {
-        this.system.Run(8)
-    }
+	/**
+	 * Clears program/data fixtures, resets the CPU, and loads the demonstration.
+	 * Call only while the parent is not running the processor.
+	 */
+	public fn LoadProgram()
+	{
+		this.system.ClearProgram()
+		this.system.ClearData()
+		this.system.Reset()
+		this.system.LoadInstruction(0, 0x400000b7) // LUI x1, 0x40000
+		this.system.LoadInstruction(1, 0x04100113) // ADDI x2, x0, 0x41 ('A')
+		this.system.LoadInstruction(2, 0x00208023) // SB x2, 0(x1)
+		this.system.LoadInstruction(3, 0x00100073) // EBREAK
+	}
 
-    public fn GetFirstByte() byte
-    {
-        return this.system.GetCapturedUartByte(0)
-    }
+	/**
+	 * Executes at most eight instructions after LoadProgram; returns on halt.
+	 */
+	public fn Run()
+	{
+		this.system.Run(8)
+	}
 
-    public fn HaltedOnEbreak() bool
-    {
-        return this.system.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
-    }
+	/**
+	 * Reads the first accepted TX byte; this does not wait for wire completion.
+	 */
+	public fn GetFirstByte() byte
+	{
+		return this.system.GetCapturedUartByte(0)
+	}
+
+	/**
+	 * Reports whether execution stopped at the program's EBREAK instruction.
+	 */
+	public fn HaltedOnEbreak() bool
+	{
+		return this.system.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+	}
 }
 ```
 
@@ -297,14 +429,21 @@ Run the configured test components:
 livt test
 ```
 
-To force a clean regeneration without removing dependencies:
+For a fresh build, use the supported cleanup command:
 
 ```sh
-rm -rf out .livt/src.json .livt/ghdl
+livt clean
 livt test
 ```
 
-Do not use `livt clean` for the package release flow.
+Release validation on 2026-10-20: **62 tests passed, zero failed or skipped**,
+using registry dependency `Livt.IO 1.2.0`. All three README examples also
+compiled and passed behavior checks in an isolated consumer project. Coverage
+includes the instruction
+matrices, bus/platform integrations, and physical UART serialization through
+the simulated loopback receiver, including a zero byte. These are simulation
+results; FPGA resource use, maximum clock frequency, and board behavior require
+separate measurements of the consuming design.
 
 Additional notes:
 
@@ -326,6 +465,11 @@ Additional notes:
 - Keep `Rv32iMinimalSystem` as the stable zero-based local-memory wrapper.
 - Treat `Rv32UartMmioDataBus` as a demo MMIO fixture until a parent application
   supplies its own mapped bus.
+
+The packaged register file and simple memory fixtures use arrays; this release
+does not promise block-RAM or distributed-RAM mapping. Choose explicit memory
+components in application-owned buses where storage mapping is a requirement,
+and check synthesis reports for the resulting hardware.
 
 ## 🚀 Outlook
 

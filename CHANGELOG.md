@@ -2,6 +2,36 @@
 
 All notable changes to `Eccelerators.RiscV` are recorded here.
 
+## [0.1.1] - 2026-10-20
+
+### Changed
+
+- Require registry dependency `Livt.IO 1.2.0` instead of `0.2.0`.
+- Migrate the UART MMIO fixture to `LoopbackUart<64, 64>` and the buffered
+  `TryTransmit`, `TryReceive`, `GetReceiveCount`, and `ClearErrors` operations.
+  Existing RISC-V bus/system helper signatures and the MMIO map are unchanged.
+- Align README examples with the Livt Design Guide: tab indentation, documented
+  ownership and functions, and explicit runtime program loading.
+- Document scheduled call completion, CPU reset/provisioning, UART acceptance
+  versus wire completion, queue/capture limits, and memory-mapping boundaries.
+
+### Added
+
+- Serial-loopback regression coverage for ordered delivery, a zero byte,
+  receive occupancy, and empty receive behavior.
+
+### Validation And Upgrade
+
+- All 62 package tests passed with `Livt.IO 1.2.0`; none failed or were skipped.
+- All three README examples compiled and passed behavior checks in an isolated
+  consumer project against this source tree.
+- Set the package dependency to `Eccelerators.RiscV = "0.1.1"` and run
+  `livt sync` after publication. Consumers that explicitly pin `Livt.IO 0.2.0`
+  must update that dependency to `1.2.0` and migrate any direct UART calls.
+- This release retains the array-backed register file and memory fixtures.
+  It does not include the application-specific RAM-backed register-file
+  adaptation or claim FPGA fit/timing for a consuming application.
+
 ## [0.1.0] - 2026-08-03
 
 - Add RV32I ISA helpers, execution primitives, and full local-memory reference

@@ -20,9 +20,7 @@ component Rv32UartMmioDataBus: IRv32DataBus
 
 	ram: Rv32SimpleDataRam
 
-	uart: Uart
-
-	loopbackLine: logic = 0b1
+	uart: LoopbackUart<64, 64>
 
 	captured: byte[64]
 
@@ -35,7 +33,7 @@ component Rv32UartMmioDataBus: IRv32DataBus
 	new()
 	{
 		this.ram = new Rv32SimpleDataRam()
-		this.uart = new Uart(this.loopbackLine, this.loopbackLine)
+		this.uart = new LoopbackUart<64, 64>()
 		this.Clear()
 	}
 
@@ -45,7 +43,7 @@ component Rv32UartMmioDataBus: IRv32DataBus
 		this.ram.Clear()
 		this.uart.ClearReceiveBuffer()
 		this.uart.ClearTransmitBuffer()
-		this.uart.ClearFrameErrors()
+		this.uart.ClearErrors()
 
 		while (index < CAPTURE_BYTES) {
 			this.captured[index] = 0x00
@@ -116,12 +114,14 @@ component Rv32UartMmioDataBus: IRv32DataBus
 
 	public fn GetUartAvailableBytes() int
 	{
-		return this.uart.GetAvailableBytes()
+		return this.uart.GetReceiveCount()
 	}
 
 	public fn ReceiveUartByte() byte
 	{
-		return this.uart.Receive()
+		var value: byte = 0x00
+		this.uart.TryReceive(value)
+		return value
 	}
 
 	override fn Load(address: uint, width: int, signedLoad: bool)
@@ -180,7 +180,7 @@ component Rv32UartMmioDataBus: IRv32DataBus
 				return
 			}
 
-			accepted = this.uart.Transmit(byteValue)
+			accepted = this.uart.TryTransmit(byteValue)
 
 			if (accepted == false) {
 				this.error = true

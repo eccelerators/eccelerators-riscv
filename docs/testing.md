@@ -23,3 +23,11 @@ The current suite covers:
   bus fixtures.
 - Compact programs running through `Rv32iReferenceCore`.
 - UART MMIO hello-world execution through `Rv32iUartMmioSystem`.
+
+The Livt.IO 1.2.0 migration was validated on 2026-10-20: 62 tests passed,
+zero failed or skipped. The UART regression also checks serial loopback delivery
+of two bytes (including zero), receive occupancy, and empty-receive behavior.
+
+The three README examples were also extracted into an isolated consumer project
+and checked for their documented local-memory, UART enqueue, and borrowed-bus
+behavior: three passed, zero failed or skipped.

@@ -1,6 +1,6 @@
 [project]
 name = "Eccelerators.RiscV"
-version = "0.1.0"
+version = "0.1.1"
 path = "src"
 outdir = "out"
 
@@ -28,4 +28,4 @@ components = [
 ]
 
 [dependencies]
-"Livt.IO" = "0.2.0"
+"Livt.IO" = "1.2.0"

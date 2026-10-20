@@ -15,7 +15,7 @@ an optimized soft CPU.
   applications that want a convenient zero-based local-memory wrapper.
 - `Rv32iUartMmioSystem` is compact in mapped-platform scope but composes the full
   `Rv32iInjectedBusCore` with mapped RAM/UART buses. It exists to show MMIO
-  composition with `Livt.IO.Uart`, not to define a reduced instruction subset.
+  composition with `Livt.IO.LoopbackUart<64, 64>`, not to define a reduced instruction subset.
 
 ## Timing And Latency
 
