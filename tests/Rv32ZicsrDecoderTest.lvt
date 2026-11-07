@@ -1,0 +1,55 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Contracts
+
+/**
+ * Independent SYSTEM encoding matrix verifies CSR forms and immediate operand flags.
+ */
+@Test
+component Rv32ZicsrDecoderTest
+{
+	// Owned base decoder and borrowed overlay.
+	base: Rv32iZmmulDecoder
+	subject: Rv32ZicsrDecoder
+
+	/**
+	 * Binds the overlay to the actual qualified Zmmul decoder.
+	 */
+	new()
+	{
+		base = new Rv32iZmmulDecoder()
+		subject = new Rv32ZicsrDecoder(base)
+	}
+
+	/**
+	 * Unknown CSR addresses are decoded as access attempts; the provider checks legality.
+	 */
+	@Test
+	fn SystemMatrix()
+	{
+		for (var operation: uint = 0; operation < 8; operation++) {
+			for (var source: uint = 0; source < 32; source++) {
+				for (var destination: uint = 0; destination < 32; destination++) {
+					subject.instruction = (0x77700073 | (operation << 12)
+						| (source << 15) | (destination << 7)) as logic[32]
+					Simulation.Wait(1)
+					var control = subject.control as uint
+					assert RvDecoded.IsLegal(control) == (operation != 0 && operation != 4)
+
+					if (operation != 0 && operation != 4) {
+						assert RvDecoded.Rd(control) == destination
+						assert RvDecoded.Rs1(control) == source
+						assert RvDecoded.HasSource1(control) == (operation < 4)
+						assert !RvDecoded.HasSource2(control)
+						assert RvDecoded.HasDestinationWrite(control)
+						var expected: uint = 224 | operation
+						assert RvDecoded.Operation(control) == expected
+						assert subject.immediate as uint == source
+					}
+				}
+			}
+		}
+	}
+}

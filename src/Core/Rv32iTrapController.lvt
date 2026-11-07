@@ -1,42 +1,60 @@
 namespace Eccelerators.RiscV.Core
 
 /**
- * Stores the simple halt/trap state used by the first RV32I core.
+ * Owns the diagnostic halt state used by the scheduled RV32I reference core.
+ * This records a stop cause and byte PC; it does not implement machine-mode traps.
+ * The controlling process serializes Trap, Reset and observation in its inherited context.
  */
 component Rv32iTrapController
 {
+	// Owned diagnostic stop and its saved cause/faulting byte address.
 	halted: bool
-
 	trapCause: int
-
 	trapPc: uint
 
+	/**
+	 * Clears the diagnostic halt and its saved cause/PC. Does not modify processor registers or memory.
+	 */
 	public fn Reset()
 	{
-		this.halted = false
-		this.trapCause = 0
-		this.trapPc = 0
+		halted = false
+		trapCause = 0
+		trapPc = 0
 	}
 
+	/**
+	 * Records cause and faulting byte PC, and stops execution until Reset.
+	 * This is diagnostic halt state, not machine-mode exception entry.
+	 */
 	public fn Trap(cause: int, pc: uint)
 	{
-		this.halted = true
-		this.trapCause = cause
-		this.trapPc = pc
+		halted = true
+		trapCause = cause
+		trapPc = pc
 	}
 
+	/**
+	 * Reports whether a diagnostic fault stopped instruction execution.
+	 */
 	public fn IsHalted() bool
 	{
-		return this.halted
+		return halted
 	}
 
+	/**
+	 * Returns the last diagnostic cause from Rv32iConstants, or TRAP_NONE after reset.
+	 * These reference-core codes are separate from machine mcause encodings.
+	 */
 	public fn GetTrapCause() int
 	{
-		return this.trapCause
+		return trapCause
 	}
 
+	/**
+	 * Returns the saved faulting PC in bytes, or zero after reset. Check IsHalted first.
+	 */
 	public fn GetTrapPc() uint
 	{
-		return this.trapPc
+		return trapPc
 	}
 }

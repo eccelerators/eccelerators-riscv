@@ -1,0 +1,180 @@
+namespace Eccelerators.RiscV.Sequential
+
+/**
+ * Context-free arithmetic, branch and byte-lane semantics shared by engines.
+ * No component state, clocks, scheduled calls or architectural side effects.
+ */
+public class Rv32iSemantics
+{
+	/**
+	 * Sign extends the low bits of value; bits must be 1..31.
+	 */
+	public static fn SignExtend[](value: uint, bits: int) uint
+	{
+		var sign = (1 as uint) << (bits - 1)
+		return ((value & ((sign << 1) - 1)) ^ sign) - sign
+	}
+
+	/**
+	 * Executes a selected 32-bit integer operation; shift counts use five low bits.
+	 */
+	public static fn Integer[](operation: uint, left: uint, right: uint) uint
+	{
+		var amount = (right & 31) as int
+
+		match (operation)
+		{
+			Rv32iOperations.ADD =>
+			{
+				return left + right
+			}
+			Rv32iOperations.SUB =>
+			{
+				return left - right
+			}
+			Rv32iOperations.SLL =>
+			{
+				return left << amount
+			}
+			Rv32iOperations.SLT =>
+			{
+				if ((left ^ 0x80000000) < (right ^ 0x80000000)) {
+					return 1
+				}
+
+				return 0
+			}
+			Rv32iOperations.SLTU =>
+			{
+				if (left < right) {
+					return 1
+				}
+
+				return 0
+			}
+			Rv32iOperations.XOR =>
+			{
+				return left ^ right
+			}
+			Rv32iOperations.SRL =>
+			{
+				return left >> amount
+			}
+			Rv32iOperations.SRA =>
+			{
+				if (amount == 0 || (left & 0x80000000) == 0) {
+					return left >> amount
+				}
+
+				return (left >> amount) | (0xffffffff << (32 - amount))
+			}
+			Rv32iOperations.OR =>
+			{
+				return left | right
+			}
+			Rv32iOperations.AND =>
+			{
+				return left & right
+			}
+			_ =>
+			{
+				return 0
+			}
+		}
+	}
+
+	/**
+	 * Evaluates the six legal branch funct3 values; reserved values return false.
+	 */
+	public static fn Branch[](kind: uint, left: uint, right: uint) bool
+	{
+		match (kind)
+		{
+			Rv32iOperations.BEQ =>
+			{
+				return left == right
+			}
+			Rv32iOperations.BNE =>
+			{
+				return left != right
+			}
+			Rv32iOperations.BLT =>
+			{
+				return (left ^ 0x80000000) < (right ^ 0x80000000)
+			}
+			Rv32iOperations.BGE =>
+			{
+				return (left ^ 0x80000000) >= (right ^ 0x80000000)
+			}
+			Rv32iOperations.BLTU =>
+			{
+				return left < right
+			}
+			Rv32iOperations.BGEU =>
+			{
+				return left >= right
+			}
+			_ =>
+			{
+				return false
+			}
+		}
+	}
+
+	/**
+	 * Tests natural alignment for the legal load/store funct3 width encoding.
+	 */
+	public static fn Misaligned[](address: uint, kind: uint) bool
+	{
+		var width = kind & Rv32iOperations.WIDTH_MASK
+		return (width == Rv32iOperations.HALF && (address & 1) != 0) || (width == Rv32iOperations.WORD && (address & 3) != 0)
+	}
+
+	/**
+	 * Extracts and extends an aligned load from a little-endian word response.
+	 */
+	public static fn Load[](word: uint, address: uint, kind: uint) uint
+	{
+		var shifted = word >> (((address & 3) * 8) as int)
+
+		match (kind)
+		{
+			Rv32iOperations.BYTE =>
+			{
+				return SignExtend(shifted, 8)
+			}
+			Rv32iOperations.HALF =>
+			{
+				return SignExtend(shifted, 16)
+			}
+			Rv32iOperations.BYTE_UNSIGNED =>
+			{
+				return shifted & 255
+			}
+			Rv32iOperations.HALF_UNSIGNED =>
+			{
+				return shifted & 65535
+			}
+			_ =>
+			{
+				return word
+			}
+		}
+	}
+
+	/**
+	 * Returns a four-lane write mask for an aligned byte, halfword or word store.
+	 */
+	public static fn StoreMask[](address: uint, kind: uint) uint
+	{
+		var mask: uint = 15
+
+		if (kind == Rv32iOperations.BYTE) {
+			mask = 1
+		} elif (kind == Rv32iOperations.HALF) {
+			mask = 3
+		}
+
+		return mask << ((address & 3) as int)
+	}
+}

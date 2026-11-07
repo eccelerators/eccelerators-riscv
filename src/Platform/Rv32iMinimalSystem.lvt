@@ -3,83 +3,137 @@ namespace Eccelerators.RiscV.Platform
 using Eccelerators.RiscV.Core
 
 /**
- * Minimal RV32I system wrapper with zero-based local program/data memories.
+ * Owns a scheduled RV32I reference core with zero-based local program/data memories.
+ * Uses the inherited clock/reset context. One controlling process provisions memory,
+ * resets CPU state and drives Step or Run; calls complete before returning.
  */
 component Rv32iMinimalSystem
 {
+	// Local program capacity in words and data capacity in bytes.
 	public const PROGRAM_WORDS: int = 64
-
 	public const DATA_BYTES: int = 256
 
+	// Owned reference processor and zero-based local memories.
 	core: Rv32iReferenceCore
 
+	/**
+	 * Owns the processor and local fixtures in the inherited clock/reset context.
+	 * Construction initializes their state; provision executable content before Run or Step.
+	 */
 	new()
 	{
-		this.core = new Rv32iReferenceCore()
+		core = new Rv32iReferenceCore()
 	}
 
+	/**
+	 * Restores reset PC, clears integer registers and releases diagnostic halt.
+	 * Program and data memories are preserved; call only while execution is stopped.
+	 */
 	public fn Reset()
 	{
-		this.core.Reset()
+		core.Reset()
 	}
 
+	/**
+	 * Zeros all 64 program words before returning. Call only while execution is stopped.
+	 */
 	public fn ClearProgram()
 	{
-		this.core.ClearProgram()
+		core.ClearProgram()
 	}
 
+	/**
+	 * Zeros the 256-byte data fixture before returning. Call only while execution is stopped.
+	 */
 	public fn ClearData()
 	{
-		this.core.ClearData()
+		core.ClearData()
 	}
 
+	/**
+	 * Stores a word at instruction index 0..63; ignores indices outside that range.
+	 * Provision only while execution is stopped; this argument is a word index, not a byte address.
+	 */
 	public fn LoadInstruction(index: int, instruction: uint)
 	{
-		this.core.LoadInstruction(index, instruction)
+		core.LoadInstruction(index, instruction)
 	}
 
+	/**
+	 * Stores a byte at local RAM offset 0..255; ignores invalid offsets.
+	 * Serialize provisioning with CPU accesses; no bus address translation is applied.
+	 */
 	public fn LoadDataByte(address: int, value: byte)
 	{
-		this.core.LoadDataByte(address, value)
+		core.LoadDataByte(address, value)
 	}
 
+	/**
+	 * Executes at most maxSteps instruction attempts, stopping early on a diagnostic halt.
+	 * Nonpositive bounds do nothing. Provision memory first and serialize CPU control calls;
+	 * scheduled completion does not imply a fixed number of clock cycles.
+	 */
 	public fn Run(maxSteps: int)
 	{
-		this.core.Run(maxSteps)
+		core.Run(maxSteps)
 	}
 
+	/**
+	 * Executes one instruction attempt and returns after its effects or diagnostic fault.
+	 * Does nothing while halted. Provision memory first; do not overlap reset or other CPU calls.
+	 */
 	public fn Step()
 	{
-		this.core.Step()
+		core.Step()
 	}
 
+	/**
+	 * Returns the byte at local RAM offset 0..255, or zero for an invalid offset.
+	 * Read only after any concurrent CPU access has completed.
+	 */
 	public fn ReadDataByte(address: int) byte
 	{
-		return this.core.ReadDataByte(address)
+		return core.ReadDataByte(address)
 	}
 
+	/**
+	 * Returns x1..x31, or zero for x0 and invalid indices. Inspect after execution completes.
+	 */
 	public fn ReadRegister(index: int) uint
 	{
-		return this.core.ReadRegister(index)
+		return core.ReadRegister(index)
 	}
 
+	/**
+	 * Returns the current architectural PC in bytes; inspect after execution completes.
+	 */
 	public fn GetPc() uint
 	{
-		return this.core.GetPc()
+		return core.GetPc()
 	}
 
+	/**
+	 * Reports whether a diagnostic fault stopped instruction execution.
+	 */
 	public fn IsHalted() bool
 	{
-		return this.core.IsHalted()
+		return core.IsHalted()
 	}
 
+	/**
+	 * Returns the last diagnostic cause from Rv32iConstants, or TRAP_NONE after reset.
+	 * These reference-core codes are separate from machine mcause encodings.
+	 */
 	public fn GetTrapCause() int
 	{
-		return this.core.GetTrapCause()
+		return core.GetTrapCause()
 	}
 
+	/**
+	 * Returns the saved faulting PC in bytes, or zero after reset. Check IsHalted first.
+	 */
 	public fn GetTrapPc() uint
 	{
-		return this.core.GetTrapPc()
+		return core.GetTrapPc()
 	}
 }

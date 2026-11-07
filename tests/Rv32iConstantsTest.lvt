@@ -2,9 +2,16 @@ namespace Eccelerators.RiscV.Tests
 
 using Eccelerators.RiscV.Isa
 
+/**
+ * Checks the published architectural widths, opcodes and diagnostic causes.
+ * Stateful scenarios initialize their inputs independently before execution.
+ */
 @Test
 component Rv32iConstantsTest
 {
+	/**
+	 * Checks published opcode values against instruction encoding fields.
+	 */
 	@Test
 	fn TestOpcodeConstants()
 	{
@@ -14,6 +21,9 @@ component Rv32iConstantsTest
 		assert Rv32iConstants.OPCODE_SYSTEM == 0x73
 	}
 
+	/**
+	 * Checks the diagnostic trap vocabulary used by the scheduled reference cores.
+	 */
 	@Test
 	fn TestTrapConstants()
 	{

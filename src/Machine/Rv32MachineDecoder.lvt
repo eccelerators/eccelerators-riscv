@@ -1,0 +1,42 @@
+namespace Eccelerators.RiscV.Machine
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Contracts
+
+/**
+ * Exact MRET overlay on an exclusively borrowed base decoder in one clock domain.
+ * The application separately checks base and Zicsr coverage and binds machine
+ * trap dispatch in the engine. Other encodings retain the base decoder's result.
+ */
+component Rv32MachineDecoder : IRv32DecodePort
+{
+	// Added decode family; existing base capabilities remain separately checked.
+	public const CAPABILITIES: uint = Rv32TrapOperations.CAPABILITY
+
+	// Borrowed base decoder, owned by the application composition root.
+	base: IRv32DecodePort
+
+	/**
+	 * Binds a pure base decoder without changing instruction sampling.
+	 */
+	new(base: flip IRv32DecodePort)
+	{
+		this.base = base
+	}
+
+	/**
+	 * Adds only exact MRET; reserved register/immediate fields remain illegal.
+	 */
+	process Decode[]()
+	{
+		base.instruction = instruction
+		control = base.control
+		immediate = base.immediate
+
+		if (instruction as uint == Rv32TrapOperations.MRET_ENCODING) {
+			control = RvDecoded.Pack(Rv32TrapOperations.RETURN_KIND << Rv32iOperations.KIND_SHIFT,
+				0, 0, 0, false, false, false, true) as logic[32]
+			immediate = 0
+		}
+	}
+}

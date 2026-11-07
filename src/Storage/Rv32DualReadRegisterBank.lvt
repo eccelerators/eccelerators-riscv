@@ -1,0 +1,117 @@
+namespace Eccelerators.RiscV.Storage
+
+using Livt.IO
+
+/**
+ * Two synchronous read copies with one broadcast write, BRAM requested by default.
+ * Each copy has one read and one write port; no multi-pumped clock is required.
+ * Explicit forwarding makes read/write collisions independent of inferred RAM
+ * collision mode. Owns storage exclusively in the inherited clock/reset context.
+ * STYLE is an implementation hint; physical mapping must be measured per target.
+ */
+component Rv32DualReadRegisterBank<STYLE: MemoryStyle = MemoryStyle.Block> : IRv32DualReadRegisterPort
+{
+	// Capabilities consumed by the bounded pipeline construction contract.
+	public const READ_PORTS: int = 2
+	public const READ_LATENCY: int = 1
+	public const INDEPENDENT_WRITE: bool = true
+	public const WRITE_FORWARDING: bool = true
+
+	// Replicated payload has no reset; the engine initializes both copies by writing.
+	@Memory(Style = STYLE)
+	@UninitializedStorage
+	leftStorage: logic[32, 32]
+
+	@Memory(Style = STYLE)
+	@UninitializedStorage
+	rightStorage: logic[32, 32]
+
+	// Raw RAM responses and sampled correction data share the accepting read edge.
+	leftResponse: logic[32]
+	rightResponse: logic[32]
+	leftZero: bool
+	rightZero: bool
+	leftCollision: bool
+	rightCollision: bool
+	forwarded: logic[32]
+
+	/**
+	 * Owns storage; no constructor-time payload initialization is promised.
+	 */
+	new()
+	{
+	}
+
+	/**
+	 * Owns the left RAM copy with independent synchronous read and write commands.
+	 */
+	process Left()
+	{
+		state {
+			if (readEnable == 0b1) {
+				leftResponse = leftStorage[leftIndex as uint]
+			}
+
+			if (writeEnable == 0b1 && writeIndex != 0) {
+				leftStorage[writeIndex as uint] = writeData
+			}
+		}
+	}
+
+	/**
+	 * Owns the right RAM copy; writes are identical to those of the left copy.
+	 */
+	process Right()
+	{
+		state {
+			if (readEnable == 0b1) {
+				rightResponse = rightStorage[rightIndex as uint]
+			}
+
+			if (writeEnable == 0b1 && writeIndex != 0) {
+				rightStorage[writeIndex as uint] = writeData
+			}
+		}
+	}
+
+	/**
+	 * Captures bypass and zero selections only when accepting a new operand pair.
+	 */
+	process Sample()
+	{
+		state {
+			if (readEnable == 0b1) {
+				leftZero = leftIndex == 0
+				rightZero = rightIndex == 0
+				leftCollision = writeEnable == 0b1 && writeIndex == leftIndex
+				rightCollision = writeEnable == 0b1 && writeIndex == rightIndex
+				forwarded = writeData
+			}
+		}
+	}
+
+	/**
+	 * Corrects collisions without relying on vendor-specific read-during-write data.
+	 */
+	process Drive[]()
+	{
+		leftData = leftResponse
+		rightData = rightResponse
+
+		if (leftCollision) {
+			leftData = forwarded
+		}
+
+		if (rightCollision) {
+			rightData = forwarded
+		}
+
+		if (leftZero) {
+			leftData = 0
+		}
+
+		if (rightZero) {
+			rightData = 0
+		}
+	}
+}

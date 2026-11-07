@@ -2,35 +2,49 @@ namespace Eccelerators.RiscV.Tests
 
 using Eccelerators.RiscV.Isa
 
+/**
+ * Checks extraction of register indices, opcodes and instruction function fields.
+ * Stateful scenarios initialize their inputs independently before execution.
+ */
 @Test
 component Rv32iInstructionFieldsTest
 {
+	// Owned subjects and fixtures; scenarios initialize mutable state before use.
 	fields: Rv32iInstructionFields
 
+	/**
+	 * Constructs the owned subjects and fixtures; each stateful scenario supplies its own initialization.
+	 */
 	new()
 	{
-		this.fields = new Rv32iInstructionFields()
+		fields = new Rv32iInstructionFields()
 	}
 
+	/**
+	 * Checks each extracted register/function field against a known R-format instruction.
+	 */
 	@Test
 	fn TestRTypeFields()
 	{
 		var instruction: uint = 0x002081b3
-		assert this.fields.GetOpcode(instruction) == Rv32iConstants.OPCODE_OP
-		assert this.fields.GetRd(instruction) == 3
-		assert this.fields.GetRs1(instruction) == 1
-		assert this.fields.GetRs2(instruction) == 2
-		assert this.fields.GetFunct3(instruction) == 0
-		assert this.fields.GetFunct7(instruction) == 0
+		assert fields.GetOpcode(instruction) == Rv32iConstants.OPCODE_OP
+		assert fields.GetRd(instruction) == 3
+		assert fields.GetRs1(instruction) == 1
+		assert fields.GetRs2(instruction) == 2
+		assert fields.GetFunct3(instruction) == 0
+		assert fields.GetFunct7(instruction) == 0
 	}
 
+	/**
+	 * Checks opcode, destination and source fields against a known I-format instruction.
+	 */
 	@Test
 	fn TestITypeFields()
 	{
 		var instruction: uint = 0x00500093
-		assert this.fields.GetOpcode(instruction) == Rv32iConstants.OPCODE_OP_IMM
-		assert this.fields.GetRd(instruction) == 1
-		assert this.fields.GetRs1(instruction) == 0
-		assert this.fields.GetFunct3(instruction) == 0
+		assert fields.GetOpcode(instruction) == Rv32iConstants.OPCODE_OP_IMM
+		assert fields.GetRd(instruction) == 1
+		assert fields.GetRs1(instruction) == 0
+		assert fields.GetFunct3(instruction) == 0
 	}
 }

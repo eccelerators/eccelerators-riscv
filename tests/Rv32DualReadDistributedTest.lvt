@@ -1,0 +1,143 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Contracts
+using Livt.IO
+
+/**
+ * Independent architectural checks for simultaneous read/write register storage.
+ * Every test initializes the bank and uses distinct operand values.
+ */
+@Test
+component Rv32DualReadDistributedTest
+{
+	// Owned provider and compatibility witness in the test clock domain.
+	subject: Rv32DualReadRegisterBank<MemoryStyle.Distributed>
+	contract: RvPipelineContract<Rv32DualReadRegisterBank.READ_PORTS,
+		Rv32DualReadRegisterBank.READ_LATENCY, Rv32DualReadRegisterBank.INDEPENDENT_WRITE,
+		Rv32DualReadRegisterBank.WRITE_FORWARDING>
+
+	/**
+	 * Instantiates a concrete storage style with the documented pipeline contract.
+	 */
+	new()
+	{
+		subject = new Rv32DualReadRegisterBank<MemoryStyle.Distributed>()
+		contract = new RvPipelineContract<Rv32DualReadRegisterBank.READ_PORTS,
+			Rv32DualReadRegisterBank.READ_LATENCY, Rv32DualReadRegisterBank.INDEPENDENT_WRITE,
+			Rv32DualReadRegisterBank.WRITE_FORWARDING>()
+	}
+
+	/**
+	 * Initializes architectural registers through the public write port.
+	 */
+	fn Initialize()
+	{
+		subject.readEnable = 0b0
+		subject.writeEnable = 0b0
+
+		for (var index: uint = 1; index < 32; index++) {
+			subject.writeIndex = index as logic[5]
+			subject.writeData = (index * 17) as logic[32]
+			subject.writeEnable = 0b1
+			Simulation.Wait(2)
+		}
+
+		subject.writeEnable = 0b0
+		Simulation.Wait(2)
+	}
+
+	/**
+	 * Both operands are independently addressed, including the last register.
+	 */
+	@Test
+	fn IndependentReads()
+	{
+		Initialize()
+		subject.readEnable = 0b1
+
+		for (var index: uint = 0; index < 32; index++) {
+			subject.leftIndex = index as logic[5]
+			subject.rightIndex = (31 - index) as logic[5]
+			Simulation.Wait(2)
+			assert subject.leftData as uint == index * 17
+			assert subject.rightData as uint == (31 - index) * 17
+		}
+	}
+
+	/**
+	 * A write forwards to either or both readers and persists in both copies.
+	 */
+	@Test
+	fn CollisionsReturnNewValue()
+	{
+		Initialize()
+		subject.readEnable = 0b1
+		subject.leftIndex = 3
+		subject.rightIndex = 5
+		subject.writeIndex = 3
+		subject.writeData = 0x12345678
+		subject.writeEnable = 0b1
+		Simulation.Wait(2)
+		assert subject.leftData == 0x12345678
+		assert subject.rightData == 85
+		subject.writeIndex = 5
+		subject.writeData = 0xabcdef01
+		Simulation.Wait(2)
+		assert subject.leftData == 0x12345678
+		assert subject.rightData == 0xabcdef01
+		subject.leftIndex = 5
+		Simulation.Wait(2)
+		assert subject.leftData == 0xabcdef01
+		assert subject.rightData == 0xabcdef01
+		subject.writeEnable = 0b0
+		subject.leftIndex = 3
+		subject.rightIndex = 3
+		Simulation.Wait(2)
+		assert subject.leftData == 0x12345678
+		assert subject.rightData == 0x12345678
+	}
+
+	/**
+	 * Architectural zero wins even when both read ports collide with a write to x0.
+	 */
+	@Test
+	fn ZeroIgnoresWrites()
+	{
+		Initialize()
+		subject.readEnable = 0b1
+		subject.leftIndex = 0
+		subject.rightIndex = 0
+		subject.writeEnable = 0b1
+		subject.writeIndex = 0
+		subject.writeData = 0xffffffff
+		Simulation.Wait(2)
+		assert subject.leftData == 0
+		assert subject.rightData == 0
+	}
+
+	/**
+	 * Disabled reads retain the previous pair while independent writes proceed.
+	 */
+	@Test
+	fn DisabledReadsHoldDuringWrites()
+	{
+		Initialize()
+		subject.readEnable = 0b1
+		subject.leftIndex = 7
+		subject.rightIndex = 9
+		Simulation.Wait(2)
+		subject.readEnable = 0b0
+		subject.writeEnable = 0b1
+		subject.writeIndex = 7
+		subject.writeData = 0xffffffff
+		Simulation.Wait(3)
+		assert subject.leftData == 119
+		assert subject.rightData == 153
+		subject.writeEnable = 0b0
+		subject.readEnable = 0b1
+		Simulation.Wait(2)
+		assert subject.leftData == 0xffffffff
+		assert subject.rightData == 153
+	}
+}

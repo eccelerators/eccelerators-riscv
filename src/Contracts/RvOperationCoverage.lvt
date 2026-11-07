@@ -1,0 +1,25 @@
+namespace Eccelerators.RiscV.Contracts
+
+/**
+ * Elaboration-only coverage check for two explicitly routed operation providers.
+ * Each bit identifies one operation in a composition-local vocabulary, not an ISA.
+ * Concrete wiring must supply provider constants; arbitrary masks prove no behavior.
+ * Extra provider capabilities are allowed; routes must cover exactly REQUESTED.
+ */
+component RvOperationCoverage<REQUESTED: uint, DECODED: uint,
+	PRIMARY: uint, SECONDARY: uint, PRIMARY_ROUTE: uint, SECONDARY_ROUTE: uint>
+{
+	static assert REQUESTED != 0, "Empty operation selection"
+	static assert (REQUESTED & DECODED) == REQUESTED, "Decoder lacks requested operation"
+	static assert (PRIMARY_ROUTE & PRIMARY) == PRIMARY_ROUTE, "Primary provider lacks routed operation"
+	static assert (SECONDARY_ROUTE & SECONDARY) == SECONDARY_ROUTE, "Secondary provider lacks routed operation"
+	static assert (PRIMARY_ROUTE & SECONDARY_ROUTE) == 0, "Ambiguous operation dispatch"
+	static assert (PRIMARY_ROUTE | SECONDARY_ROUTE) == REQUESTED, "Dispatch must cover exactly requested operations"
+
+	/**
+	 * Checks the supplied constants; owns no runtime state or hardware service.
+	 */
+	new()
+	{
+	}
+}

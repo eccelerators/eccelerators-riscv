@@ -2,6 +2,69 @@
 
 All notable changes to `Eccelerators.RiscV` are recorded here.
 
+## [0.2.0] - 2026-11-07
+
+This release adds signal-level, composable FPGA cores alongside the scheduled
+RV32I reference API from 0.1.x.
+
+### Added
+
+- `Rv32SequentialEngine` and `Rv32PipelineEngine`, with explicit decoder,
+  register-file, arithmetic, multiplier, CSR and instruction/data providers.
+- Six named presets covering RV32I, RV32I + Zmmul, and machine-mode compositions
+  for both execution engines. Applications can also assemble the same units
+  explicitly through their signal interfaces.
+- Synchronous single-port and dual-read register banks, with
+  `REGISTER_FILE_STYLE` defaulting to `MemoryStyle.Block`, and bounded word RAM
+  with a separate provisioning channel.
+- Iterative and DSP-oriented providers for MUL, MULH, MULHSU and MULHU. The
+  non-machine Zmmul presets and pipeline machine preset expose `DSP_MULTIPLY`;
+  sequential DSP machine cores use explicit composition.
+- Shared `Rv32ZicsrComposition` and access helpers, the six CSR instruction forms,
+  machine CSR state, cycle/retirement counters, direct exception entry and MRET.
+- Timer and external interrupt delivery at precise architectural boundaries,
+  plus application-owned timer, interrupt aggregation, event-latch and
+  synchronization components.
+- Run/pause, single-step and restart controls, retirement/trap observation,
+  ordered memory effects and pipeline hazard/drain handling.
+- Elaboration checks for declared operation coverage and provider timing, plus
+  functional tests for execution, storage, controls, multiplication, CSRs,
+  traps and interrupts.
+
+### Migration and scope
+
+- New FPGA integrations should select a named preset or explicitly compose an
+  engine. The existing scheduled reference cores remain available, but their
+  `Step()`/`Run()` calls and blocking buses are separate from the new signal-level
+  control and memory protocols. They are not interchangeable interfaces.
+- The older reference core's `Rv32iRegisterStorage` selection remains distinct
+  from `REGISTER_FILE_STYLE`. Storage hints preserve each interface's timing
+  contract; physical RAM mapping must be checked for the target FPGA.
+- Applications own firmware provisioning, memory maps, peripherals, clock/reset
+  and interrupt acknowledgement. CPU restart does not reset platform devices.
+- Use `rv32i`, `rv32i_zmmul` or `rv32i_zmmul_zicsr` with the `ilp32` ABI according
+  to the selected core. Zmmul does not include division/remainder. Machine support
+  is a documented subset; lower privilege modes, MMU, caches, architectural debug
+  and Linux boot support are absent.
+- The registry dependency remains `Livt.IO 1.2.0`. After publication, select
+  `"Eccelerators.RiscV" = "0.2.0"` and run `livt sync`.
+
+### Repository layout
+
+- Retain `src`, `tests` and current user documentation under `docs`, together
+  with package metadata, the README, license and changelog.
+- Exclude development tools, generated output and benchmark material from the
+  reusable package.
+- Document public interfaces, storage choices, software targets and integration
+  requirements.
+
+### Validation
+
+- A clean build of the retained source and functional suite passed 293 Livt tests,
+  with zero failures or skips, during pre-release validation.
+- Resource use and routed timing remain specific to the selected providers,
+  parameters, tools and FPGA target; validate the complete application.
+
 ## [0.1.2] - 2026-10-20
 
 ### Added
@@ -97,7 +160,5 @@ All notable changes to `Eccelerators.RiscV` are recorded here.
 - Remove the test-only `StoreForTest` core/platform API and unused immediate-kind
   and register-write state from `Rv32iControlDecoder` before the initial public
   release.
-- Refresh the release-facing README with the Livt package-family heading icons,
-  context about the Livt and Livt Agents experiment, and verified links to all
-  supporting guides.
+- Refresh the package overview and links to supporting guides.
 - Use `Livt.IO` 0.2.0 for the UART MMIO demo.

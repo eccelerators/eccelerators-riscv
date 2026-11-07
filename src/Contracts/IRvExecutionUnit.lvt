@@ -1,0 +1,28 @@
+namespace Eccelerators.RiscV.Contracts
+
+/**
+ * One outstanding blocking call, exclusive controlling caller. Completion is
+ * return, not a fixed number of clocks. All outputs assigned even on fault.
+ * fault=false makes cause/tval zero; fault=true suppresses result/redirect.
+ * No register, PC, memory or peripheral writes by this arithmetic/control unit.
+ * Reset is legal only after completion; there is no cancellation or flush API.
+ */
+public interface IRvExecutionUnit
+{
+	/**
+	 * Resets unit-local state after any prior Execute call has completed.
+	 * The exclusive caller must quiesce execution first; no cancellation is provided.
+	 */
+	fn Reset()
+
+	/**
+	 * Executes the composition-defined operation using two operands and original PC.
+	 * Returns only after completion; latency may vary. Overwrites every output.
+	 * Success returns value and optional redirect/target, with zero cause/tval.
+	 * Fault returns cause/tval, zero value/target and no redirect.
+	 * Never writes architectural registers, PC, memory or peripherals.
+	 */
+	fn Execute(operation: uint, left: uint, right: uint, pc: uint,
+		value: out uint, redirect: out bool, target: out uint,
+		fault: out bool, cause: out uint, tval: out uint)
+}

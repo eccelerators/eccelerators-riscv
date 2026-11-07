@@ -1,0 +1,253 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+using Livt.IO
+
+/**
+ * Control and MMIO tests cover delayed completion, pause, stepping and restart drain.
+ */
+@Test
+component Rv32DspControlTest
+{
+	// Owned instruction storage, delayable device, core and retirement observations.
+	instructions: Rv32WordMemory<64, 6>
+	data: DelayedWordDevice
+	core: Rv32iZmmulSequentialCore<0, MemoryStyle.Block, true>
+	clearObservation: bool
+	count: uint
+	lastValue: uint
+
+	/**
+	 * Creates exclusively owned providers in one reset context.
+	 */
+	new()
+	{
+		instructions = new Rv32WordMemory<64, 6>()
+		data = new DelayedWordDevice()
+		core = new Rv32iZmmulSequentialCore<0, MemoryStyle.Block, true>(instructions, data)
+	}
+
+	/**
+	 * Observes successful commits independently of stepping acknowledgements.
+	 */
+	process Observe()
+	{
+		state {
+			if (clearObservation) {
+				count = 0
+				lastValue = 0
+			} elif (core.retired == 0b1) {
+				count++
+				lastValue = core.retiredValue as uint
+			}
+		}
+	}
+
+	/**
+	 * Restarts the core and independently clears the test device and observations.
+	 */
+	fn Prepare()
+	{
+		core.run = 0b0
+		WaitIdle()
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		Simulation.Wait(50)
+		assert core.restartAck == ticket
+		clearObservation = true
+		data.clear = 0b1
+		data.releaseResponse = 0b0
+		Simulation.Wait(4)
+		data.clear = 0b0
+		clearObservation = false
+	}
+
+	/**
+	 * Provisions one instruction while paused.
+	 */
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			instructions.programWrite = 0b1
+			instructions.programIndex = index as logic[6]
+			instructions.programData = word as logic[32]
+		}
+
+		state {
+			instructions.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Bounds initialization or instruction completion while run is low.
+	 */
+	fn WaitIdle()
+	{
+		var elapsed: uint = 0
+
+		while (core.idle == 0b0 && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.idle == 0b1
+	}
+
+	/**
+	 * Toggles exactly one pending step and waits for its completion acknowledgement.
+	 */
+	fn Step()
+	{
+		core.stepRequest = ~core.stepRequest
+		var elapsed: uint = 0
+
+		while (core.stepAck != core.stepRequest && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.stepAck == core.stepRequest
+	}
+
+	/**
+	 * A held step request executes once; restart clears registers and restarts at zero.
+	 */
+	@Test
+	fn TestStepPauseRestart()
+	{
+		Prepare()
+		Load(0, 0x00700093)
+		Load(1, 0x00108113)
+		Load(2, 0x00100073)
+		WaitIdle()
+		Step()
+		assert count == 1 && lastValue == 7
+		assert core.pc == 4
+		Simulation.Wait(20)
+		assert count == 1
+		Step()
+		assert count == 2 && lastValue == 8
+		Step()
+		assert core.halted == 0b1 && core.faultCause == 3
+		assert count == 2
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		Simulation.Wait(50)
+		assert core.restartAck == ticket && core.halted == 0b0
+		assert core.pc == 0
+		Load(0, 0x00008193)
+		Step()
+		assert count == 3 && lastValue == 0
+	}
+
+	/**
+	 * Software restart drains a pending store exactly once before clearing CPU state.
+	 */
+	@Test
+	fn TestRestartDrainsDelayedStore()
+	{
+		Prepare()
+		Load(0, 0x02a00093)
+		Load(1, 0x00102023)
+		Load(2, 0x00002103)
+		Load(3, 0x00100073)
+		core.run = 0b1
+		var elapsed: uint = 0
+
+		while (data.accepted == 0b0 && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert data.accepted == 0b1
+		core.run = 0b0
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		Simulation.Wait(20)
+		assert core.restartAck != ticket
+		assert data.writes == 0 && count == 1
+		data.releaseResponse = 0b1
+		Simulation.Wait(70)
+		assert core.restartAck == ticket && core.idle == 0b1
+		assert core.pc == 0
+		assert data.writes == 1 && data.reads == 0
+		assert data.payload == 42 && count == 2
+		Load(0, 0x00002183)
+		Step()
+		assert lastValue == 42 && data.reads == 1
+	}
+
+	/**
+	 * An error response prevents retirement and MMIO effects, including a load to x0.
+	 */
+	@Test
+	fn TestDelayedAccessFault()
+	{
+		Prepare()
+		Load(0, 0x00402003)
+		data.releaseResponse = 0b1
+		WaitIdle()
+		Step()
+		assert core.halted == 0b1 && core.faultCause == 5
+		assert core.faultValue == 4 && core.pc == 0
+		assert count == 0 && data.reads == 0 && data.writes == 0
+	}
+
+	/**
+	 * Pause drains multiplication; held step executes once and restart drains before clearing.
+	 */
+	@Test
+	fn MultiplyPauseStepRestart()
+	{
+		Prepare()
+		Load(0, 0x00700093)
+		Load(1, 0x00900113)
+		Load(2, 0x022081b3)
+		Load(3, 0x02118233)
+		Load(4, 0x00100073)
+		Step()
+		Step()
+		core.run = 0b1
+		Simulation.Wait(8)
+		core.run = 0b0
+		assert core.idle == 0b0 && count == 2
+		WaitIdle()
+		Simulation.Wait(3)
+		assert count == 3 && lastValue == 63 && core.pc == 12
+		Simulation.Wait(50)
+		assert count == 3 && core.pc == 12
+		Step()
+		assert count == 4 && lastValue == 441 && core.pc == 16
+		Simulation.Wait(50)
+		assert count == 4
+
+		Prepare()
+		Step()
+		Step()
+		var ticket = ~core.restartAck
+		core.run = 0b1
+		Simulation.Wait(8)
+
+		state {
+			core.run = 0b0
+			core.restartRequest = ticket
+			assert core.idle == 0b0 && count == 2
+		}
+
+		state {
+			assert core.restartAck != ticket
+		}
+
+		Simulation.Wait(80)
+		assert core.restartAck == ticket && core.pc == 0
+		assert count == 3 && lastValue == 63
+		Load(0, 0x021081b3)
+		Step()
+		assert count == 4 && lastValue == 0
+	}
+}

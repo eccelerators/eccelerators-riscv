@@ -5,31 +5,49 @@ namespace Eccelerators.RiscV.Isa
  */
 component Rv32iInstructionFields
 {
+	/**
+	 * Returns instruction bits 6..0 as the unsigned opcode selector.
+	 */
 	public fn GetOpcode(instruction: uint) int
 	{
 		return (instruction & (0x7f as uint)) as int
 	}
 
+	/**
+	 * Returns instruction bits 11..7 as a destination register index in 0..31.
+	 */
 	public fn GetRd(instruction: uint) int
 	{
 		return ((instruction >> 7) & (0x1f as uint)) as int
 	}
 
+	/**
+	 * Returns instruction bits 14..12 as the unsigned function selector.
+	 */
 	public fn GetFunct3(instruction: uint) int
 	{
 		return ((instruction >> 12) & (0x07 as uint)) as int
 	}
 
+	/**
+	 * Returns instruction bits 19..15 as the first source register index in 0..31.
+	 */
 	public fn GetRs1(instruction: uint) int
 	{
 		return ((instruction >> 15) & (0x1f as uint)) as int
 	}
 
+	/**
+	 * Returns instruction bits 24..20 as the second source register index in 0..31.
+	 */
 	public fn GetRs2(instruction: uint) int
 	{
 		return ((instruction >> 20) & (0x1f as uint)) as int
 	}
 
+	/**
+	 * Returns instruction bits 31..25 as the unsigned function selector.
+	 */
 	public fn GetFunct7(instruction: uint) int
 	{
 		return ((instruction >> 25) & (0x7f as uint)) as int

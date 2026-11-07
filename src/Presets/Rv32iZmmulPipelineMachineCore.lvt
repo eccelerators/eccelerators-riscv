@@ -1,0 +1,113 @@
+namespace Eccelerators.RiscV.Presets
+
+using Eccelerators.RiscV.Pipeline
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Contracts
+using Livt.IO
+
+/**
+ * Named machine-only pipeline: RV32I + Zmmul + Zicsr, selectable multiplier and a
+ * dual-read register bank (BRAM by default). Borrows instruction/data providers exclusively
+ * in the same clock/reset domain. Qualification applies to the documented memory
+ * providers and target, not to arbitrary buses supplied through these interfaces.
+ */
+component Rv32iZmmulPipelineMachineCore<RESET_PC: uint = 0, REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block,
+	DSP_MULTIPLY: bool = false> : IRv32ControlPort
+{
+	static assert Rv32DspMultiplier.CAPABILITIES == Rv32IterativeMultiplier.CAPABILITIES, "Multiplier choices must implement the same operations"
+
+	// Platform-owned pending level, synchronous to this core.
+	public timerPending: in logic
+	public externalPending: in logic
+
+	// Owned execution components and elaboration-only compatibility checks.
+	registers: Rv32DualReadRegisterBank<REGISTER_FILE_STYLE>
+	baseDecoder: Rv32iZmmulDecoder
+	zicsr: Rv32ZicsrComposition<0, true, true>
+	decoder: Rv32MachineDecoder
+
+	static if (DSP_MULTIPLY) {
+		// DSP implementation is absent in the default iterative composition.
+		dspMultiplier: Rv32DspMultiplier
+	} else {
+		// Iterative implementation keeps this preset usable without DSP blocks.
+		multiplier: Rv32IterativeMultiplier
+	}
+
+	// Shared integer unit and sole architectural ordering owner; zicsr owns machine state.
+	integer: Rv32iIntegerUnit
+	engine: Rv32PipelineEngine<RESET_PC, true, true, true, true>
+
+	// Elaboration-only checks for operation coverage and provider timing.
+	coverage: RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iZmmulDecoder.CAPABILITIES,
+		Rv32iIntegerUnit.CAPABILITIES, Rv32PipelineEngine.CAPABILITIES,
+		Rv32iOperations.INTEGER_CAPABILITY, Rv32PipelineEngine.CAPABILITIES>
+	multiplyCoverage: RvOperationCoverage<Rv32MultiplyOperations.CAPABILITY, Rv32iZmmulDecoder.CAPABILITIES,
+		Rv32IterativeMultiplier.CAPABILITIES, 0, Rv32MultiplyOperations.CAPABILITY, 0>
+	trapCoverage: RvOperationCoverage<Rv32TrapOperations.CAPABILITY, Rv32MachineDecoder.CAPABILITIES,
+		Rv32ZicsrComposition.TRAP_CAPABILITIES, 0, Rv32TrapOperations.CAPABILITY, 0>
+	timing: RvPipelineContract<Rv32DualReadRegisterBank.READ_PORTS, Rv32DualReadRegisterBank.READ_LATENCY,
+		Rv32DualReadRegisterBank.INDEPENDENT_WRITE, Rv32DualReadRegisterBank.WRITE_FORWARDING>
+
+	/**
+	 * Owns the CPU internals; the caller owns both bus providers.
+	 */
+	new(instructions: flip IRv32MemoryPort, data: flip IRv32MemoryPort)
+	{
+		registers = new Rv32DualReadRegisterBank<REGISTER_FILE_STYLE>()
+		baseDecoder = new Rv32iZmmulDecoder()
+		zicsr = new Rv32ZicsrComposition<0, true, true>(baseDecoder)
+		decoder = new Rv32MachineDecoder(zicsr)
+		integer = new Rv32iIntegerUnit()
+
+		static if (DSP_MULTIPLY) {
+			dspMultiplier = new Rv32DspMultiplier()
+			engine = new Rv32PipelineEngine<RESET_PC, true, true, true, true>(registers, instructions, data, decoder, integer, dspMultiplier, zicsr)
+		} else {
+			multiplier = new Rv32IterativeMultiplier()
+			engine = new Rv32PipelineEngine<RESET_PC, true, true, true, true>(registers, instructions, data, decoder, integer, multiplier, zicsr)
+		}
+
+		coverage = new RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iZmmulDecoder.CAPABILITIES,
+			Rv32iIntegerUnit.CAPABILITIES, Rv32PipelineEngine.CAPABILITIES,
+			Rv32iOperations.INTEGER_CAPABILITY, Rv32PipelineEngine.CAPABILITIES>()
+		multiplyCoverage = new RvOperationCoverage<Rv32MultiplyOperations.CAPABILITY, Rv32iZmmulDecoder.CAPABILITIES,
+			Rv32IterativeMultiplier.CAPABILITIES, 0, Rv32MultiplyOperations.CAPABILITY, 0>()
+
+		trapCoverage = new RvOperationCoverage<Rv32TrapOperations.CAPABILITY, Rv32MachineDecoder.CAPABILITIES,
+			Rv32ZicsrComposition.TRAP_CAPABILITIES, 0, Rv32TrapOperations.CAPABILITY, 0>()
+
+		timing = new RvPipelineContract<Rv32DualReadRegisterBank.READ_PORTS, Rv32DualReadRegisterBank.READ_LATENCY,
+			Rv32DualReadRegisterBank.INDEPENDENT_WRITE, Rv32DualReadRegisterBank.WRITE_FORWARDING>()
+	}
+
+	/**
+	 * Pure wiring preserves the engine's edge-level control and retirement contract.
+	 */
+	process Connect[]()
+	{
+		zicsr.timerPending = timerPending
+		zicsr.externalPending = externalPending
+		engine.run = run
+		engine.stepRequest = stepRequest
+		engine.restartRequest = restartRequest
+		stepAck = engine.stepAck
+		restartAck = engine.restartAck
+		idle = engine.idle
+		halted = engine.halted
+		pc = engine.pc
+		faultCause = engine.faultCause
+		faultValue = engine.faultValue
+		trapped = engine.trapped
+		trapPc = engine.trapPc
+		trapCause = engine.trapCause
+		trapValue = engine.trapValue
+		retired = engine.retired
+		retiredPc = engine.retiredPc
+		retiredInstruction = engine.retiredInstruction
+		retiredRd = engine.retiredRd
+		retiredValue = engine.retiredValue
+	}
+}

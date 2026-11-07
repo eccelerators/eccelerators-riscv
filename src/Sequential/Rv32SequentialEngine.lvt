@@ -1,0 +1,512 @@
+namespace Eccelerators.RiscV.Sequential
+
+using Eccelerators.RiscV.Contracts
+using Eccelerators.RiscV.Machine
+
+/**
+ * In-order RV32I/optional Zmmul engine with one instruction and memory transaction outstanding.
+ * Borrows all units exclusively in one clock/reset context; the composition root
+ * owns their lifetime. RAM reads have one-edge latency. Decoder/integer ports are
+ * combinational. One clocked controller owns PC, faults and architectural commit.
+ * Diagnostic policy stops on exceptions. MACHINE_TRAPS enters direct mtvec and
+ * enables MRET through the shared CSR owner. Optional interrupt delivery samples
+ * the CSR provider at a drained instruction boundary before the next fetch.
+ */
+component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bool = false, MACHINE_TRAPS: bool = false, INTERRUPTS: bool = false> : IRv32ControlPort
+{
+	static assert (RESET_PC & 3) == 0, "Reset PC must be word aligned"
+	static assert !MACHINE_TRAPS || CSR, "Machine traps require CSR state"
+	static assert !INTERRUPTS || MACHINE_TRAPS, "Interrupts require machine traps"
+
+	// Semantic operation families owned by the controller, separate from integer execution.
+	public const CAPABILITIES: uint = Rv32iOperations.MEMORY_CAPABILITY | Rv32iOperations.CONTROL_CAPABILITY
+
+	// Controller phases. Boot clears the bank; stopped waits for an explicit restart.
+	const BOOT: uint = 0
+	const IDLE: uint = 1
+	const FETCH: uint = 2
+	const DECODE: uint = 3
+	const READ_FIRST: uint = 4
+	const CAPTURE_FIRST: uint = 5
+	const CAPTURE_SECOND: uint = 6
+	const EXECUTE: uint = 7
+	const MEMORY: uint = 8
+	const COMMIT: uint = 9
+	const MULTIPLY_WAIT: uint = 11
+	const STOPPED: uint = 10
+	const EXCEPTION: uint = 12
+
+	// Exclusive borrowed implementation instances, with substitutable decode/multiply ports.
+	registers: IRv32RegisterPort
+	instructions: IRv32MemoryPort
+	data: IRv32MemoryPort
+	decoder: IRv32DecodePort
+	integer: Rv32iIntegerUnit
+	multiplier: IRv32MultiplyPort
+	csrs: IRv32CsrPort
+
+	// Owned sequencing, instruction identity, operands and pending completion.
+	phase: uint
+	clearIndex: uint
+	programCounter: uint
+	instruction: uint
+	leftValue: uint
+	rightValue: uint
+	resultValue: uint
+	nextPc: uint
+	memoryAddress: uint
+	activeStep: logic
+	stepCompleted: logic
+	restartCompleted: logic
+	stopCause: logic[32]
+	stopValue: logic[32]
+	trapPulse: logic
+	retirementPulse: logic
+	commitPc: logic[32]
+	commitRd: logic[5]
+	commitValue: logic[32]
+
+	// Combinational decode views, never additional scheduled calls or retained copies.
+	control: uint
+	kind: uint
+	funct3: uint
+	commitData: uint
+
+	/**
+	 * Binds caller-owned resources. Hardware reset starts bank initialization;
+	 * wait for idle before requesting a single step or provisioning shared resources.
+	 */
+	new(registers: flip IRv32RegisterPort, instructions: flip IRv32MemoryPort, data: flip IRv32MemoryPort,
+		decoder: flip IRv32DecodePort, integer: Rv32iIntegerUnit, multiplier: flip IRv32MultiplyPort, csrs: flip IRv32CsrPort)
+	{
+		this.registers = registers
+		this.instructions = instructions
+		this.data = data
+		this.decoder = decoder
+		this.integer = integer
+		this.multiplier = multiplier
+		this.csrs = csrs
+	}
+
+	/**
+	 * Drives all borrowed ports from the current phase. Memory request remains stable
+	 * until completion; there are no speculative or repeated MMIO accesses.
+	 */
+	process Drive[]()
+	{
+		stepAck = stepCompleted
+		restartAck = restartCompleted
+		faultCause = stopCause
+		faultValue = stopValue
+
+		if (MACHINE_TRAPS) {
+			faultCause = 0
+			faultValue = 0
+		}
+
+		trapped = trapPulse
+		trapPc = commitPc
+		trapCause = stopCause
+		trapValue = stopValue
+		retired = retirementPulse
+		retiredPc = commitPc
+		retiredRd = commitRd
+		retiredValue = commitValue
+		decoder.instruction = instruction as logic[32]
+		control = decoder.control as uint
+		kind = RvDecoded.Operation(control) >> Rv32iOperations.KIND_SHIFT
+		funct3 = (instruction >> 12) & 7
+		pc = programCounter as logic[32]
+		retiredInstruction = instruction as logic[32]
+		idle = 0b0
+		halted = 0b0
+
+		if (phase == IDLE || phase == STOPPED) {
+			idle = 0b1
+		}
+
+		if (phase == STOPPED) {
+			halted = 0b1
+		}
+
+		instructions.request = 0b0
+		instructions.address = programCounter as logic[32]
+		instructions.write = 0b0
+		instructions.byteEnable = 0
+		instructions.writeData = 0
+
+		if (phase == FETCH) {
+			instructions.request = 0b1
+		}
+
+		// Copy values before pure calls so state registers keep direct publication.
+		var addressValue = memoryAddress
+		var width = funct3
+		var csrInstruction = instruction
+		var csrOperand = leftValue
+		var csrDestination = RvDecoded.Rd(control)
+		data.request = 0b0
+		data.address = (memoryAddress & 0xfffffffc) as logic[32]
+		data.write = 0b0
+		data.byteEnable = Rv32iSemantics.StoreMask(addressValue, width) as logic[4]
+		data.writeData = (rightValue << (((memoryAddress & 3) * 8) as int)) as logic[32]
+
+		if (phase == MEMORY) {
+			data.request = 0b1
+		}
+
+		if (kind == Rv32iOperations.STORE) {
+			data.write = 0b1
+		}
+
+		registers.enable = 0b0
+		registers.write = 0b0
+		registers.index = RvDecoded.Rs1(control) as logic[5]
+		commitData = resultValue
+
+		if (CSR && kind == Rv32CsrOperations.KIND) {
+			commitData = csrs.readData as uint
+		}
+
+		registers.writeData = commitData as logic[32]
+
+		if (phase == BOOT) {
+			registers.enable = 0b1
+			registers.write = 0b1
+			registers.index = clearIndex as logic[5]
+			registers.writeData = 0
+		} elif (phase == READ_FIRST && RvDecoded.HasSource1(control)) {
+			registers.enable = 0b1
+		} elif (phase == CAPTURE_FIRST && RvDecoded.HasSource2(control)) {
+			registers.enable = 0b1
+			registers.index = RvDecoded.Rs2(control) as logic[5]
+		} elif (phase == COMMIT && RvDecoded.HasDestinationWrite(control)) {
+			registers.enable = 0b1
+			registers.write = 0b1
+			registers.index = RvDecoded.Rd(control) as logic[5]
+		}
+
+		multiplier.request = 0b0
+		multiplier.operation = funct3 as logic[2]
+		multiplier.left = leftValue as logic[32]
+		multiplier.right = rightValue as logic[32]
+
+		if (MULTIPLY && kind == Rv32MultiplyOperations.KIND && (phase == EXECUTE || phase == MULTIPLY_WAIT)) {
+			multiplier.request = 0b1
+		}
+
+		csrs.enterTrap = 0b0
+		csrs.returnTrap = 0b0
+		csrs.entryPc = programCounter as logic[32]
+		csrs.entryCause = stopCause
+		csrs.entryValue = stopValue
+
+		if (MACHINE_TRAPS) {
+			if (phase == EXCEPTION) {
+				csrs.enterTrap = 0b1
+			}
+
+			if (phase == COMMIT && kind == Rv32TrapOperations.RETURN_KIND) {
+				csrs.returnTrap = 0b1
+			}
+		}
+
+		csrs.address = (instruction >> 20) as logic[12]
+		csrs.operation = (funct3 & 3) as logic[2]
+		csrs.operand = leftValue as logic[32]
+		csrs.readEnable = 0b0
+		csrs.writeEnable = 0b0
+		csrs.commit = 0b0
+		csrs.retire = 0b0
+		csrs.clear = 0b0
+
+		if (CSR) {
+			if (phase == BOOT) {
+				csrs.clear = 0b1
+			}
+
+			if (phase == COMMIT) {
+				csrs.retire = 0b1
+			}
+
+			if (kind == Rv32CsrOperations.KIND) {
+				csrs.operand = Rv32ZicsrAccess.SelectOperand(width, csrInstruction, csrOperand) as logic[32]
+				csrs.readEnable = Rv32ZicsrAccess.RequiresRead(width, csrDestination) as logic
+				csrs.writeEnable = Rv32ZicsrAccess.RequiresWrite(width, csrInstruction) as logic
+
+				if (phase == COMMIT) {
+					csrs.commit = 0b1
+				}
+			}
+		}
+
+		integer.operation = (RvDecoded.Operation(control) & Rv32iOperations.ALU_MASK) as logic[4]
+		integer.left = leftValue as logic[32]
+		integer.right = decoder.immediate
+
+		if (kind == Rv32iOperations.REGISTER) {
+			integer.right = rightValue as logic[32]
+		}
+
+		if (kind == Rv32iOperations.LUI) {
+			integer.left = 0
+		} elif (kind == Rv32iOperations.AUIPC || kind == Rv32iOperations.JAL || kind == Rv32iOperations.BRANCH) {
+			integer.left = programCounter as logic[32]
+		}
+	}
+
+	/**
+	 * Advances one controller edge. This process contains no scheduled calls.
+	 * Keep state updates in this clocked process: scheduled helpers would add
+	 * call phases and change the sampling and publication edges.
+	 */
+	process Advance()
+	{
+		state {
+			// Locals preserve the sampled values without passing state fields by reference.
+			var operand1 = leftValue
+			var operand2 = rightValue
+			var addressValue = memoryAddress
+			trapPulse = 0b0
+			retirementPulse = 0b0
+
+			match (phase)
+			{
+				BOOT =>
+				{
+					programCounter = RESET_PC
+					stopCause = 0
+					stopValue = 0
+
+					if (clearIndex == 31) {
+						phase = IDLE
+						restartCompleted = restartRequest
+						stepCompleted = stepRequest
+					} else {
+						clearIndex++
+					}
+				}
+				IDLE, STOPPED =>
+				{
+					if (restartRequest != restartCompleted) {
+						clearIndex = 0
+						phase = BOOT
+					} elif (phase == IDLE && (run == 0b1 || stepRequest != stepCompleted)) {
+						activeStep = stepRequest
+
+						if (INTERRUPTS && csrs.interruptEligible == 0b1) {
+							stopCause = csrs.interruptCause
+							stopValue = 0
+							phase = EXCEPTION
+						} else {
+							phase = FETCH
+						}
+					}
+				}
+				FETCH =>
+				{
+					if (instructions.ready == 0b1) {
+						if (instructions.error == 0b1) {
+							stopCause = Rv32iOperations.INSTRUCTION_ACCESS as logic[32]
+							stopValue = programCounter as logic[32]
+							phase = EXCEPTION
+						} else {
+							instruction = instructions.readData as uint
+							phase = DECODE
+						}
+					}
+				}
+				DECODE =>
+				{
+					if (!RvDecoded.IsLegal(control) || (!MULTIPLY && kind == Rv32MultiplyOperations.KIND)
+						|| (!CSR && kind == Rv32CsrOperations.KIND)
+						|| (!MACHINE_TRAPS && kind == Rv32TrapOperations.RETURN_KIND)) {
+						stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
+						stopValue = instruction as logic[32]
+						phase = EXCEPTION
+					} else {
+						phase = READ_FIRST
+					}
+				}
+				READ_FIRST =>
+				{
+					phase = CAPTURE_FIRST
+				}
+				CAPTURE_FIRST =>
+				{
+					leftValue = 0
+
+					if (RvDecoded.HasSource1(control)) {
+						leftValue = registers.readData as uint
+					}
+
+					phase = CAPTURE_SECOND
+				}
+				CAPTURE_SECOND =>
+				{
+					rightValue = 0
+
+					if (RvDecoded.HasSource2(control)) {
+						rightValue = registers.readData as uint
+					}
+
+					phase = EXECUTE
+				}
+				EXECUTE =>
+				{
+					var arithmetic = integer.result as uint
+					nextPc = programCounter + 4
+					resultValue = arithmetic
+					phase = COMMIT
+
+					match (kind)
+					{
+						Rv32TrapOperations.RETURN_KIND =>
+						{
+							if (MACHINE_TRAPS) {
+								nextPc = csrs.returnPc as uint
+							}
+						}
+						Rv32CsrOperations.KIND =>
+						{
+							if (CSR && csrs.illegal == 0b1) {
+								stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
+								stopValue = instruction as logic[32]
+								phase = EXCEPTION
+							}
+						}
+						Rv32MultiplyOperations.KIND =>
+						{
+							if (MULTIPLY) {
+								phase = MULTIPLY_WAIT
+							}
+						}
+						Rv32iOperations.JAL, Rv32iOperations.JALR =>
+						{
+							var target = arithmetic
+
+							if (kind == Rv32iOperations.JALR) {
+								target = target & 0xfffffffe
+							}
+
+							if ((target & 3) != 0) {
+								stopCause = Rv32iOperations.INSTRUCTION_MISALIGNED as logic[32]
+								stopValue = target as logic[32]
+								phase = EXCEPTION
+							} else {
+								nextPc = target
+								resultValue = programCounter + 4
+							}
+						}
+						Rv32iOperations.BRANCH =>
+						{
+							if (Rv32iSemantics.Branch(funct3, operand1, operand2)) {
+								if ((arithmetic & 3) != 0) {
+									stopCause = Rv32iOperations.INSTRUCTION_MISALIGNED as logic[32]
+									stopValue = arithmetic as logic[32]
+									phase = EXCEPTION
+								} else {
+									nextPc = arithmetic
+								}
+							}
+						}
+						Rv32iOperations.LOAD, Rv32iOperations.STORE =>
+						{
+							memoryAddress = arithmetic
+
+							if (Rv32iSemantics.Misaligned(arithmetic, funct3)) {
+								if (kind == Rv32iOperations.LOAD) {
+									stopCause = Rv32iOperations.LOAD_MISALIGNED as logic[32]
+									stopValue = arithmetic as logic[32]
+									phase = EXCEPTION
+								} else {
+									stopCause = Rv32iOperations.STORE_MISALIGNED as logic[32]
+									stopValue = arithmetic as logic[32]
+									phase = EXCEPTION
+								}
+							} else {
+								phase = MEMORY
+							}
+						}
+						Rv32iOperations.ECALL =>
+						{
+							stopCause = Rv32iOperations.ENVIRONMENT_CALL as logic[32]
+							stopValue = 0 as logic[32]
+							phase = EXCEPTION
+						}
+						Rv32iOperations.EBREAK =>
+						{
+							stopCause = Rv32iOperations.BREAKPOINT as logic[32]
+							stopValue = programCounter as logic[32]
+							phase = EXCEPTION
+						}
+						_ => {
+							// Other legal instructions complete through the common commit edge.
+						}
+					}
+				}
+				MULTIPLY_WAIT =>
+				{
+					if (MULTIPLY && multiplier.ready == 0b1) {
+						resultValue = multiplier.result as uint
+						phase = COMMIT
+					}
+				}
+				MEMORY =>
+				{
+					if (data.ready == 0b1) {
+						if (data.error == 0b1) {
+							if (kind == Rv32iOperations.LOAD) {
+								stopCause = Rv32iOperations.LOAD_ACCESS as logic[32]
+								stopValue = memoryAddress as logic[32]
+								phase = EXCEPTION
+							} else {
+								stopCause = Rv32iOperations.STORE_ACCESS as logic[32]
+								stopValue = memoryAddress as logic[32]
+								phase = EXCEPTION
+							}
+						} else {
+							resultValue = Rv32iSemantics.Load(data.readData as uint, addressValue, funct3)
+							phase = COMMIT
+						}
+					}
+				}
+				EXCEPTION =>
+				{
+					stepCompleted = activeStep
+
+					if (MACHINE_TRAPS) {
+						commitPc = programCounter as logic[32]
+						programCounter = csrs.trapVector as uint
+						trapPulse = 0b1
+						phase = IDLE
+					} else {
+						phase = STOPPED
+					}
+				}
+				COMMIT =>
+				{
+					retirementPulse = 0b1
+					commitPc = programCounter as logic[32]
+					commitRd = 0
+					commitValue = 0
+
+					if (RvDecoded.HasDestinationWrite(control) && RvDecoded.Rd(control) != 0) {
+						commitRd = RvDecoded.Rd(control) as logic[5]
+						commitValue = commitData as logic[32]
+					}
+
+					programCounter = nextPc
+					stepCompleted = activeStep
+					phase = IDLE
+				}
+				_ =>
+				{
+					stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
+					stopValue = instruction as logic[32]
+					phase = EXCEPTION
+				}
+			}
+		}
+	}
+}

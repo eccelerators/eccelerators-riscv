@@ -1,0 +1,104 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+
+/**
+ * Test-only one-word MMIO device. Completion is externally delayed, accesses at
+ * nonzero addresses fault before effects, and held requests must remain stable.
+ */
+component PipelineWordDevice : IRv32MemoryPort
+{
+	// Test-controlled backpressure and independently visible side-effect counters.
+	public clear: in logic
+	public releaseResponse: in logic
+	public accepted: out logic
+	public reads: uint
+	public writes: uint
+	public payload: uint
+
+	// Captured transaction and exactly-once response state.
+	active: bool
+	completed: bool
+	savedAddress: logic[32]
+	savedWrite: logic
+	savedMask: logic[4]
+	savedValue: logic[32]
+
+	// Explicit combinational publication keeps the test device's bus contract exact.
+	requestActive: bool
+	inputAddress: logic[32]
+	inputWrite: logic
+	inputMask: logic[4]
+	inputData: logic[32]
+	responseReady: logic
+	responseError: logic
+	responseData: logic[32]
+
+	/**
+	 * Exposes response state directly and samples unbuffered request signals.
+	 */
+	process Connect[]()
+	{
+		requestActive = request == 0b1
+		inputAddress = address
+		inputWrite = write
+		inputMask = byteEnable
+		inputData = writeData
+		ready = responseReady
+		error = responseError
+		readData = responseData
+	}
+
+	/**
+	 * Checks stability and performs an effect once, then holds the response.
+	 */
+	process Respond()
+	{
+		state {
+			if (clear == 0b1) {
+				active = false
+				completed = false
+				accepted = 0b0
+				responseReady = 0b0
+				responseError = 0b0
+				reads = 0
+				writes = 0
+				payload = 0
+			} elif (!active && requestActive) {
+				active = true
+				accepted = 0b1
+				savedAddress = inputAddress
+				savedWrite = inputWrite
+				savedMask = inputMask
+				savedValue = inputData
+			} elif (active && requestActive) {
+				assert inputAddress == savedAddress
+				assert inputWrite == savedWrite
+				assert inputMask == savedMask
+				assert inputData == savedValue
+
+				if (!completed && releaseResponse == 0b1) {
+					completed = true
+					responseReady = 0b1
+					responseError = 0b0
+
+					if (savedAddress != 0) {
+						responseError = 0b1
+					} elif (savedWrite == 0b1) {
+						assert savedMask == 15
+						payload = savedValue as uint
+						writes++
+					} else {
+						responseData = payload as logic[32]
+						reads++
+					}
+				}
+			} elif (active && !requestActive) {
+				assert completed
+				active = false
+				completed = false
+				responseReady = 0b0
+			}
+		}
+	}
+}

@@ -1,0 +1,476 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Pipeline
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+using Eccelerators.RiscV.Machine
+
+/**
+ * Instruction-level checks observe committed writes independently of CPU storage.
+ * Every wait is bounded so a stalled bus or controller fails the test.
+ */
+@Test
+component Rv32PipelineTrapEngineTest
+{
+	// Owned platform, explicit execution composition and architectural scoreboard.
+	instructions: Rv32WordMemory<512, 9>
+	data: PipelineWordDevice
+	core: Rv32PipelineEngine<0, true, true, true>
+	registers: Rv32DualReadRegisterBank
+	baseDecoder: Rv32iZmmulDecoder
+	csrDecoder: Rv32ZicsrDecoder
+	decoder: Rv32MachineDecoder
+	integer: Rv32iIntegerUnit
+	multiplier: Rv32DspMultiplier
+	csrs: Rv32MachineCsrs
+	observed: uint[32]
+	retireCount: uint
+	clearObservation: bool
+	cycles: uint
+	trapCount: uint
+	lastTrapPc: uint
+	lastTrapCause: uint
+	lastTrapValue: uint
+	tracePc: uint[512]
+	traceWord: uint[512]
+	traceRd: uint[512]
+	traceValue: uint[512]
+
+	/**
+	 * Creates distinct instruction and data providers in the test clock context.
+	 */
+	new()
+	{
+		instructions = new Rv32WordMemory<512, 9>()
+		data = new PipelineWordDevice()
+		registers = new Rv32DualReadRegisterBank()
+		baseDecoder = new Rv32iZmmulDecoder()
+		csrDecoder = new Rv32ZicsrDecoder(baseDecoder)
+		decoder = new Rv32MachineDecoder(csrDecoder)
+		integer = new Rv32iIntegerUnit()
+		multiplier = new Rv32DspMultiplier()
+		csrs = new Rv32MachineCsrs()
+		core = new Rv32PipelineEngine<0, true, true, true>(registers, instructions, data, decoder, integer, multiplier, csrs)
+	}
+
+	/**
+	 * Samples retirement every clock; tests never read a CPU-private register array.
+	 */
+	process Observe()
+	{
+		state {
+			cycles++
+
+			assert !(core.trapped == 0b1 && core.retired == 0b1)
+
+			if (clearObservation) {
+				trapCount = 0
+			} elif (core.trapped == 0b1) {
+				trapCount++
+				lastTrapPc = core.trapPc as uint
+				lastTrapCause = core.trapCause as uint
+				lastTrapValue = core.trapValue as uint
+			}
+
+			if (clearObservation) {
+				retireCount = 0
+			} elif (core.retired == 0b1) {
+				assert retireCount < 512
+				tracePc[retireCount] = core.retiredPc as uint
+				traceWord[retireCount] = core.retiredInstruction as uint
+				traceRd[retireCount] = core.retiredRd as uint
+				traceValue[retireCount] = core.retiredValue as uint
+				retireCount++
+
+				if (core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	/**
+	 * Programs one word with the CPU paused; writes are sampled once.
+	 */
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			instructions.programWrite = 0b1
+			instructions.programIndex = index as logic[9]
+			instructions.programData = word as logic[32]
+		}
+
+		state {
+			instructions.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Initializes every data location that a vector can read before execution.
+	 */
+	fn Prepare()
+	{
+		core.run = 0b0
+		Simulation.Wait(40)
+		assert core.idle == 0b1
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		var elapsed: uint = 0
+
+		while (core.restartAck != ticket && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.restartAck == ticket
+		clearObservation = true
+		Simulation.Wait(4)
+		clearObservation = false
+
+		data.clear = 0b1
+		data.releaseResponse = 0b0
+		Simulation.Wait(4)
+		data.clear = 0b0
+
+		assert core.idle == 0b1
+	}
+
+	/**
+	 * Steps one attempt through retirement or trap entry, leaving the handler paused.
+	 */
+	fn Step()
+	{
+		core.stepRequest = ~core.stepRequest
+		var elapsed: uint = 0
+
+		while (core.stepAck != core.stepRequest && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.stepAck == core.stepRequest
+		Simulation.Wait(3)
+		assert core.idle == 0b1 && core.halted == 0b0
+	}
+
+	/**
+	 * Installs a handler that reads saved state, skips one instruction and returns.
+	 */
+	fn Handler()
+	{
+		Load(0, 0x10000093)
+		Load(1, 0x30509073)
+		Load(64, 0x34102573)
+		Load(65, 0x342025f3)
+		Load(66, 0x34302673)
+		Load(67, 0x300026f3)
+		Load(68, 0x00450513)
+		Load(69, 0x34151073)
+		Load(70, 0x30200073)
+	}
+
+	/**
+	 * Checks precise exception state, no memory effects, MRET and retirement count.
+	 */
+	fn CheckFault(word: uint, cause: uint, value: uint)
+	{
+		Prepare()
+		Handler()
+		Load(2, word)
+		Load(3, 0xb0202a73)
+		Load(4, 0x30002af3)
+		Load(5, 0x00028b13)
+		data.releaseResponse = 0b1
+		Step()
+		Step()
+		Step()
+		assert trapCount == 1 && retireCount == 2
+		assert core.pc == 256 && lastTrapPc == 8
+		assert lastTrapCause == cause && lastTrapValue == value
+		assert data.reads == 0 && data.writes == 0
+		Simulation.Wait(30)
+		assert trapCount == 1 && retireCount == 2 && core.pc == 256
+
+		for (var index = 0; index < 7; index++) {
+			Step()
+		}
+
+		assert trapCount == 1 && retireCount == 9 && core.pc == 12
+		assert observed[10] == 12 && observed[11] == cause
+		assert observed[12] == value && observed[13] == 0x1800
+		Step()
+		assert observed[20] == 9
+		Step()
+		assert observed[21] == 0x1880
+		Step()
+		assert observed[22] == 0
+	}
+
+	/**
+	 * Checks EnvironmentCall with an actual software handler and return.
+	 */
+	@Test
+	fn EnvironmentCall()
+	{
+		CheckFault(0x00000073, 11, 0x00000000)
+	}
+
+	/**
+	 * Checks Breakpoint with an actual software handler and return.
+	 */
+	@Test
+	fn Breakpoint()
+	{
+		CheckFault(0x00100073, 3, 0x00000008)
+	}
+
+	/**
+	 * Checks IllegalInstruction with an actual software handler and return.
+	 */
+	@Test
+	fn IllegalInstruction()
+	{
+		CheckFault(0xffffffff, 2, 0xffffffff)
+	}
+
+	/**
+	 * Checks IllegalCsr with an actual software handler and return.
+	 */
+	@Test
+	fn IllegalCsr()
+	{
+		CheckFault(0x777022f3, 2, 0x777022f3)
+	}
+
+	/**
+	 * Checks ReadOnlyCsr with an actual software handler and return.
+	 */
+	@Test
+	fn ReadOnlyCsr()
+	{
+		CheckFault(0xf111d2f3, 2, 0xf111d2f3)
+	}
+
+	/**
+	 * Checks JumpAlignment with an actual software handler and return.
+	 */
+	@Test
+	fn JumpAlignment()
+	{
+		CheckFault(0x002002ef, 0, 0x0000000a)
+	}
+
+	/**
+	 * Checks IndirectJumpAlignment with an actual software handler and return.
+	 */
+	@Test
+	fn IndirectJumpAlignment()
+	{
+		CheckFault(0x002002e7, 0, 0x00000002)
+	}
+
+	/**
+	 * Checks TakenBranchAlignment with an actual software handler and return.
+	 */
+	@Test
+	fn TakenBranchAlignment()
+	{
+		CheckFault(0x00000163, 0, 0x0000000a)
+	}
+
+	/**
+	 * Checks LoadAlignment with an actual software handler and return.
+	 */
+	@Test
+	fn LoadAlignment()
+	{
+		CheckFault(0x00202283, 4, 0x00000002)
+	}
+
+	/**
+	 * Checks StoreAlignment with an actual software handler and return.
+	 */
+	@Test
+	fn StoreAlignment()
+	{
+		CheckFault(0x00102123, 6, 0x00000002)
+	}
+
+	/**
+	 * Checks LoadAccess with an actual software handler and return.
+	 */
+	@Test
+	fn LoadAccess()
+	{
+		CheckFault(0x00402283, 5, 0x00000004)
+	}
+
+	/**
+	 * Checks LoadAccessToZero with an actual software handler and return.
+	 */
+	@Test
+	fn LoadAccessToZero()
+	{
+		CheckFault(0x00402003, 5, 0x00000004)
+	}
+
+	/**
+	 * Checks StoreAccess with an actual software handler and return.
+	 */
+	@Test
+	fn StoreAccess()
+	{
+		CheckFault(0x00102223, 7, 0x00000004)
+	}
+
+	/**
+	 * Saves enabled MIE, clears it during entry and restores it on MRET.
+	 */
+	@Test
+	fn InterruptEnableStack()
+	{
+		Prepare()
+		Handler()
+		Load(2, 0x30046073)
+		Load(3, 0x00000073)
+		Load(4, 0x30002a73)
+		Step()
+		Step()
+		Step()
+		Step()
+		assert trapCount == 1 && retireCount == 3 && lastTrapPc == 12
+
+		for (var index = 0; index < 7; index++) {
+			Step()
+		}
+
+		assert observed[13] == 0x1880 && core.pc == 16
+		Step()
+		assert observed[20] == 0x1888
+	}
+
+	/**
+	 * A failed fetch records the target PC; the preceding JALR still retires.
+	 */
+	@Test
+	fn FetchAccess()
+	{
+		Prepare()
+		Handler()
+		Load(2, 0x7ff00293)
+		Load(3, 0x00128067)
+		Step()
+		Step()
+		Step()
+		Step()
+		assert retireCount == 4 && core.pc == 2048
+		Step()
+		assert trapCount == 1 && retireCount == 4 && core.pc == 256
+		assert lastTrapPc == 2048 && lastTrapCause == 1 && lastTrapValue == 2048
+		Step()
+		Step()
+		Step()
+		assert observed[10] == 2048 && observed[11] == 1 && observed[12] == 2048
+	}
+
+	/**
+	 * An exception inside a handler overwrites the machine save registers normally.
+	 */
+	@Test
+	fn HandlerException()
+	{
+		Prepare()
+		Handler()
+		Load(2, 0x00000073)
+		Load(64, 0x00100073)
+		Step()
+		Step()
+		Step()
+		Step()
+		assert trapCount == 2 && retireCount == 2 && core.pc == 256
+		assert lastTrapPc == 256 && lastTrapCause == 3 && lastTrapValue == 256
+		Load(64, 0x34102573)
+		Step()
+		assert observed[10] == 256
+	}
+
+	/**
+	 * Unmapped handlers trap again; step remains bounded and restart can recover.
+	 */
+	@Test
+	fn HandlerFetchFault()
+	{
+		Prepare()
+		Load(0, 0x000010b7)
+		Load(1, 0x30509073)
+		Load(2, 0x00000073)
+		Step()
+		Step()
+		Step()
+		assert core.pc == 4096 && trapCount == 1
+		Step()
+		assert core.pc == 4096 && trapCount == 2 && retireCount == 2
+		assert lastTrapPc == 4096 && lastTrapCause == 1 && lastTrapValue == 4096
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		Simulation.Wait(60)
+		assert core.restartAck == ticket && core.pc == 0 && core.idle == 0b1
+	}
+
+	/**
+	 * An untaken branch ignores target alignment and MRET uses normalized mepc.
+	 */
+	@Test
+	fn ReturnAndUntakenBranch()
+	{
+		Prepare()
+		Load(0, 0x00001163)
+		Load(1, 0x34115073)
+		Load(2, 0x30200073)
+		Step()
+		Step()
+		Step()
+		assert core.pc == 0 && retireCount == 3 && trapCount == 0
+	}
+
+	/**
+	 * Delayed errors drain before entry; pending restart clears the resulting state.
+	 */
+	@Test
+	fn DelayedFaultRestart()
+	{
+		Prepare()
+		Handler()
+		Load(2, 0x00102223)
+		Step()
+		Step()
+		core.run = 0b1
+		var elapsed: uint = 0
+
+		while (data.accepted == 0b0 && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert data.accepted == 0b1
+		core.run = 0b0
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		Simulation.Wait(20)
+		assert core.restartAck != ticket && trapCount == 0 && retireCount == 2
+		assert data.writes == 0
+		data.releaseResponse = 0b1
+		Simulation.Wait(80)
+		assert core.restartAck == ticket && core.pc == 0 && core.idle == 0b1
+		assert trapCount == 1 && retireCount == 2 && data.writes == 0
+		Load(0, 0x34102573)
+		Load(1, 0xb02025f3)
+		Step()
+		Step()
+		assert observed[10] == 0 && observed[11] == 1
+	}
+}

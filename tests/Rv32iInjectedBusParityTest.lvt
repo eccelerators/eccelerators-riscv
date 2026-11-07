@@ -4,154 +4,178 @@ using Eccelerators.RiscV.Bus
 using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Isa
 
+/**
+ * Checks matching architectural results with owned and caller-supplied buses.
+ * Stateful scenarios initialize their inputs independently before execution.
+ */
 @Test
 component Rv32iInjectedBusParityTest
 {
+	// Owned subjects and fixtures; scenarios initialize mutable state before use.
 	core: Rv32iInjectedBusCore
-
 	instructionBus: Rv32SimpleInstructionRom
-
 	dataBus: Rv32SimpleDataRam
 
+	/**
+	 * Constructs the owned subjects and fixtures; each stateful scenario supplies its own initialization.
+	 */
 	new()
 	{
-		this.instructionBus = new Rv32SimpleInstructionRom()
-		this.dataBus = new Rv32SimpleDataRam()
-		this.core = new Rv32iInjectedBusCore(this.instructionBus, this.dataBus)
+		instructionBus = new Rv32SimpleInstructionRom()
+		dataBus = new Rv32SimpleDataRam()
+		core = new Rv32iInjectedBusCore(instructionBus, dataBus)
 	}
 
+	/**
+	 * Clears the program/data fixtures and resets CPU state before an independent scenario.
+	 */
 	fn Prepare()
 	{
-		this.instructionBus.Clear()
-		this.dataBus.Clear()
-		this.core.Reset()
+		instructionBus.Clear()
+		dataBus.Clear()
+		core.Reset()
 	}
 
+	/**
+	 * Checks upper-immediate and jump behavior through constructor-injected buses.
+	 */
 	@Test
 	fn TestUpperImmediateAndJumpInstructions()
 	{
-		this.Prepare()
-		this.instructionBus.LoadInstruction(0, 0x123450b7)
-		this.instructionBus.LoadInstruction(1, 0x00001117)
-		this.instructionBus.LoadInstruction(2, 0x008001ef)
-		this.instructionBus.LoadInstruction(3, 0x06300213)
-		this.instructionBus.LoadInstruction(4, 0x00700293)
-		this.instructionBus.LoadInstruction(5, 0x00100073)
-		this.core.Run(10)
-		assert this.core.ReadRegister(1) == (0x12345000 as uint)
-		assert this.core.ReadRegister(2) == 0x1004
-		assert this.core.ReadRegister(3) == 12
-		assert this.core.ReadRegister(4) == 0
-		assert this.core.ReadRegister(5) == 7
-		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+		Prepare()
+		instructionBus.LoadInstruction(0, 0x123450b7)
+		instructionBus.LoadInstruction(1, 0x00001117)
+		instructionBus.LoadInstruction(2, 0x008001ef)
+		instructionBus.LoadInstruction(3, 0x06300213)
+		instructionBus.LoadInstruction(4, 0x00700293)
+		instructionBus.LoadInstruction(5, 0x00100073)
+		core.Run(10)
+		assert core.ReadRegister(1) == (0x12345000 as uint)
+		assert core.ReadRegister(2) == 0x1004
+		assert core.ReadRegister(3) == 12
+		assert core.ReadRegister(4) == 0
+		assert core.ReadRegister(5) == 7
+		assert core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
 	}
 
+	/**
+	 * Runs immediate arithmetic, bitwise, comparison and shift cases against expected register values.
+	 */
 	@Test
 	fn TestImmediateAluInstructions()
 	{
-		this.Prepare()
-		this.instructionBus.LoadInstruction(0, 0x00500093)
-		this.instructionBus.LoadInstruction(1, 0x0060a113)
-		this.instructionBus.LoadInstruction(2, 0x0060b193)
-		this.instructionBus.LoadInstruction(3, 0x0030c213)
-		this.instructionBus.LoadInstruction(4, 0x0020e293)
-		this.instructionBus.LoadInstruction(5, 0x0070f313)
-		this.instructionBus.LoadInstruction(6, 0x00209393)
-		this.instructionBus.LoadInstruction(7, 0x0013d413)
-		this.instructionBus.LoadInstruction(8, 0xff800513)
-		this.instructionBus.LoadInstruction(9, 0x40155493)
-		this.instructionBus.LoadInstruction(10, 0x00100073)
-		this.core.Run(16)
-		assert this.core.ReadRegister(1) == 5
-		assert this.core.ReadRegister(2) == 1
-		assert this.core.ReadRegister(3) == 1
-		assert this.core.ReadRegister(4) == 6
-		assert this.core.ReadRegister(5) == 7
-		assert this.core.ReadRegister(6) == 5
-		assert this.core.ReadRegister(7) == 20
-		assert this.core.ReadRegister(8) == 10
-		assert this.core.ReadRegister(9) == (0xfffffffc as uint)
-		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+		Prepare()
+		instructionBus.LoadInstruction(0, 0x00500093)
+		instructionBus.LoadInstruction(1, 0x0060a113)
+		instructionBus.LoadInstruction(2, 0x0060b193)
+		instructionBus.LoadInstruction(3, 0x0030c213)
+		instructionBus.LoadInstruction(4, 0x0020e293)
+		instructionBus.LoadInstruction(5, 0x0070f313)
+		instructionBus.LoadInstruction(6, 0x00209393)
+		instructionBus.LoadInstruction(7, 0x0013d413)
+		instructionBus.LoadInstruction(8, 0xff800513)
+		instructionBus.LoadInstruction(9, 0x40155493)
+		instructionBus.LoadInstruction(10, 0x00100073)
+		core.Run(16)
+		assert core.ReadRegister(1) == 5
+		assert core.ReadRegister(2) == 1
+		assert core.ReadRegister(3) == 1
+		assert core.ReadRegister(4) == 6
+		assert core.ReadRegister(5) == 7
+		assert core.ReadRegister(6) == 5
+		assert core.ReadRegister(7) == 20
+		assert core.ReadRegister(8) == 10
+		assert core.ReadRegister(9) == (0xfffffffc as uint)
+		assert core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
 	}
 
+	/**
+	 * Runs register arithmetic, bitwise, comparison and shift cases against expected register values.
+	 */
 	@Test
 	fn TestRegisterAluInstructions()
 	{
-		this.Prepare()
-		this.instructionBus.LoadInstruction(0, 0x00800093)
-		this.instructionBus.LoadInstruction(1, 0x00300113)
-		this.instructionBus.LoadInstruction(2, 0x002081b3)
-		this.instructionBus.LoadInstruction(3, 0x40208233)
-		this.instructionBus.LoadInstruction(4, 0x002092b3)
-		this.instructionBus.LoadInstruction(5, 0x0020a333)
-		this.instructionBus.LoadInstruction(6, 0x0020b3b3)
-		this.instructionBus.LoadInstruction(7, 0x0020c433)
-		this.instructionBus.LoadInstruction(8, 0x0020d4b3)
-		this.instructionBus.LoadInstruction(9, 0x4020d533)
-		this.instructionBus.LoadInstruction(10, 0x0020e5b3)
-		this.instructionBus.LoadInstruction(11, 0x0020f633)
-		this.instructionBus.LoadInstruction(12, 0x00100073)
-		this.core.Run(18)
-		assert this.core.ReadRegister(3) == 11
-		assert this.core.ReadRegister(4) == 5
-		assert this.core.ReadRegister(5) == 64
-		assert this.core.ReadRegister(6) == 0
-		assert this.core.ReadRegister(7) == 0
-		assert this.core.ReadRegister(8) == 11
-		assert this.core.ReadRegister(9) == 1
-		assert this.core.ReadRegister(10) == 1
-		assert this.core.ReadRegister(11) == 11
-		assert this.core.ReadRegister(12) == 0
-		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+		Prepare()
+		instructionBus.LoadInstruction(0, 0x00800093)
+		instructionBus.LoadInstruction(1, 0x00300113)
+		instructionBus.LoadInstruction(2, 0x002081b3)
+		instructionBus.LoadInstruction(3, 0x40208233)
+		instructionBus.LoadInstruction(4, 0x002092b3)
+		instructionBus.LoadInstruction(5, 0x0020a333)
+		instructionBus.LoadInstruction(6, 0x0020b3b3)
+		instructionBus.LoadInstruction(7, 0x0020c433)
+		instructionBus.LoadInstruction(8, 0x0020d4b3)
+		instructionBus.LoadInstruction(9, 0x4020d533)
+		instructionBus.LoadInstruction(10, 0x0020e5b3)
+		instructionBus.LoadInstruction(11, 0x0020f633)
+		instructionBus.LoadInstruction(12, 0x00100073)
+		core.Run(18)
+		assert core.ReadRegister(3) == 11
+		assert core.ReadRegister(4) == 5
+		assert core.ReadRegister(5) == 64
+		assert core.ReadRegister(6) == 0
+		assert core.ReadRegister(7) == 0
+		assert core.ReadRegister(8) == 11
+		assert core.ReadRegister(9) == 1
+		assert core.ReadRegister(10) == 1
+		assert core.ReadRegister(11) == 11
+		assert core.ReadRegister(12) == 0
+		assert core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
 	}
 
+	/**
+	 * Checks byte/halfword/word behavior through constructor-injected buses.
+	 */
 	@Test
 	fn TestLoadStoreInstructions()
 	{
-		this.Prepare()
-		this.instructionBus.LoadInstruction(0, 0xfff00093)
-		this.instructionBus.LoadInstruction(1, 0x00100023)
-		this.instructionBus.LoadInstruction(2, 0x00000103)
-		this.instructionBus.LoadInstruction(3, 0x00004183)
-		this.instructionBus.LoadInstruction(4, 0xfff00213)
-		this.instructionBus.LoadInstruction(5, 0x00401123)
-		this.instructionBus.LoadInstruction(6, 0x00201283)
-		this.instructionBus.LoadInstruction(7, 0x00205303)
-		this.instructionBus.LoadInstruction(8, 0x00100073)
-		this.core.Run(14)
-		assert this.core.ReadRegister(2) == (0xffffffff as uint)
-		assert this.core.ReadRegister(3) == 0xff
-		assert this.core.ReadRegister(5) == (0xffffffff as uint)
-		assert this.core.ReadRegister(6) == 0xffff
-		assert this.dataBus.ReadDataByte(0) == 0xff
-		assert this.dataBus.ReadDataByte(2) == 0xff
-		assert this.dataBus.ReadDataByte(3) == 0xff
-		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+		Prepare()
+		instructionBus.LoadInstruction(0, 0xfff00093)
+		instructionBus.LoadInstruction(1, 0x00100023)
+		instructionBus.LoadInstruction(2, 0x00000103)
+		instructionBus.LoadInstruction(3, 0x00004183)
+		instructionBus.LoadInstruction(4, 0xfff00213)
+		instructionBus.LoadInstruction(5, 0x00401123)
+		instructionBus.LoadInstruction(6, 0x00201283)
+		instructionBus.LoadInstruction(7, 0x00205303)
+		instructionBus.LoadInstruction(8, 0x00100073)
+		core.Run(14)
+		assert core.ReadRegister(2) == (0xffffffff as uint)
+		assert core.ReadRegister(3) == 0xff
+		assert core.ReadRegister(5) == (0xffffffff as uint)
+		assert core.ReadRegister(6) == 0xffff
+		assert dataBus.ReadDataByte(0) == 0xff
+		assert dataBus.ReadDataByte(2) == 0xff
+		assert dataBus.ReadDataByte(3) == 0xff
+		assert core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
 	}
 
+	/**
+	 * Checks control transfers and FENCE before an unsupported instruction halts execution.
+	 */
 	@Test
 	fn TestBranchJalrFenceAndIllegalInstruction()
 	{
-		this.Prepare()
-		this.instructionBus.LoadInstruction(0, 0x0000000f)
-		this.instructionBus.LoadInstruction(1, 0x00000093)
-		this.instructionBus.LoadInstruction(2, 0x00300113)
-		this.instructionBus.LoadInstruction(3, 0x00108093)
-		this.instructionBus.LoadInstruction(4, 0xfe209ee3)
-		this.instructionBus.LoadInstruction(5, 0x01c00093)
-		this.instructionBus.LoadInstruction(6, 0x001082e7)
-		this.instructionBus.LoadInstruction(7, 0x04d00313)
-		this.instructionBus.LoadInstruction(8, 0x00100073)
-		this.core.Run(28)
-		assert this.core.ReadRegister(1) == 28
-		assert this.core.ReadRegister(5) == 28
-		assert this.core.ReadRegister(6) == 77
-		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+		Prepare()
+		instructionBus.LoadInstruction(0, 0x0000000f)
+		instructionBus.LoadInstruction(1, 0x00000093)
+		instructionBus.LoadInstruction(2, 0x00300113)
+		instructionBus.LoadInstruction(3, 0x00108093)
+		instructionBus.LoadInstruction(4, 0xfe209ee3)
+		instructionBus.LoadInstruction(5, 0x01c00093)
+		instructionBus.LoadInstruction(6, 0x001082e7)
+		instructionBus.LoadInstruction(7, 0x04d00313)
+		instructionBus.LoadInstruction(8, 0x00100073)
+		core.Run(28)
+		assert core.ReadRegister(1) == 28
+		assert core.ReadRegister(5) == 28
+		assert core.ReadRegister(6) == 77
+		assert core.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
 
-		this.Prepare()
-		this.instructionBus.LoadInstruction(0, 0xffffffff)
-		this.core.Step()
-		assert this.core.GetTrapCause() == Rv32iConstants.TRAP_ILLEGAL_INSTRUCTION
-		assert this.core.GetTrapPc() == 0
+		Prepare()
+		instructionBus.LoadInstruction(0, 0xffffffff)
+		core.Step()
+		assert core.GetTrapCause() == Rv32iConstants.TRAP_ILLEGAL_INSTRUCTION
+		assert core.GetTrapPc() == 0
 	}
 }

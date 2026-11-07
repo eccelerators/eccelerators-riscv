@@ -5,12 +5,18 @@ namespace Eccelerators.RiscV.Isa
  */
 component Rv32iImmediateDecoder
 {
+	/**
+	 * Returns the sign-extended 12-bit I-format immediate as a 32-bit word.
+	 */
 	public fn DecodeI(instruction: uint) uint
 	{
 		var imm: uint = (instruction >> 20) & (0xfff as uint)
 		return Rv32iWord.SignExtend(imm, 12)
 	}
 
+	/**
+	 * Reassembles and sign-extends the split S-format store offset.
+	 */
 	public fn DecodeS(instruction: uint) uint
 	{
 		var lowBits: uint = (instruction >> 7) & (0x1f as uint)
@@ -19,6 +25,9 @@ component Rv32iImmediateDecoder
 		return Rv32iWord.SignExtend(imm, 12)
 	}
 
+	/**
+	 * Reassembles and sign-extends the B-format byte offset, including its implicit zero low bit.
+	 */
 	public fn DecodeB(instruction: uint) uint
 	{
 		var bit12: uint = (instruction >> 31) & (0x1 as uint)
@@ -29,11 +38,17 @@ component Rv32iImmediateDecoder
 		return Rv32iWord.SignExtend(imm, 13)
 	}
 
+	/**
+	 * Returns the upper-immediate value with its low 12 bits cleared.
+	 */
 	public fn DecodeU(instruction: uint) uint
 	{
 		return instruction & (0xfffff000 as uint)
 	}
 
+	/**
+	 * Reassembles and sign-extends the J-format byte offset, including its implicit zero low bit.
+	 */
 	public fn DecodeJ(instruction: uint) uint
 	{
 		var bit20: uint = (instruction >> 31) & (0x1 as uint)

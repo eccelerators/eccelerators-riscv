@@ -1,0 +1,16 @@
+namespace Eccelerators.RiscV.Contracts
+
+/**
+ * Blocking decode; output control uses RvDecoded. Caller retains original PC,
+ * instruction and length (4 for RV32I). All outputs overwritten on every call.
+ * Operation numbering belongs to a paired decoder/execution composition.
+ */
+public interface IRvDecoder
+{
+	/**
+	 * Decodes one instruction, completing before return. Overwrites control and
+	 * immediate on every call; control uses RvDecoded, with IsLegal false on rejection.
+	 * The exclusive caller retains original PC, instruction bits and length.
+	 */
+	fn Decode(instruction: uint, control: out uint, immediate: out uint)
+}

@@ -3,39 +3,55 @@ namespace Eccelerators.RiscV.Bus
 using Eccelerators.RiscV.Core
 
 /**
- * Small synchronous data RAM for tests and minimal systems.
+ * Owns 256 bytes of zero-based RAM for tests and minimal systems.
+ * Scheduled transactions use the inherited context and complete before returning.
+ * Serialize bus access, provisioning and Clear; results describe the last completed call.
  */
-component Rv32SimpleDataRam: IRv32DataBus
+component Rv32SimpleDataRam : IRv32DataBus
 {
+	// Capacity in bytes; load/store addresses and provisioning offsets are zero-based.
 	public const BYTE_COUNT: int = 256
 
+	// Owned byte storage; Clear initializes all cells.
 	data: byte[256]
 
+	// Owned alignment and lane-selection helper.
 	loadStore: Rv32iLoadStoreUnit
 
+	// Response snapshot for the last completed transaction.
 	error: bool
-
 	readData: uint
 
+	/**
+	 * Creates the load/store helper and clears all RAM bytes and response state before use.
+	 */
 	new()
 	{
-		this.loadStore = new Rv32iLoadStoreUnit()
-		this.Clear()
+		loadStore = new Rv32iLoadStoreUnit()
+		Clear()
 	}
 
+	/**
+	 * Zeros every RAM byte and clears result/error state before returning.
+	 * Serialize clearing with all load, store and provisioning calls.
+	 */
 	public fn Clear()
 	{
 		var index: int = 0
 
 		while (index < BYTE_COUNT) {
-			this.data[index] = 0x00
+			data[index] = 0x00
 			index++
 		}
 
-		this.error = false
-		this.readData = 0
+		error = false
+		readData = 0
 	}
 
+	/**
+	 * Stores a byte at local RAM offset 0..255; ignores invalid offsets.
+	 * Serialize provisioning with CPU accesses; no bus address translation is applied.
+	 */
 	public fn LoadDataByte(address: int, value: byte)
 	{
 		if (address < 0) {
@@ -46,9 +62,13 @@ component Rv32SimpleDataRam: IRv32DataBus
 			return
 		}
 
-		this.data[address] = value
+		data[address] = value
 	}
 
+	/**
+	 * Returns the byte at local RAM offset 0..255, or zero for an invalid offset.
+	 * Read only after any concurrent CPU access has completed.
+	 */
 	public fn ReadDataByte(address: int) byte
 	{
 		if (address < 0) {
@@ -59,63 +79,82 @@ component Rv32SimpleDataRam: IRv32DataBus
 			return 0x00
 		}
 
-		return this.data[address]
+		return data[address]
 	}
 
+	/**
+	 * Completes a byte/halfword/word load from zero-based RAM, with optional sign extension.
+	 * Unsupported widths, misalignment or out-of-range accesses set error and zero read data.
+	 */
 	override fn Load(address: uint, width: int, signedLoad: bool)
 	{
 		var memoryWord: uint = 0
 		var offset: int = (address & (3 as uint)) as int
-		this.error = false
-		this.readData = 0
+		error = false
+		readData = 0
 
-		if (this.IsRangeValid(address, width) == false) {
-			this.error = true
+		if (IsRangeValid(address, width) == false) {
+			error = true
 			return
 		}
 
-		if (this.loadStore.IsMisaligned(address, width) == true) {
-			this.error = true
+		if (loadStore.IsMisaligned(address, width) == true) {
+			error = true
 			return
 		}
 
-		memoryWord = this.ReadWord(address)
-		this.readData = this.loadStore.ExtractLoad(memoryWord, offset, width, signedLoad)
+		memoryWord = ReadWord(address)
+		readData = loadStore.ExtractLoad(memoryWord, offset, width, signedLoad)
 	}
 
+	/**
+	 * Completes a little-endian byte/halfword/word store into zero-based RAM.
+	 * Unsupported widths, misalignment or out-of-range accesses set error without writing.
+	 */
 	override fn Store(address: uint, width: int, value: uint)
 	{
-		this.error = false
-		this.readData = 0
+		error = false
+		readData = 0
 
-		if (this.IsRangeValid(address, width) == false) {
-			this.error = true
+		if (IsRangeValid(address, width) == false) {
+			error = true
 			return
 		}
 
-		if (this.loadStore.IsMisaligned(address, width) == true) {
-			this.error = true
+		if (loadStore.IsMisaligned(address, width) == true) {
+			error = true
 			return
 		}
 
-		this.WriteValue(address, value, width)
+		WriteValue(address, value, width)
 	}
 
+	/**
+	 * Returns the last completed load result; consume it before another transaction.
+	 * Check HasError before treating the value as valid.
+	 */
 	override fn GetReadData() uint
 	{
-		return this.readData
+		return readData
 	}
 
+	/**
+	 * Reports whether the last completed transaction failed. A new transaction replaces this status.
+	 */
 	override fn HasError() bool
 	{
-		return this.error
+		return error
 	}
 
+	/**
+	 * Checks supported width and the entire access against the local RAM bounds.
+	 * Alignment is checked separately before accessing storage.
+	 */
 	fn IsRangeValid(address: uint, width: int) bool
 	{
 		var endAddress: uint = 0
 
-		if (this.IsWidthValid(width) == false) {
+		if (IsWidthValid(width) == false) {
 			return false
 		}
 
@@ -132,6 +171,9 @@ component Rv32SimpleDataRam: IRv32DataBus
 		return true
 	}
 
+	/**
+	 * Accepts only the byte, halfword and word width constants; rejects all other values.
+	 */
 	fn IsWidthValid(width: int) bool
 	{
 		if (width == Rv32iLoadStoreUnit.WIDTH_BYTE) {
@@ -149,19 +191,27 @@ component Rv32SimpleDataRam: IRv32DataBus
 		return false
 	}
 
+	/**
+	 * Assembles the aligned little-endian word containing address.
+	 * Requires a previously validated in-range access; this helper does not check bounds.
+	 */
 	fn ReadWord(address: uint) uint
 	{
 		var baseAddress: int = (address & (0xfffffffc as uint)) as int
-		var b0: uint = this.data[baseAddress] as uint
+		var b0: uint = data[baseAddress] as uint
 		var b1Index: int = baseAddress + 1
 		var b2Index: int = baseAddress + 2
 		var b3Index: int = baseAddress + 3
-		var b1: uint = this.data[b1Index] as uint
-		var b2: uint = this.data[b2Index] as uint
-		var b3: uint = this.data[b3Index] as uint
+		var b1: uint = data[b1Index] as uint
+		var b2: uint = data[b2Index] as uint
+		var b3: uint = data[b3Index] as uint
 		return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
 	}
 
+	/**
+	 * Stores the low width bytes in little-endian order.
+	 * Requires a supported width and a previously validated, aligned RAM range.
+	 */
 	fn WriteValue(address: uint, value: uint, width: int)
 	{
 		var baseAddress: int = address as int
@@ -172,15 +222,15 @@ component Rv32SimpleDataRam: IRv32DataBus
 		var thirdByte: byte = ((value >> 16) & (0xff as uint)) as byte
 		var fourthAddress: int = baseAddress + 3
 		var fourthByte: byte = ((value >> 24) & (0xff as uint)) as byte
-		this.data[baseAddress] = byteValue
+		data[baseAddress] = byteValue
 
 		if (width >= 2) {
-			this.data[secondAddress] = secondByte
+			data[secondAddress] = secondByte
 		}
 
 		if (width >= 4) {
-			this.data[thirdAddress] = thirdByte
-			this.data[fourthAddress] = fourthByte
+			data[thirdAddress] = thirdByte
+			data[fourthAddress] = fourthByte
 		}
 	}
 }

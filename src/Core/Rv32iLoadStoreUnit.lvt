@@ -7,12 +7,15 @@ using Eccelerators.RiscV.Isa
  */
 component Rv32iLoadStoreUnit
 {
+	// Supported access widths in bytes.
 	public const WIDTH_BYTE: int = 1
-
 	public const WIDTH_HALF: int = 2
-
 	public const WIDTH_WORD: int = 4
 
+	/**
+	 * Tests halfword and word alignment; byte accesses are always aligned.
+	 * Requires a supported width; unsupported values are not rejected by this helper.
+	 */
 	public fn IsMisaligned(address: uint, width: int) bool
 	{
 		if (width == WIDTH_HALF) {
@@ -26,6 +29,10 @@ component Rv32iLoadStoreUnit
 		return false
 	}
 
+	/**
+	 * Selects little-endian bytes and optionally sign-extends a byte or halfword.
+	 * Requires a supported width, byteOffset in 0..3, and an aligned access within the word.
+	 */
 	public fn ExtractLoad(memoryWord: uint, byteOffset: int, width: int, signedLoad: bool) uint
 	{
 		var shifted: uint = memoryWord >> (byteOffset * 8)
@@ -54,6 +61,10 @@ component Rv32iLoadStoreUnit
 		return memoryWord
 	}
 
+	/**
+	 * Replaces the selected little-endian byte lanes and preserves other lanes.
+	 * Requires a supported width, byteOffset in 0..3, and an aligned access within the word.
+	 */
 	public fn MergeStore(memoryWord: uint, byteOffset: int, width: int, value: uint) uint
 	{
 		var shiftBits: int = byteOffset * 8

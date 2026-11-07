@@ -3,85 +3,104 @@ namespace Eccelerators.RiscV.Tests
 using Eccelerators.RiscV.Bus
 using Eccelerators.RiscV.Core
 
+/**
+ * Checks instruction fetches and byte-addressed RAM transactions, including errors.
+ * Stateful scenarios initialize their inputs independently before execution.
+ */
 @Test
 component Rv32SimpleMemoryTest
 {
+	// Owned subjects and fixtures; scenarios initialize mutable state before use.
 	rom: Rv32SimpleInstructionRom
-
 	ram: Rv32SimpleDataRam
 
+	/**
+	 * Constructs the owned subjects and fixtures; each stateful scenario supplies its own initialization.
+	 */
 	new()
 	{
-		this.rom = new Rv32SimpleInstructionRom()
-		this.ram = new Rv32SimpleDataRam()
+		rom = new Rv32SimpleInstructionRom()
+		ram = new Rv32SimpleDataRam()
 	}
 
+	/**
+	 * Checks aligned fetch, misalignment failure and recovery on the following valid request.
+	 */
 	@Test
 	fn TestInstructionRomFetchAndError()
 	{
-		this.rom.Clear()
-		this.rom.LoadInstruction(2, 0x123450b7)
-		this.rom.Request(8)
-		assert this.rom.HasError() == false
-		assert this.rom.GetInstruction() == (0x123450b7 as uint)
-		this.rom.Request(2)
-		assert this.rom.HasError() == true
-		this.rom.Request(8)
-		assert this.rom.HasError() == false
-		assert this.rom.GetInstruction() == (0x123450b7 as uint)
+		rom.Clear()
+		rom.LoadInstruction(2, 0x123450b7)
+		rom.Request(8)
+		assert rom.HasError() == false
+		assert rom.GetInstruction() == (0x123450b7 as uint)
+		rom.Request(2)
+		assert rom.HasError() == true
+		rom.Request(8)
+		assert rom.HasError() == false
+		assert rom.GetInstruction() == (0x123450b7 as uint)
 	}
 
+	/**
+	 * Checks little-endian lane placement and signed narrow loads after explicit RAM clearing.
+	 */
 	@Test
 	fn TestDataRamByteHalfwordAndWordAccess()
 	{
-		this.ram.Clear()
-		this.ram.Store(0, Rv32iLoadStoreUnit.WIDTH_WORD, 0x807f3412)
-		assert this.ram.HasError() == false
-		assert this.ram.ReadDataByte(0) == 0x12
-		assert this.ram.ReadDataByte(1) == 0x34
-		assert this.ram.ReadDataByte(2) == 0x7f
-		assert this.ram.ReadDataByte(3) == 0x80
-		this.ram.Load(0, Rv32iLoadStoreUnit.WIDTH_WORD, false)
-		assert this.ram.GetReadData() == (0x807f3412 as uint)
-		this.ram.Load(3, Rv32iLoadStoreUnit.WIDTH_BYTE, true)
-		assert this.ram.GetReadData() == (0xffffff80 as uint)
-		this.ram.Store(4, Rv32iLoadStoreUnit.WIDTH_HALF, 0xbeef)
-		assert this.ram.ReadDataByte(4) == 0xef
-		assert this.ram.ReadDataByte(5) == 0xbe
+		ram.Clear()
+		ram.Store(0, Rv32iLoadStoreUnit.WIDTH_WORD, 0x807f3412)
+		assert ram.HasError() == false
+		assert ram.ReadDataByte(0) == 0x12
+		assert ram.ReadDataByte(1) == 0x34
+		assert ram.ReadDataByte(2) == 0x7f
+		assert ram.ReadDataByte(3) == 0x80
+		ram.Load(0, Rv32iLoadStoreUnit.WIDTH_WORD, false)
+		assert ram.GetReadData() == (0x807f3412 as uint)
+		ram.Load(3, Rv32iLoadStoreUnit.WIDTH_BYTE, true)
+		assert ram.GetReadData() == (0xffffff80 as uint)
+		ram.Store(4, Rv32iLoadStoreUnit.WIDTH_HALF, 0xbeef)
+		assert ram.ReadDataByte(4) == 0xef
+		assert ram.ReadDataByte(5) == 0xbe
 	}
 
+	/**
+	 * Checks boundary and alignment rejection without relying on state from an earlier test.
+	 */
 	@Test
 	fn TestDataRamRangeAndAlignmentErrors()
 	{
-		this.ram.Clear()
-		this.ram.Load(1, Rv32iLoadStoreUnit.WIDTH_WORD, false)
-		assert this.ram.HasError() == true
-		this.ram.Load(252, Rv32iLoadStoreUnit.WIDTH_WORD, false)
-		assert this.ram.HasError() == false
-		this.ram.Store(255, Rv32iLoadStoreUnit.WIDTH_HALF, 0xabcd)
-		assert this.ram.HasError() == true
+		ram.Clear()
+		ram.Load(1, Rv32iLoadStoreUnit.WIDTH_WORD, false)
+		assert ram.HasError() == true
+		ram.Load(252, Rv32iLoadStoreUnit.WIDTH_WORD, false)
+		assert ram.HasError() == false
+		ram.Store(255, Rv32iLoadStoreUnit.WIDTH_HALF, 0xabcd)
+		assert ram.HasError() == true
 	}
 
+	/**
+	 * Rejects zero, negative and unsupported widths while preserving a sentinel RAM byte.
+	 */
 	@Test
 	fn TestDataRamRejectsInvalidWidthsWithoutWriting()
 	{
-		this.ram.Clear()
-		this.ram.LoadDataByte(0, 0x5a)
-		this.ram.Load(0, 0, false)
-		assert this.ram.HasError() == true
-		assert this.ram.GetReadData() == 0
-		this.ram.Load(0, -1, false)
-		assert this.ram.HasError() == true
-		this.ram.Load(0, 3, false)
-		assert this.ram.HasError() == true
-		this.ram.Store(0, 0, 0xaa)
-		assert this.ram.HasError() == true
-		assert this.ram.ReadDataByte(0) == 0x5a
-		this.ram.Store(0, -1, 0xbb)
-		assert this.ram.HasError() == true
-		assert this.ram.ReadDataByte(0) == 0x5a
-		this.ram.Store(0, 3, 0xccbbaa)
-		assert this.ram.HasError() == true
-		assert this.ram.ReadDataByte(0) == 0x5a
+		ram.Clear()
+		ram.LoadDataByte(0, 0x5a)
+		ram.Load(0, 0, false)
+		assert ram.HasError() == true
+		assert ram.GetReadData() == 0
+		ram.Load(0, -1, false)
+		assert ram.HasError() == true
+		ram.Load(0, 3, false)
+		assert ram.HasError() == true
+		ram.Store(0, 0, 0xaa)
+		assert ram.HasError() == true
+		assert ram.ReadDataByte(0) == 0x5a
+		ram.Store(0, -1, 0xbb)
+		assert ram.HasError() == true
+		assert ram.ReadDataByte(0) == 0x5a
+		ram.Store(0, 3, 0xccbbaa)
+		assert ram.HasError() == true
+		assert ram.ReadDataByte(0) == 0x5a
 	}
 }

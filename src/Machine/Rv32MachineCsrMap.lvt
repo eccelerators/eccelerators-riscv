@@ -1,0 +1,48 @@
+namespace Eccelerators.RiscV.Machine
+
+/**
+ * Supported CSR addresses and fixed machine-only field encodings.
+ */
+public class Rv32MachineCsrMap
+{
+	// Individually decoded machine CSR addresses.
+	public const MSTATUS: uint = 0x300
+	public const MISA: uint = 0x301
+	public const MIE: uint = 0x304
+	public const MTVEC: uint = 0x305
+	public const MCOUNTEREN: uint = 0x306
+	public const MSTATUSH: uint = 0x310
+	public const MCOUNTINHIBIT: uint = 0x320
+	public const MSCRATCH: uint = 0x340
+	public const MEPC: uint = 0x341
+	public const MCAUSE: uint = 0x342
+	public const MTVAL: uint = 0x343
+	public const MIP: uint = 0x344
+	public const MCYCLE: uint = 0xb00
+	public const MINSTRET: uint = 0xb02
+	public const MCYCLEH: uint = 0xb80
+	public const MINSTRETH: uint = 0xb82
+	public const MVENDORID: uint = 0xf11
+	public const MARCHID: uint = 0xf12
+	public const MIMPID: uint = 0xf13
+	public const MHARTID: uint = 0xf14
+	public const MCONFIGPTR: uint = 0xf15
+
+	// Unimplemented hardware performance counters/selectors read zero and ignore writes.
+	public const HPM_FIRST: uint = 0xb03
+	public const HPM_LAST: uint = 0xb1f
+	public const HPM_HIGH_FIRST: uint = 0xb83
+	public const HPM_HIGH_LAST: uint = 0xb9f
+	public const EVENT_FIRST: uint = 0x323
+	public const EVENT_LAST: uint = 0x33f
+
+	// M-only, little-endian RV32I. Zmmul does not set the full-M extension bit.
+	public const ISA: uint = 0x40000100
+	public const MPP_MACHINE: uint = 0x1800
+	public const STATUS_WRITABLE: uint = 0x88
+	public const WORD_ALIGNED: uint = 0xfffffffc
+	public const COUNTER_MASK: uint = 5
+	public const INHIBIT_CYCLE: uint = 1
+	public const INHIBIT_RETIRE: uint = 4
+	public const READ_ONLY_ADDRESS: uint = 0xc00
+}

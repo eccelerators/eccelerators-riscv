@@ -1,0 +1,29 @@
+namespace Eccelerators.RiscV.Contracts
+
+/**
+ * Capability declarations are obligations, not proof of instruction correctness.
+ * ISA bits: RV32I=1, Zmmul=2 (all four multiplies), Zicsr=4.
+ * This contract rejects compressed and other undeclared ISA bits.
+ */
+component RvCompositionContract<ISA: uint = 1, DECODE_ISA: uint = 1,
+	EXECUTE_ISA: uint = 1, MACHINE: bool = false, MACHINE_TRAPS: bool = false,
+	INTERRUPTS: bool = false, PIPELINED: bool = false, READ_PORTS: int = 1,
+	OPERAND_STALLS: bool = true, VARIABLE_LATENCY: bool = true,
+	COMPLETION_STALLS: bool = true>
+{
+	static assert (ISA & RV32I) != 0 && (ISA & UNSUPPORTED_ISA_MASK) == 0, "Unsupported ISA selection"
+	static assert ISA == DECODE_ISA && ISA == EXECUTE_ISA, "Decode/execute ISA mismatch"
+	static assert !MACHINE || ((ISA & ZICSR) != 0 && MACHINE_TRAPS), "Machine mode requires CSR and traps"
+	static assert !INTERRUPTS || MACHINE, "Interrupts require machine mode"
+	static assert READ_PORTS >= 1, "Register read port required"
+	static assert !PIPELINED || READ_PORTS >= 2 || OPERAND_STALLS, "Pipeline needs read ports or stalls"
+	static assert !VARIABLE_LATENCY || COMPLETION_STALLS, "Variable latency requires completion stalls"
+
+	// Capability bits describe obligations of the selected implementations.
+	public const RV32I: uint = 1
+	public const ZMMUL: uint = 2
+	public const ZICSR: uint = 4
+
+	// Reject bits outside the currently declared capability vocabulary.
+	public const UNSUPPORTED_ISA_MASK: uint = 0xfffffff8
+}

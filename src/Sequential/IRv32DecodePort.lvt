@@ -1,0 +1,16 @@
+namespace Eccelerators.RiscV.Sequential
+
+/**
+ * Combinational instruction decode in the consumer's clock/reset domain.
+ * Control uses RvDecoded packing and the shared sequential operation vocabulary.
+ * Illegal encodings return zero control. Outputs have no retained state.
+ */
+interface IRv32DecodePort
+{
+	// Instruction supplied by the exclusive engine owner.
+	instruction: in logic[32]
+
+	// Complete decode outputs, sampled by the engine at its decode/execute edges.
+	control: out logic[32]
+	immediate: out logic[32]
+}

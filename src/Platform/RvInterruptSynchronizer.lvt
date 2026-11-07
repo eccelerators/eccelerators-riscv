@@ -1,0 +1,44 @@
+namespace Eccelerators.RiscV.Platform
+
+/**
+ * Two-register input adapter for a persistent asynchronous interrupt level.
+ * The device must hold the level until serviced; short pulses are unsupported.
+ * Both stages reset low in the inherited destination context. Simulation checks
+ * logical sampling only; board integration must preserve the synchronizer chain
+ * and constrain the asynchronous input path. No debounce or event counting.
+ */
+component RvInterruptSynchronizer
+{
+	// Asynchronous device input and destination-clock output.
+	public source: in logic
+	public pending: out logic
+
+	// First sampling stage has no consumers except the second register.
+	metastabilityStage: logic
+	synchronizedStage: logic
+
+	// Pure signal views preserve pre-edge sampling across the explicit state.
+	sampledSource: logic
+	previousStage: logic
+
+	/**
+	 * Wires the two-register chain without scheduled port access or forwarding.
+	 */
+	process Connect[]()
+	{
+		sampledSource = source
+		previousStage = metastabilityStage
+		pending = synchronizedStage
+	}
+
+	/**
+	 * Samples the asynchronous level through two consecutive registers.
+	 */
+	process Sample()
+	{
+		state {
+			metastabilityStage = sampledSource
+			synchronizedStage = previousStage
+		}
+	}
+}

@@ -1,0 +1,22 @@
+namespace Eccelerators.RiscV.Contracts
+
+/**
+ * Optional blocking verification sink. Called once per committed instruction
+ * or trap event; disabled compositions must omit both sink and calls.
+ * kind: 0 retired, 1 synchronous fault, 2 interrupt. Faults do not retire.
+ * rd=0 means no architectural register write. memoryKind: 0 none, 1 load,
+ * 2 store; mask is a four-bit byte lane mask; data is the transferred word.
+ * Unused fields are zero. Sink cannot change architecture; it may add latency.
+ */
+public interface IRvObservation
+{
+	/**
+	 * Records one ordered architectural event, completing before return.
+	 * Use RvObservationValues for kind and memoryKind. Supply original PC/instruction,
+	 * rd in 0..31 (zero means no write), and a four-bit byte-lane memory mask.
+	 * Unused fields must be zero. Fault/interrupt events do not retire instructions.
+	 * The exclusive caller owns architectural updates; this sink may add latency.
+	 */
+	fn Observe(kind: uint, pc: uint, instruction: uint, rd: uint, value: uint,
+		memoryKind: uint, address: uint, mask: uint, data: uint, cause: uint, tval: uint)
+}

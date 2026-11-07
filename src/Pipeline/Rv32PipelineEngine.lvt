@@ -1,0 +1,660 @@
+namespace Eccelerators.RiscV.Pipeline
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Contracts
+using Eccelerators.RiscV.Machine
+
+/**
+ * Four-stage, single-issue RV32I engine with optional multiply and machine state.
+ * Diagnostic compositions stop on faults; machine compositions enter direct mtvec.
+ * CSR effects, multiply completion and traps are ordered by the commit owner.
+ * Borrows exclusive same-clock providers. Instruction reads must be side-effect
+ * free; only commit issues data requests. Requests cannot be cancelled. Pause and
+ * restart drain admitted work; idle includes the memory release edges. A paused
+ * step admits exactly one instruction. Reset must also reset the bus providers.
+ * Owns all stage validity and architectural ordering in one clocked controller.
+ */
+component Rv32PipelineEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bool = false,
+	MACHINE_TRAPS: bool = false, INTERRUPTS: bool = false> : IRv32ControlPort
+{
+	static assert (RESET_PC & 3) == 0, "Pipeline reset PC must be word aligned"
+	static assert !MACHINE_TRAPS || CSR, "Machine traps require CSR state"
+	static assert !INTERRUPTS || MACHINE_TRAPS, "Interrupts require machine traps"
+
+	// Semantic families implemented by the controller, excluding the borrowed ALU.
+	public const CAPABILITIES: uint = Rv32iOperations.MEMORY_CAPABILITY | Rv32iOperations.CONTROL_CAPABILITY
+
+	// Decode response lifecycle; a stalled captured pair must not be read again.
+	const READ_WAIT: uint = 0
+	const READ_PENDING: uint = 1
+	const READ_CAPTURED: uint = 2
+
+	// Exclusive borrowed providers; the application owns their lifetime.
+	registers: IRv32DualReadRegisterPort
+	instructions: IRv32MemoryPort
+	data: IRv32MemoryPort
+	decoder: IRv32DecodePort
+	integer: Rv32iIntegerUnit
+	multiplier: IRv32MultiplyPort
+	csrs: IRv32CsrPort
+
+	// Architectural state, initialization and single-pending control toggles.
+	initialized: bool
+	clearIndex: logic[5]
+	programCounter: uint
+	stopped: bool
+	stopCause: logic[4]
+	stopValue: uint
+	stepActive: bool
+	activeStep: logic
+	stepCompleted: logic
+	restartCompleted: logic
+
+	// Fetch owns one slot, including the uncancellable outstanding transaction.
+	fetchPc: uint
+	fBusy: bool
+	fValid: bool
+	fGap: bool
+	fKilled: bool
+	fPc: uint
+	fWord: uint
+	fError: bool
+
+	// Decode holds identity and, when execute stalls, its synchronous operand pair.
+	dValid: bool
+	dPhase: uint
+	dPc: uint
+	dWord: uint
+	dError: bool
+	dLeft: uint
+	dRight: uint
+
+	// Execute holds the complete decoded instruction independently of decode.
+	xValid: bool
+	xPc: uint
+	xWord: uint
+	xControl: uint
+	xImmediate: uint
+	xLeft: uint
+	xRight: uint
+	xError: bool
+
+	// Commit owns effects. cValue holds an ALU result, effective address or fault value.
+	cValid: bool
+	cPc: uint
+	cWord: uint
+	cNext: uint
+	cValue: uint
+	cStoreValue: uint
+	cRd: logic[5]
+	cWrites: bool
+	cKind: logic[4]
+	cWidth: logic[3]
+	cFault: bool
+	cCause: logic[4]
+	cRedirect: bool
+	dataGap: bool
+	cOperand: uint
+	multiplyGap: bool
+
+	// Trap event state survives fetch draining; CSR enable changes get a boundary edge.
+	boundaryCheck: bool
+	trapPending: bool
+	entryPc: logic[32]
+	entryCause: logic[32]
+	entryValue: logic[32]
+	trapPulse: logic
+
+	// Registered observation pulses and payload; stable across younger stage changes.
+	retirementPulse: logic
+	commitPc: logic[32]
+	commitWord: logic[32]
+	commitRd: logic[5]
+	commitValue: logic[32]
+
+	// Pure edge decisions derived from the old stage state, never scheduled helpers.
+	dControl: uint
+	xKind: uint
+	xWidth: uint
+	xResult: uint
+	xNext: uint
+	xFault: bool
+	xCause: logic[4]
+	xRedirect: bool
+	cMemory: bool
+	cMultiply: bool
+	cCsr: bool
+	cReturn: bool
+	cSerialize: bool
+	redirectPc: uint
+	takeInterrupt: bool
+	enterTrap: bool
+	cComplete: bool
+	cFailed: bool
+	cWrite: bool
+	cResult: uint
+	flush: bool
+	quiescent: bool
+	launch: bool
+	readOperands: bool
+	fTransfer: bool
+	dTransfer: bool
+	xTransfer: bool
+
+	/**
+	 * Binds providers without scheduled wrappers. Startup clears x1..x31 before idle.
+	 */
+	new(registers: flip IRv32DualReadRegisterPort, instructions: flip IRv32MemoryPort,
+		data: flip IRv32MemoryPort, decoder: flip IRv32DecodePort, integer: Rv32iIntegerUnit,
+		multiplier: flip IRv32MultiplyPort, csrs: flip IRv32CsrPort)
+	{
+		this.registers = registers
+		this.instructions = instructions
+		this.data = data
+		this.decoder = decoder
+		this.integer = integer
+		this.multiplier = multiplier
+		this.csrs = csrs
+	}
+
+	/**
+	 * Evaluates execute without architectural effects. Faults travel to commit in order.
+	 */
+	process Execute[]()
+	{
+		var control = xControl
+		var operand1 = xLeft
+		var operand2 = xRight
+		xKind = RvDecoded.Operation(control) >> Rv32iOperations.KIND_SHIFT
+		xWidth = (xWord >> 12) & 7
+		integer.operation = (RvDecoded.Operation(control) & Rv32iOperations.ALU_MASK) as logic[4]
+		integer.left = xLeft as logic[32]
+		integer.right = xImmediate as logic[32]
+
+		if (xKind == Rv32iOperations.REGISTER) {
+			integer.right = xRight as logic[32]
+		}
+
+		if (xKind == Rv32iOperations.LUI) {
+			integer.left = 0
+		} elif (xKind == Rv32iOperations.AUIPC || xKind == Rv32iOperations.JAL || xKind == Rv32iOperations.BRANCH) {
+			integer.left = xPc as logic[32]
+		}
+
+		var arithmetic = integer.result as uint
+		xResult = arithmetic
+		xNext = xPc + 4
+		xFault = false
+		xCause = 0
+		xRedirect = false
+
+		if (xError) {
+			xFault = true
+			xCause = Rv32iOperations.INSTRUCTION_ACCESS as logic[4]
+			xResult = xPc
+		} elif (!RvDecoded.IsLegal(control)
+			|| (xKind == Rv32MultiplyOperations.KIND && !MULTIPLY)
+			|| (xKind == Rv32CsrOperations.KIND && !CSR)
+			|| (xKind == Rv32TrapOperations.RETURN_KIND && !MACHINE_TRAPS)) {
+			xFault = true
+			xCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[4]
+			xResult = xWord
+		} else {
+			match (xKind)
+			{
+				Rv32iOperations.JAL, Rv32iOperations.JALR, Rv32iOperations.BRANCH =>
+				{
+					var target = arithmetic
+
+					if (xKind == Rv32iOperations.JALR) {
+						target = target & 0xfffffffe
+					}
+
+					xRedirect = xKind != Rv32iOperations.BRANCH || Rv32iSemantics.Branch(xWidth, operand1, operand2)
+
+					if (xRedirect) {
+						xNext = target
+						xResult = xPc + 4
+
+						if ((target & 3) != 0) {
+							xFault = true
+							xCause = Rv32iOperations.INSTRUCTION_MISALIGNED as logic[4]
+							xResult = target
+						}
+					}
+				}
+				Rv32iOperations.LOAD, Rv32iOperations.STORE =>
+				{
+					if (Rv32iSemantics.Misaligned(arithmetic, xWidth)) {
+						xFault = true
+						xCause = Rv32iOperations.LOAD_MISALIGNED as logic[4]
+
+						if (xKind == Rv32iOperations.STORE) {
+							xCause = Rv32iOperations.STORE_MISALIGNED as logic[4]
+						}
+					}
+				}
+				Rv32iOperations.ECALL =>
+				{
+					xFault = true
+					xCause = Rv32iOperations.ENVIRONMENT_CALL as logic[4]
+					xResult = 0
+				}
+				Rv32iOperations.EBREAK =>
+				{
+					xFault = true
+					xCause = Rv32iOperations.BREAKPOINT as logic[4]
+					xResult = xPc
+				}
+				_ => {
+					// Legal integer operations and FENCE use common ordered commit.
+				}
+			}
+		}
+	}
+
+	/**
+	 * Drives stable buses and computes transfers from sampled stage state. Ready
+	 * propagates only from commit toward fetch; no combinational ready cycle exists.
+	 */
+	process Drive[]()
+	{
+		decoder.instruction = dWord as logic[32]
+		dControl = decoder.control as uint
+		var control = dControl
+		var executeControl = xControl
+		var addressValue = cValue
+		var width = cWidth as uint
+		var csrInstruction = cWord
+		var csrOperand = cOperand
+		var csrDestination = cRd as uint
+		cMemory = cKind as uint == Rv32iOperations.LOAD || cKind as uint == Rv32iOperations.STORE
+		cMultiply = MULTIPLY && cKind as uint == Rv32MultiplyOperations.KIND
+		cCsr = CSR && cKind as uint == Rv32CsrOperations.KIND
+		cReturn = MACHINE_TRAPS && cKind as uint == Rv32TrapOperations.RETURN_KIND
+		cComplete = cValid && (cFault || (cMemory && !dataGap && data.ready == 0b1)
+			|| (cMultiply && !multiplyGap && multiplier.ready == 0b1) || (!cMemory && !cMultiply))
+		cFailed = cFault || (cMemory && data.error == 0b1) || (cCsr && csrs.illegal == 0b1)
+		cWrite = cComplete && !cFailed && cWrites && cRd != 0
+		cResult = cValue
+
+		if (cKind as uint == Rv32iOperations.LOAD) {
+			cResult = Rv32iSemantics.Load(data.readData as uint, addressValue, width)
+		} elif (cMultiply) {
+			cResult = multiplier.result as uint
+		} elif (cCsr) {
+			cResult = csrs.readData as uint
+		}
+
+		redirectPc = cNext
+
+		if (cReturn) {
+			redirectPc = csrs.returnPc as uint
+		}
+
+		cSerialize = INTERRUPTS && cComplete && !cFailed && (cCsr || cReturn)
+		quiescent = !fBusy && !fValid && !fGap && !dValid && !xValid && !cValid
+			&& !dataGap && !multiplyGap && !trapPending && !boundaryCheck
+		takeInterrupt = INTERRUPTS && initialized && !stopped && !trapPending && !stepActive
+			&& restartRequest == restartCompleted && csrs.interruptEligible == 0b1
+			&& (!cValid || (cComplete && !cFailed)) && !cSerialize
+			&& (run == 0b1 || (quiescent && stepRequest != stepCompleted))
+		enterTrap = MACHINE_TRAPS && trapPending && !fBusy && !fGap && !dataGap && !multiplyGap
+		flush = (cComplete && (cFailed || cRedirect || cReturn)) || takeInterrupt
+		xTransfer = xValid && (!cValid || cComplete) && !flush && !cSerialize && !boundaryCheck && !trapPending
+		dTransfer = dValid && dPhase != READ_WAIT && (!xValid || xTransfer) && !flush
+		fTransfer = fValid && (!dValid || dTransfer) && !flush
+		launch = initialized && !stopped && !stepActive && !trapPending && restartRequest == restartCompleted
+			&& !fBusy && (!fValid || fTransfer) && !flush
+			&& (run == 0b1 || (quiescent && stepRequest != stepCompleted))
+
+		var rs1 = RvDecoded.Rs1(control)
+		var rs2 = RvDecoded.Rs2(control)
+		var xRd = RvDecoded.Rd(executeControl)
+		var hazard1 = RvDecoded.HasSource1(control) && rs1 != 0
+			&& ((xValid && RvDecoded.HasDestinationWrite(executeControl) && xRd == rs1)
+			|| (cValid && cWrites && cRd as uint == rs1 && !cWrite))
+		var hazard2 = RvDecoded.HasSource2(control) && rs2 != 0
+			&& ((xValid && RvDecoded.HasDestinationWrite(executeControl) && xRd == rs2)
+			|| (cValid && cWrites && cRd as uint == rs2 && !cWrite))
+		readOperands = dValid && dPhase == READ_WAIT && !hazard1 && !hazard2 && !flush
+		registers.readEnable = 0b0
+		registers.leftIndex = rs1 as logic[5]
+		registers.rightIndex = rs2 as logic[5]
+		registers.writeEnable = 0b0
+		registers.writeIndex = cRd
+		registers.writeData = cResult as logic[32]
+
+		if (readOperands) {
+			registers.readEnable = 0b1
+		}
+
+		if (!initialized) {
+			registers.writeEnable = 0b1
+			registers.writeIndex = clearIndex
+			registers.writeData = 0
+		} elif (cWrite) {
+			registers.writeEnable = 0b1
+		}
+
+		instructions.request = 0b0
+		instructions.address = fPc as logic[32]
+		instructions.write = 0b0
+		instructions.byteEnable = 0
+		instructions.writeData = 0
+
+		if (fBusy) {
+			instructions.request = 0b1
+		}
+
+		data.request = 0b0
+		data.address = (cValue & 0xfffffffc) as logic[32]
+		data.write = 0b0
+		data.byteEnable = Rv32iSemantics.StoreMask(addressValue, width) as logic[4]
+		data.writeData = (cStoreValue << (((cValue & 3) * 8) as int)) as logic[32]
+
+		if (cValid && cMemory && !cFault && !dataGap) {
+			data.request = 0b1
+		}
+
+		if (cKind as uint == Rv32iOperations.STORE) {
+			data.write = 0b1
+		}
+
+		multiplier.request = 0b0
+		multiplier.operation = cWidth as logic[2]
+		multiplier.left = cOperand as logic[32]
+		multiplier.right = cStoreValue as logic[32]
+
+		if (cValid && cMultiply && !cFault && !multiplyGap) {
+			multiplier.request = 0b1
+		}
+
+		csrs.address = (cWord >> 20) as logic[12]
+		csrs.operation = (width & 3) as logic[2]
+		csrs.operand = cOperand as logic[32]
+		csrs.readEnable = 0b0
+		csrs.writeEnable = 0b0
+		csrs.commit = 0b0
+		csrs.retire = 0b0
+		csrs.clear = 0b0
+		csrs.enterTrap = 0b0
+		csrs.returnTrap = 0b0
+		csrs.entryPc = entryPc
+		csrs.entryCause = entryCause
+		csrs.entryValue = entryValue
+
+		if (CSR) {
+			if (!initialized) {
+				csrs.clear = 0b1
+			}
+
+			if (cValid && cCsr) {
+				csrs.operand = Rv32ZicsrAccess.SelectOperand(width, csrInstruction, csrOperand) as logic[32]
+				csrs.readEnable = Rv32ZicsrAccess.RequiresRead(width, csrDestination) as logic
+				csrs.writeEnable = Rv32ZicsrAccess.RequiresWrite(width, csrInstruction) as logic
+			}
+
+			if (cComplete && !cFailed) {
+				csrs.retire = 0b1
+
+				if (cCsr) {
+					csrs.commit = 0b1
+				}
+
+				if (cReturn) {
+					csrs.returnTrap = 0b1
+				}
+			}
+
+			if (enterTrap) {
+				csrs.enterTrap = 0b1
+			}
+		}
+
+		idle = 0b0
+		halted = 0b0
+
+		if (initialized && quiescent && !stepActive && restartRequest == restartCompleted) {
+			idle = 0b1
+		}
+
+		if (stopped) {
+			halted = 0b1
+		}
+
+		pc = programCounter as logic[32]
+		faultCause = stopCause as logic[32]
+		faultValue = stopValue as logic[32]
+		stepAck = stepCompleted
+		restartAck = restartCompleted
+		trapped = trapPulse
+		trapPc = entryPc
+		trapCause = entryCause
+		trapValue = entryValue
+
+		if (MACHINE_TRAPS) {
+			faultCause = 0
+			faultValue = 0
+		}
+
+		retired = retirementPulse
+		retiredPc = commitPc
+		retiredInstruction = commitWord
+		retiredRd = commitRd
+		retiredValue = commitValue
+	}
+
+	/**
+	 * Owns all pipeline state. Transfer enables above refer to the pre-edge state;
+	 * downstream capture precedes upstream refill to preserve Livt sampling order.
+	 * Flush overrides younger transfers while uncancellable fetch bookkeeping drains.
+	 */
+	process Advance()
+	{
+		state {
+			var control = dControl
+			var executeControl = xControl
+			retirementPulse = 0b0
+			trapPulse = 0b0
+
+			if (!initialized) {
+				programCounter = RESET_PC
+				fetchPc = RESET_PC
+				stopped = false
+				boundaryCheck = false
+				trapPending = false
+				entryPc = 0
+				entryCause = 0
+				entryValue = 0
+				stopCause = 0
+				stopValue = 0
+
+				if (clearIndex == 31) {
+					initialized = true
+					restartCompleted = restartRequest
+					stepCompleted = stepRequest
+				} else {
+					clearIndex = ((clearIndex as uint) + 1) as logic[5]
+				}
+			} else {
+				if (quiescent && restartRequest != restartCompleted) {
+					initialized = false
+					clearIndex = 0
+					stepActive = false
+				} elif (quiescent && stepActive) {
+					stepCompleted = activeStep
+					stepActive = false
+				}
+
+				// A launch on the fetch release edge raises request only AFTER that edge.
+				// A full response slot may transfer to decode while the next slot is reserved.
+				fGap = false
+				dataGap = false
+				multiplyGap = false
+				boundaryCheck = cSerialize
+
+				if (cComplete) {
+					cValid = false
+
+					if (cMemory && !cFault) {
+						dataGap = true
+					}
+
+					if (cMultiply && !cFault) {
+						multiplyGap = true
+					}
+
+					if (cFailed) {
+						programCounter = cPc
+						stopCause = cCause
+						stopValue = cValue
+
+						if (!cFault) {
+							stopCause = Rv32iOperations.LOAD_ACCESS as logic[4]
+
+							if (cCsr) {
+								stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[4]
+								stopValue = cWord
+							} elif (cKind as uint == Rv32iOperations.STORE) {
+								stopCause = Rv32iOperations.STORE_ACCESS as logic[4]
+							}
+						}
+
+						if (MACHINE_TRAPS) {
+							trapPending = true
+							entryPc = cPc as logic[32]
+							entryCause = stopCause as logic[32]
+							entryValue = stopValue as logic[32]
+						} else {
+							stopped = true
+						}
+					} else {
+						retirementPulse = 0b1
+						commitPc = cPc as logic[32]
+						commitWord = cWord as logic[32]
+						commitRd = 0
+						commitValue = 0
+
+						if (cWrite) {
+							commitRd = cRd
+							commitValue = cResult as logic[32]
+						}
+
+						programCounter = redirectPc
+					}
+				}
+
+				if (flush) {
+					fetchPc = redirectPc
+					fValid = false
+					dValid = false
+					xValid = false
+					fKilled = fBusy
+				}
+
+				if (takeInterrupt) {
+					trapPending = true
+					entryPc = programCounter as logic[32]
+					entryCause = csrs.interruptCause
+					entryValue = 0
+
+					if (run == 0b0) {
+						stepActive = true
+						activeStep = stepRequest
+					}
+				}
+
+				if (enterTrap) {
+					trapPending = false
+					trapPulse = 0b1
+					programCounter = csrs.trapVector as uint
+					fetchPc = csrs.trapVector as uint
+				}
+
+				if (xTransfer) {
+					cValid = true
+					cPc = xPc
+					cWord = xWord
+					cNext = xNext
+					cValue = xResult
+					cStoreValue = xRight
+					cOperand = xLeft
+					cRd = RvDecoded.Rd(executeControl) as logic[5]
+					cWrites = RvDecoded.HasDestinationWrite(executeControl)
+					cKind = xKind as logic[4]
+					cWidth = xWidth as logic[3]
+					cFault = xFault
+					cCause = xCause
+					cRedirect = xRedirect
+					xValid = false
+				}
+
+				if (dTransfer) {
+					xValid = true
+					xPc = dPc
+					xWord = dWord
+					xControl = control
+					xImmediate = decoder.immediate as uint
+					xError = dError
+					xLeft = dLeft
+					xRight = dRight
+
+					if (dPhase == READ_PENDING) {
+						xLeft = registers.leftData as uint
+						xRight = registers.rightData as uint
+					}
+
+					// Unused encoded source fields must never contribute operands.
+					if (!RvDecoded.HasSource1(control)) {
+						xLeft = 0
+					}
+
+					if (!RvDecoded.HasSource2(control)) {
+						xRight = 0
+					}
+
+					dValid = false
+				} elif (dValid && dPhase == READ_PENDING) {
+					dLeft = registers.leftData as uint
+					dRight = registers.rightData as uint
+					dPhase = READ_CAPTURED
+				}
+
+				if (readOperands) {
+					dPhase = READ_PENDING
+				}
+
+				if (fTransfer) {
+					dValid = true
+					dPc = fPc
+					dWord = fWord
+					dError = fError
+					dPhase = READ_WAIT
+					fValid = false
+				}
+
+				if (fBusy && instructions.ready == 0b1) {
+					fBusy = false
+					fGap = true
+					fValid = !fKilled && !flush
+					fWord = instructions.readData as uint
+					fError = instructions.error == 0b1
+					fKilled = false
+				}
+
+				if (launch) {
+					fBusy = true
+					fPc = fetchPc
+					fetchPc = fetchPc + 4
+
+					if (run == 0b0) {
+						stepActive = true
+						activeStep = stepRequest
+					}
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,43 @@
+namespace Eccelerators.RiscV.Sequential
+
+/**
+ * Signal-level execution control and retirement observation in the core clock domain.
+ * run=1 executes continuously. With run=0, toggle stepRequest once and hold it until
+ * stepAck matches: one instruction attempt or accepted interrupt completes through retirement, diagnostic stop or trap entry.
+ * A machine-trap step pauses at the handler address before executing its first instruction. Pause takes effect
+ * at an instruction boundary; idle indicates no outstanding memory/register work.
+ * Toggle restartRequest and hold until restartAck matches; pending work drains,
+ * registers are cleared, PC resets and fault clears. Restart discards pending steps.
+ * Hardware reset cancels the whole system; reset external providers with the core.
+ */
+interface IRv32ControlPort
+{
+	// Consumer-owned execution controls; requests are single-pending toggles.
+	run: in logic
+	stepRequest: in logic
+	restartRequest: in logic
+
+	// Completion and stopped-state inspection. halted denotes diagnostic stop, never ordinary machine trap entry.
+	stepAck: out logic
+	restartAck: out logic
+	idle: out logic
+	halted: out logic
+	pc: out logic[32]
+	// Diagnostic-stop payload; machine exceptions use the separate trap event below.
+	faultCause: out logic[32]
+	faultValue: out logic[32]
+
+	// Machine trap pulse, separate from retirement. Payload is valid on trapped=1.
+	// trapPc identifies the faulting instruction for exceptions, or resume PC for interrupts.
+	trapped: out logic
+	trapPc: out logic[32]
+	trapCause: out logic[32]
+	trapValue: out logic[32]
+
+	// Retirement pulse and committed destination. rd=0 means no architectural write.
+	retired: out logic
+	retiredPc: out logic[32]
+	retiredInstruction: out logic[32]
+	retiredRd: out logic[5]
+	retiredValue: out logic[32]
+}

@@ -1,0 +1,153 @@
+namespace Eccelerators.RiscV.Storage
+
+using Eccelerators.RiscV.Sequential
+using Livt.IO
+
+/**
+ * Exclusive, synchronous little-endian RAM with one outstanding word transaction.
+ * Holds completion until request falls. Byte writes use read/modify/write and are
+ * atomic relative to this sole port. Out-of-range or unaligned requests fault
+ * before a RAM access. Reset retains payload; initialize every location read.
+ * The composition root may provision whole words only while the CPU is idle and
+ * request is low. Programming and execution must never overlap. No bus arbitration.
+ */
+component Rv32WordMemory<WORDS: int = 1024, ADDRESS_BITS: int = 10,
+	STYLE: MemoryStyle = MemoryStyle.Block, BASE: uint = 0> : IRv32MemoryPort
+{
+	static assert (BASE & 3) == 0, "Memory base must be word aligned"
+	static assert ADDRESS_BITS > 0 && ADDRESS_BITS <= 28, "Memory address width must be 1..28"
+	static assert WORDS > 0 && WORDS <= (1 << ADDRESS_BITS), "Memory capacity exceeds address width"
+
+	// Host provisioning signals, sampled on an enabled edge with an idle bus.
+	public programWrite: in logic
+	public programIndex: in logic[ADDRESS_BITS]
+	public programData: in logic[32]
+
+	// Transaction phases and little-endian lane constants.
+	const IDLE: uint = 0
+	const CAPTURE: uint = 1
+	const WRITE_BACK: uint = 2
+	const RESPONSE: uint = 3
+	const ALL_LANES: uint = 15
+	const BYTE_MASK: uint = 255
+
+	// Owned native synchronous memory and transaction phase; no payload reset loop.
+	storage: SynchronousRam<logic[32], logic[ADDRESS_BITS], WORDS, STYLE>
+	phase: uint
+	responseError: logic
+	responseData: logic[32]
+
+	// Combinational address validity and expanded byte enables.
+	validAddress: bool
+	mask: uint
+
+	/**
+	 * Creates exactly one synchronous payload memory.
+	 */
+	new()
+	{
+		storage = new SynchronousRam<logic[32], logic[ADDRESS_BITS], WORDS, STYLE>()
+	}
+
+	/**
+	 * Maps bus or provisioning operations onto the sole RAM port.
+	 */
+	process Drive[]()
+	{
+		validAddress = (address as uint & 3) == 0 && ((address as uint - BASE) >> 2) < (WORDS as uint)
+		mask = 0
+
+		if ((byteEnable as uint & 1) != 0) {
+			mask = mask | BYTE_MASK
+		}
+
+		if ((byteEnable as uint & 2) != 0) {
+			mask = mask | (BYTE_MASK << 8)
+		}
+
+		if ((byteEnable as uint & 4) != 0) {
+			mask = mask | (BYTE_MASK << 16)
+		}
+
+		if ((byteEnable as uint & 8) != 0) {
+			mask = mask | (BYTE_MASK << 24)
+		}
+
+		error = responseError
+		readData = responseData
+		ready = 0b0
+
+		if (phase == RESPONSE) {
+			ready = 0b1
+		}
+
+		storage.enable = false
+		storage.writeEnable = false
+		storage.address = ((address as uint - BASE) >> 2) as logic[ADDRESS_BITS]
+		storage.writeData = writeData
+
+		if (phase == IDLE && request == 0b1 && validAddress) {
+			storage.enable = true
+			storage.writeEnable = write == 0b1 && byteEnable as uint == ALL_LANES
+		} elif (phase == WRITE_BACK) {
+			storage.enable = true
+			storage.writeEnable = true
+			storage.writeData = (((storage.readData as uint) & ~mask) | ((writeData as uint) & mask)) as logic[32]
+		} elif (phase == IDLE && request == 0b0 && programWrite == 0b1) {
+			storage.enable = true
+			storage.writeEnable = true
+			storage.address = programIndex
+			storage.writeData = programData
+		}
+	}
+
+	/**
+	 * Completes each bus request once, including errors and zero-byte-mask writes.
+	 */
+	process Advance()
+	{
+		state {
+			match (phase)
+			{
+				IDLE =>
+				{
+					if (request == 0b1) {
+						responseError = 0b0
+
+						if (!validAddress) {
+							responseError = 0b1
+							phase = RESPONSE
+						} elif (write == 0b1 && byteEnable as uint == ALL_LANES) {
+							phase = RESPONSE
+						} else {
+							phase = CAPTURE
+						}
+					}
+				}
+				CAPTURE =>
+				{
+					responseData = storage.readData
+					phase = RESPONSE
+
+					if (write == 0b1) {
+						phase = WRITE_BACK
+					}
+				}
+				WRITE_BACK =>
+				{
+					phase = RESPONSE
+				}
+				RESPONSE =>
+				{
+					if (request == 0b0) {
+						phase = IDLE
+					}
+				}
+				_ =>
+				{
+					phase = IDLE
+				}
+			}
+		}
+	}
+}

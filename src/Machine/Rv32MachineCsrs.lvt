@@ -1,0 +1,297 @@
+namespace Eccelerators.RiscV.Machine
+
+/**
+ * Machine-only CSR and synchronous trap state, exclusively owned in the engine's clock/reset domain.
+ * Trap entry/return share the single writer; optional interrupt delivery samples
+ * same-domain levels. mcycle counts every non-clear edge even
+ * while paused/stopped, unless inhibited; minstret counts the retire input. Explicit
+ * writes suppress the targeted 64-bit counter's automatic increment for that edge.
+ * Counter half writes retain the other half. Software clear and hardware reset zero
+ * storage; MPP and ISA/identification constants are reconstructed on reads.
+ */
+component Rv32MachineCsrs<HART_ID: uint = 0, TIMER_INTERRUPTS: bool = false, EXTERNAL_INTERRUPTS: bool = false> : IRv32CsrPort
+{
+	// Concrete Zicsr coverage for composition checks.
+	public const CAPABILITIES: uint = Rv32CsrOperations.CAPABILITY
+	public const TRAP_CAPABILITIES: uint = Rv32TrapOperations.CAPABILITY
+
+	// Platform-owned pending level; tie low when absent. CPU clear never resets the timer.
+	public timerPending: in logic
+	public externalPending: in logic
+
+	// Supported interrupt enable bits; disabled elaborations remove this storage.
+	interruptEnable: uint
+
+	// Machine state stores only writable status bits and aligned address payloads.
+	status: uint
+	vector: uint
+	scratch: uint
+	epc: uint
+	cause: uint
+	value: uint
+
+	// Two independent 64-bit counters, represented by 32-bit words.
+	cycleLow: uint
+	cycleHigh: uint
+	retireLow: uint
+	retireHigh: uint
+	inhibit: uint
+
+	// Pure query view and selected read/modify/write value.
+	oldValue: uint
+	newValue: uint
+	known: bool
+	writeAccepted: bool
+
+	/**
+	 * Decodes legal addresses without side effects, including fixed-zero HPM ranges.
+	 */
+	process Query[]()
+	{
+		trapVector = vector as logic[32]
+		returnPc = epc as logic[32]
+		interruptEligible = 0b0
+		interruptCause = Rv32TrapOperations.TIMER_CAUSE as logic[32]
+
+		if ((status & Rv32TrapOperations.STATUS_MIE) != 0) {
+			if (EXTERNAL_INTERRUPTS && externalPending == 0b1
+				&& (interruptEnable & Rv32TrapOperations.EXTERNAL_MASK) != 0) {
+				interruptEligible = 0b1
+				interruptCause = Rv32TrapOperations.EXTERNAL_CAUSE as logic[32]
+			} elif (TIMER_INTERRUPTS && timerPending == 0b1
+				&& (interruptEnable & Rv32TrapOperations.TIMER_MASK) != 0) {
+				interruptEligible = 0b1
+			}
+		}
+
+		var index = address as uint
+		oldValue = 0
+		known = true
+
+		match (index)
+		{
+			Rv32MachineCsrMap.MSTATUS =>
+			{
+				oldValue = status | Rv32MachineCsrMap.MPP_MACHINE
+			}
+			Rv32MachineCsrMap.MISA =>
+			{
+				oldValue = Rv32MachineCsrMap.ISA
+			}
+			Rv32MachineCsrMap.MTVEC =>
+			{
+				oldValue = vector
+			}
+			Rv32MachineCsrMap.MSCRATCH =>
+			{
+				oldValue = scratch
+			}
+			Rv32MachineCsrMap.MEPC =>
+			{
+				oldValue = epc
+			}
+			Rv32MachineCsrMap.MCAUSE =>
+			{
+				oldValue = cause
+			}
+			Rv32MachineCsrMap.MTVAL =>
+			{
+				oldValue = value
+			}
+			Rv32MachineCsrMap.MCOUNTINHIBIT =>
+			{
+				oldValue = inhibit
+			}
+			Rv32MachineCsrMap.MCYCLE =>
+			{
+				oldValue = cycleLow
+			}
+			Rv32MachineCsrMap.MCYCLEH =>
+			{
+				oldValue = cycleHigh
+			}
+			Rv32MachineCsrMap.MINSTRET =>
+			{
+				oldValue = retireLow
+			}
+			Rv32MachineCsrMap.MINSTRETH =>
+			{
+				oldValue = retireHigh
+			}
+			Rv32MachineCsrMap.MHARTID =>
+			{
+				oldValue = HART_ID
+			}
+			Rv32MachineCsrMap.MIE =>
+			{
+				if (TIMER_INTERRUPTS || EXTERNAL_INTERRUPTS) {
+					oldValue = interruptEnable
+				}
+			}
+			Rv32MachineCsrMap.MIP =>
+			{
+				if (TIMER_INTERRUPTS && timerPending == 0b1) {
+					oldValue = Rv32TrapOperations.TIMER_MASK
+				}
+
+				if (EXTERNAL_INTERRUPTS && externalPending == 0b1) {
+					oldValue = oldValue | Rv32TrapOperations.EXTERNAL_MASK
+				}
+			}
+			Rv32MachineCsrMap.MSTATUSH,
+				Rv32MachineCsrMap.MCOUNTEREN, Rv32MachineCsrMap.MVENDORID,
+				Rv32MachineCsrMap.MARCHID, Rv32MachineCsrMap.MIMPID, Rv32MachineCsrMap.MCONFIGPTR =>
+			{
+				oldValue = 0
+			}
+			_ =>
+			{
+				known = (index >= Rv32MachineCsrMap.HPM_FIRST && index <= Rv32MachineCsrMap.HPM_LAST)
+					|| (index >= Rv32MachineCsrMap.HPM_HIGH_FIRST && index <= Rv32MachineCsrMap.HPM_HIGH_LAST)
+					|| (index >= Rv32MachineCsrMap.EVENT_FIRST && index <= Rv32MachineCsrMap.EVENT_LAST)
+			}
+		}
+
+		illegal = 0b0
+
+		if (!known || operation == 0
+			|| (writeEnable == 0b1 && (index & Rv32MachineCsrMap.READ_ONLY_ADDRESS) == Rv32MachineCsrMap.READ_ONLY_ADDRESS)) {
+			illegal = 0b1
+		}
+
+		readData = 0
+
+		if (readEnable == 0b1) {
+			readData = oldValue as logic[32]
+		}
+
+		newValue = operand as uint
+
+		if (operation as uint == Rv32CsrOperations.SET) {
+			newValue = oldValue | (operand as uint)
+		} elif (operation as uint == Rv32CsrOperations.CLEAR) {
+			newValue = oldValue & ~(operand as uint)
+		}
+
+		writeAccepted = commit == 0b1 && writeEnable == 0b1 && illegal == 0b0
+			&& enterTrap == 0b0 && returnTrap == 0b0
+	}
+
+	/**
+	 * Applies clear, trap/return, counter increments and explicit writes with one state owner.
+	 */
+	process Advance()
+	{
+		state {
+			var index = address as uint
+
+			if (clear == 0b1) {
+				status = 0
+				interruptEnable = 0
+				vector = 0
+				scratch = 0
+				epc = 0
+				cause = 0
+				value = 0
+				cycleLow = 0
+				cycleHigh = 0
+				retireLow = 0
+				retireHigh = 0
+				inhibit = 0
+			} else {
+				if ((inhibit & Rv32MachineCsrMap.INHIBIT_CYCLE) == 0
+					&& !(writeAccepted && (index == Rv32MachineCsrMap.MCYCLE || index == Rv32MachineCsrMap.MCYCLEH))) {
+					if (cycleLow == 0xffffffff) {
+						cycleHigh++
+					}
+
+					cycleLow++
+				}
+
+				if (retire == 0b1 && enterTrap == 0b0 && (inhibit & Rv32MachineCsrMap.INHIBIT_RETIRE) == 0
+					&& !(writeAccepted && (index == Rv32MachineCsrMap.MINSTRET || index == Rv32MachineCsrMap.MINSTRETH))) {
+					if (retireLow == 0xffffffff) {
+						retireHigh++
+					}
+
+					retireLow++
+				}
+
+				if (enterTrap == 0b1) {
+					epc = (entryPc as uint) & Rv32MachineCsrMap.WORD_ALIGNED
+					cause = entryCause as uint
+					value = entryValue as uint
+					status = (status & Rv32TrapOperations.STATUS_MIE) << Rv32TrapOperations.STATUS_STACK_SHIFT
+				} elif (returnTrap == 0b1) {
+					status = ((status & Rv32TrapOperations.STATUS_MPIE) >> Rv32TrapOperations.STATUS_STACK_SHIFT)
+						| Rv32TrapOperations.STATUS_MPIE
+				} elif (writeAccepted) {
+					match (index)
+					{
+						Rv32MachineCsrMap.MSTATUS =>
+						{
+							status = newValue & Rv32MachineCsrMap.STATUS_WRITABLE
+						}
+						Rv32MachineCsrMap.MIE =>
+						{
+							var supported: uint = 0
+
+							if (TIMER_INTERRUPTS) {
+								supported = Rv32TrapOperations.TIMER_MASK
+							}
+
+							if (EXTERNAL_INTERRUPTS) {
+								supported = supported | Rv32TrapOperations.EXTERNAL_MASK
+							}
+
+							interruptEnable = newValue & supported
+						}
+						Rv32MachineCsrMap.MTVEC =>
+						{
+							vector = newValue & Rv32MachineCsrMap.WORD_ALIGNED
+						}
+						Rv32MachineCsrMap.MSCRATCH =>
+						{
+							scratch = newValue
+						}
+						Rv32MachineCsrMap.MEPC =>
+						{
+							epc = newValue & Rv32MachineCsrMap.WORD_ALIGNED
+						}
+						Rv32MachineCsrMap.MCAUSE =>
+						{
+							cause = newValue
+						}
+						Rv32MachineCsrMap.MTVAL =>
+						{
+							value = newValue
+						}
+						Rv32MachineCsrMap.MCOUNTINHIBIT =>
+						{
+							inhibit = newValue & Rv32MachineCsrMap.COUNTER_MASK
+						}
+						Rv32MachineCsrMap.MCYCLE =>
+						{
+							cycleLow = newValue
+						}
+						Rv32MachineCsrMap.MCYCLEH =>
+						{
+							cycleHigh = newValue
+						}
+						Rv32MachineCsrMap.MINSTRET =>
+						{
+							retireLow = newValue
+						}
+						Rv32MachineCsrMap.MINSTRETH =>
+						{
+							retireHigh = newValue
+						}
+						_ => {
+							// Legal fixed fields retain their documented values.
+						}
+					}
+				}
+			}
+		}
+	}
+}

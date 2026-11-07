@@ -1,0 +1,172 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Machine
+
+/**
+ * Exercises all four supported interrupt feature selections with identical inputs.
+ */
+@Test
+component Rv32InterruptCsrTest
+{
+	// Distinct providers share stimulus, never state or architectural ownership.
+	none: Rv32MachineCsrs<0, false, false>
+	timer: Rv32MachineCsrs<0, true, false>
+	external: Rv32MachineCsrs<0, false, true>
+	both: Rv32MachineCsrs<0, true, true>
+
+	// Driven query, commit, reset and level stimulus.
+	address: logic[12]
+	operand: logic[32]
+	commit: logic
+	clear: logic
+	timerPending: logic
+	externalPending: logic
+
+	/**
+	 * Constructs independently elaborated feature selections.
+	 */
+	new()
+	{
+		none = new Rv32MachineCsrs<0, false, false>()
+		timer = new Rv32MachineCsrs<0, true, false>()
+		external = new Rv32MachineCsrs<0, false, true>()
+		both = new Rv32MachineCsrs<0, true, true>()
+	}
+
+	/**
+	 * Drives one sampled CSR transaction to every provider in the inherited context.
+	 */
+	process Connect[]()
+	{
+		none.address = address
+		none.operation = 1
+		none.operand = operand
+		none.readEnable = 0b1
+		none.writeEnable = commit
+		none.commit = commit
+		none.clear = clear
+		none.retire = 0b0
+		none.enterTrap = 0b0
+		none.returnTrap = 0b0
+		none.entryPc = 0
+		none.entryCause = 0
+		none.entryValue = 0
+		none.timerPending = timerPending
+		none.externalPending = externalPending
+		timer.address = address
+		timer.operation = 1
+		timer.operand = operand
+		timer.readEnable = 0b1
+		timer.writeEnable = commit
+		timer.commit = commit
+		timer.clear = clear
+		timer.retire = 0b0
+		timer.enterTrap = 0b0
+		timer.returnTrap = 0b0
+		timer.entryPc = 0
+		timer.entryCause = 0
+		timer.entryValue = 0
+		timer.timerPending = timerPending
+		timer.externalPending = externalPending
+		external.address = address
+		external.operation = 1
+		external.operand = operand
+		external.readEnable = 0b1
+		external.writeEnable = commit
+		external.commit = commit
+		external.clear = clear
+		external.retire = 0b0
+		external.enterTrap = 0b0
+		external.returnTrap = 0b0
+		external.entryPc = 0
+		external.entryCause = 0
+		external.entryValue = 0
+		external.timerPending = timerPending
+		external.externalPending = externalPending
+		both.address = address
+		both.operation = 1
+		both.operand = operand
+		both.readEnable = 0b1
+		both.writeEnable = commit
+		both.commit = commit
+		both.clear = clear
+		both.retire = 0b0
+		both.enterTrap = 0b0
+		both.returnTrap = 0b0
+		both.entryPc = 0
+		both.entryCause = 0
+		both.entryValue = 0
+		both.timerPending = timerPending
+		both.externalPending = externalPending
+	}
+
+	/**
+	 * Clears providers with both sources pending, then performs one CSR write.
+	 */
+	fn Prepare()
+	{
+		commit = 0b0
+		clear = 0b1
+		timerPending = 0b1
+		externalPending = 0b1
+		Simulation.Wait(4)
+		clear = 0b0
+		Simulation.Wait(3)
+	}
+
+	/**
+	 * Writes one address with an exactly-one-edge commit pulse.
+	 */
+	fn Write(address: uint, value: uint)
+	{
+		this.address = address as logic[12]
+		operand = value as logic[32]
+
+		state {
+			commit = 0b1
+		}
+
+		state {
+			commit = 0b0
+		}
+
+		Simulation.Wait(3)
+	}
+
+	/**
+	 * Unsupported enable bits remain zero and writes cannot clear hardware pending.
+	 */
+	@Test
+	fn FeatureMasksAndPendingOwnership()
+	{
+		Prepare()
+		Write(0x304, 0xffffffff)
+		assert none.readData == 0 && timer.readData == 0x80
+		assert external.readData == 0x800 && both.readData == 0x880
+		Write(0x344, 0)
+		assert none.readData == 0 && timer.readData == 0x80
+		assert external.readData == 0x800 && both.readData == 0x880
+		assert both.interruptEligible == 0b0
+	}
+
+	/**
+	 * Enables and live levels select only supported causes; clear masks pending work.
+	 */
+	@Test
+	fn EligibilityPriorityAndClear()
+	{
+		Prepare()
+		Write(0x304, 0xffffffff)
+		Write(0x300, 8)
+		assert none.interruptEligible == 0b0 && timer.interruptEligible == 0b1
+		assert external.interruptEligible == 0b1 && both.interruptEligible == 0b1
+		assert timer.interruptCause == 0x80000007 && both.interruptCause == 0x8000000b
+		externalPending = 0b0
+		Simulation.Wait(3)
+		assert external.interruptEligible == 0b0 && both.interruptCause == 0x80000007
+		clear = 0b1
+		Simulation.Wait(3)
+		assert timer.interruptEligible == 0b0 && both.interruptEligible == 0b0
+		clear = 0b0
+	}
+}

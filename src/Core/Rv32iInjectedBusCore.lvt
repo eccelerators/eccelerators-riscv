@@ -15,107 +15,139 @@ using Livt.IO
  */
 component Rv32iInjectedBusCore<REGISTER_STORAGE: Rv32iRegisterStorage = Rv32iRegisterStorage.Array>
 {
+	// Borrowed buses; the caller owns them for the core lifetime and serializes access.
 	instructionBus: IRv32InstructionBus
-
 	dataBus: IRv32DataBus
 
+	// Owned instruction-field, immediate and control decoding.
 	fields: Rv32iInstructionFields
-
 	immediates: Rv32iImmediateDecoder
-
 	control: Rv32iControlDecoder
 
+	// Owned compile-time-selected architectural register storage.
 	registerFile: IRv32iRegisterFile
 
+	// Owned integer, branch and load/store execution helpers.
 	alu: Rv32iAlu
-
 	branchUnit: Rv32iBranchUnit
-
 	loadStore: Rv32iLoadStoreUnit
 
+	// Owned diagnostic halt state and next architectural byte address.
 	traps: Rv32iTrapController
-
 	pc: uint
 
+	/**
+	 * Borrows both buses exclusively for the core lifetime and owns the selected register
+	 * file, decode and execution units in the inherited context. Initializes CPU state;
+	 * the caller provisions the buses before Run or Step.
+	 */
 	new(instructionBus: IRv32InstructionBus, dataBus: IRv32DataBus)
 	{
 		this.instructionBus = instructionBus
 		this.dataBus = dataBus
-		this.fields = new Rv32iInstructionFields()
-		this.immediates = new Rv32iImmediateDecoder()
-		this.control = new Rv32iControlDecoder()
+		fields = new Rv32iInstructionFields()
+		immediates = new Rv32iImmediateDecoder()
+		control = new Rv32iControlDecoder()
 
-		static if (REGISTER_STORAGE == Rv32iRegisterStorage.Array)
-		{
-			this.registerFile = new Rv32iRegisterFile()
-		}
-		elif (REGISTER_STORAGE == Rv32iRegisterStorage.DistributedRam)
-		{
-			this.registerFile = new Rv32iRamRegisterFile<MemoryStyle.Distributed>()
-		}
-		else
-		{
-			this.registerFile = new Rv32iRamRegisterFile<MemoryStyle.Block>()
+		static if (REGISTER_STORAGE == Rv32iRegisterStorage.Array) {
+			registerFile = new Rv32iRegisterFile()
+		} elif (REGISTER_STORAGE == Rv32iRegisterStorage.DistributedRam) {
+			registerFile = new Rv32iRamRegisterFile<MemoryStyle.Distributed>()
+		} else {
+			registerFile = new Rv32iRamRegisterFile<MemoryStyle.Block>()
 		}
 
-		this.alu = new Rv32iAlu()
-		this.branchUnit = new Rv32iBranchUnit()
-		this.loadStore = new Rv32iLoadStoreUnit()
-		this.traps = new Rv32iTrapController()
-		this.Reset()
+		alu = new Rv32iAlu()
+		branchUnit = new Rv32iBranchUnit()
+		loadStore = new Rv32iLoadStoreUnit()
+		traps = new Rv32iTrapController()
+		Reset()
 	}
 
+	/**
+	 * Restores reset PC, clears integer registers and releases diagnostic halt.
+	 * Program and data memories are preserved; call only while execution is stopped.
+	 */
 	public fn Reset()
 	{
-		this.pc = Rv32iConstants.RESET_VECTOR
-		this.registerFile.Reset()
-		this.traps.Reset()
+		pc = Rv32iConstants.RESET_VECTOR
+		registerFile.Reset()
+		traps.Reset()
 	}
 
+	/**
+	 * Returns x1..x31, or zero for x0 and invalid indices. Inspect after execution completes.
+	 */
 	public fn ReadRegister(index: int) uint
 	{
-		return this.registerFile.Read(index)
+		return registerFile.Read(index)
 	}
 
+	/**
+	 * Returns the current architectural PC in bytes; inspect after execution completes.
+	 */
 	public fn GetPc() uint
 	{
-		return this.pc
+		return pc
 	}
 
+	/**
+	 * Reports whether a diagnostic fault stopped instruction execution.
+	 */
 	public fn IsHalted() bool
 	{
-		return this.traps.IsHalted()
+		return traps.IsHalted()
 	}
 
+	/**
+	 * Returns the last diagnostic cause from Rv32iConstants, or TRAP_NONE after reset.
+	 * These reference-core codes are separate from machine mcause encodings.
+	 */
 	public fn GetTrapCause() int
 	{
-		return this.traps.GetTrapCause()
+		return traps.GetTrapCause()
 	}
 
+	/**
+	 * Returns the saved faulting PC in bytes, or zero after reset. Check IsHalted first.
+	 */
 	public fn GetTrapPc() uint
 	{
-		return this.traps.GetTrapPc()
+		return traps.GetTrapPc()
 	}
 
+	/**
+	 * Returns the last data transaction status from the borrowed or owned data provider.
+	 * This status is replaced by the next data transaction.
+	 */
 	public fn HasDataBusError() bool
 	{
-		return this.dataBus.HasError()
+		return dataBus.HasError()
 	}
 
+	/**
+	 * Executes at most maxSteps instruction attempts, stopping early on a diagnostic halt.
+	 * Nonpositive bounds do nothing. Provision memory first and serialize CPU control calls;
+	 * scheduled completion does not imply a fixed number of clock cycles.
+	 */
 	public fn Run(maxSteps: int)
 	{
 		var stepIndex: int = 0
 
 		while (stepIndex < maxSteps) {
-			if (this.IsHalted() == true) {
+			if (IsHalted() == true) {
 				return
 			}
 
-			this.Step()
+			Step()
 			stepIndex++
 		}
 	}
 
+	/**
+	 * Executes one instruction attempt and returns after its effects or diagnostic fault.
+	 * Does nothing while halted. Provision memory first; do not overlap reset or other CPU calls.
+	 */
 	public fn Step()
 	{
 		var instruction: uint = 0
@@ -127,7 +159,7 @@ component Rv32iInjectedBusCore<REGISTER_STORAGE: Rv32iRegisterStorage = Rv32iReg
 		var rightValue: uint = 0
 		var immediate: uint = 0
 		var result: uint = 0
-		var nextPc: uint = this.pc + 4
+		var nextPc: uint = pc + 4
 		var address: uint = 0
 		var branchKind: int = 0
 		var loadKind: int = 0
@@ -135,203 +167,218 @@ component Rv32iInjectedBusCore<REGISTER_STORAGE: Rv32iRegisterStorage = Rv32iReg
 		var aluOperation: int = 0
 		var accessWidth: int = 0
 
-		if (this.IsHalted() == true) {
+		if (IsHalted() == true) {
 			return
 		}
 
-		if ((this.pc & (3 as uint)) != (0 as uint)) {
-			this.traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, this.pc)
+		if ((pc & (3 as uint)) != (0 as uint)) {
+			traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, pc)
 			return
 		}
 
-		this.instructionBus.Request(this.pc)
+		instructionBus.Request(pc)
 
-		if (this.instructionBus.HasError() == true) {
-			this.traps.Trap(Rv32iConstants.TRAP_BUS_ERROR, this.pc)
+		if (instructionBus.HasError() == true) {
+			traps.Trap(Rv32iConstants.TRAP_BUS_ERROR, pc)
 			return
 		}
 
-		instruction = this.instructionBus.GetInstruction()
-		this.control.Decode(instruction)
+		instruction = instructionBus.GetInstruction()
+		control.Decode(instruction)
 
-		if (this.control.IsLegal() == false) {
-			this.traps.Trap(Rv32iConstants.TRAP_ILLEGAL_INSTRUCTION, this.pc)
+		if (control.IsLegal() == false) {
+			traps.Trap(Rv32iConstants.TRAP_ILLEGAL_INSTRUCTION, pc)
 			return
 		}
 
-		instructionClass = this.control.GetInstructionClass()
-		rd = this.fields.GetRd(instruction)
-		rs1 = this.fields.GetRs1(instruction)
-		rs2 = this.fields.GetRs2(instruction)
-		leftValue = this.registerFile.Read(rs1)
-		rightValue = this.registerFile.Read(rs2)
+		instructionClass = control.GetInstructionClass()
+		rd = fields.GetRd(instruction)
+		rs1 = fields.GetRs1(instruction)
+		rs2 = fields.GetRs2(instruction)
+		leftValue = registerFile.Read(rs1)
+		rightValue = registerFile.Read(rs2)
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_LUI) {
-			immediate = this.immediates.DecodeU(instruction)
-			this.registerFile.Write(rd, immediate)
-			this.pc = nextPc
+			immediate = immediates.DecodeU(instruction)
+			registerFile.Write(rd, immediate)
+			pc = nextPc
 			return
 		}
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_AUIPC) {
-			immediate = this.immediates.DecodeU(instruction)
-			this.registerFile.Write(rd, this.pc + immediate)
-			this.pc = nextPc
+			immediate = immediates.DecodeU(instruction)
+			registerFile.Write(rd, pc + immediate)
+			pc = nextPc
 			return
 		}
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_JAL) {
-			immediate = this.immediates.DecodeJ(instruction)
-			result = this.pc + immediate
+			immediate = immediates.DecodeJ(instruction)
+			result = pc + immediate
 
 			if ((result & (3 as uint)) != (0 as uint)) {
-				this.traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, this.pc)
+				traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, pc)
 				return
 			}
 
-			this.registerFile.Write(rd, nextPc)
-			this.pc = result
+			registerFile.Write(rd, nextPc)
+			pc = result
 			return
 		}
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_JALR) {
-			immediate = this.immediates.DecodeI(instruction)
+			immediate = immediates.DecodeI(instruction)
 			result = (leftValue + immediate) & (0xfffffffe as uint)
 
 			if ((result & (3 as uint)) != (0 as uint)) {
-				this.traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, this.pc)
+				traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, pc)
 				return
 			}
 
-			this.registerFile.Write(rd, nextPc)
-			this.pc = result
+			registerFile.Write(rd, nextPc)
+			pc = result
 			return
 		}
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_BRANCH) {
-			branchKind = this.control.GetBranchKind()
-			immediate = this.immediates.DecodeB(instruction)
+			branchKind = control.GetBranchKind()
+			immediate = immediates.DecodeB(instruction)
 
-			if (this.branchUnit.IsTaken(branchKind, leftValue, rightValue) == true) {
-				result = this.pc + immediate
+			if (branchUnit.IsTaken(branchKind, leftValue, rightValue) == true) {
+				result = pc + immediate
 
 				if ((result & (3 as uint)) != (0 as uint)) {
-					this.traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, this.pc)
+					traps.Trap(Rv32iConstants.TRAP_INSTRUCTION_MISALIGNED, pc)
 					return
 				}
 
-				this.pc = result
+				pc = result
 				return
 			}
 
-			this.pc = nextPc
+			pc = nextPc
 			return
 		}
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_LOAD) {
-			loadKind = this.control.GetLoadKind()
-			immediate = this.immediates.DecodeI(instruction)
+			loadKind = control.GetLoadKind()
+			immediate = immediates.DecodeI(instruction)
 			address = leftValue + immediate
-			accessWidth = this.GetLoadWidth(loadKind)
+			accessWidth = GetLoadWidth(loadKind)
 
-			if (this.loadStore.IsMisaligned(address, accessWidth) == true) {
-				this.traps.Trap(Rv32iConstants.TRAP_LOAD_STORE_MISALIGNED, this.pc)
+			if (loadStore.IsMisaligned(address, accessWidth) == true) {
+				traps.Trap(Rv32iConstants.TRAP_LOAD_STORE_MISALIGNED, pc)
 				return
 			}
 
-			this.ExecuteBusLoad(address, loadKind)
+			ExecuteBusLoad(address, loadKind)
 
-			if (this.HasDataBusError() == true) {
-				this.traps.Trap(Rv32iConstants.TRAP_BUS_ERROR, this.pc)
+			if (HasDataBusError() == true) {
+				traps.Trap(Rv32iConstants.TRAP_BUS_ERROR, pc)
 				return
 			}
 
-			this.registerFile.Write(rd, this.GetBusReadData())
-			this.pc = nextPc
+			registerFile.Write(rd, GetBusReadData())
+			pc = nextPc
 			return
 		}
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_STORE) {
-			storeKind = this.control.GetStoreKind()
-			immediate = this.immediates.DecodeS(instruction)
+			storeKind = control.GetStoreKind()
+			immediate = immediates.DecodeS(instruction)
 			address = leftValue + immediate
-			accessWidth = this.GetStoreWidth(storeKind)
+			accessWidth = GetStoreWidth(storeKind)
 
-			if (this.loadStore.IsMisaligned(address, accessWidth) == true) {
-				this.traps.Trap(Rv32iConstants.TRAP_LOAD_STORE_MISALIGNED, this.pc)
+			if (loadStore.IsMisaligned(address, accessWidth) == true) {
+				traps.Trap(Rv32iConstants.TRAP_LOAD_STORE_MISALIGNED, pc)
 				return
 			}
 
-			this.ExecuteBusStore(address, rightValue, storeKind)
+			ExecuteBusStore(address, rightValue, storeKind)
 
-			if (this.HasDataBusError() == true) {
-				this.traps.Trap(Rv32iConstants.TRAP_BUS_ERROR, this.pc)
+			if (HasDataBusError() == true) {
+				traps.Trap(Rv32iConstants.TRAP_BUS_ERROR, pc)
 				return
 			}
 
-			this.pc = nextPc
+			pc = nextPc
 			return
 		}
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_ALU_IMM) {
-			aluOperation = this.control.GetAluOperation()
-			immediate = this.immediates.DecodeI(instruction)
+			aluOperation = control.GetAluOperation()
+			immediate = immediates.DecodeI(instruction)
 
 			if (aluOperation == Rv32iAlu.OP_SLL || aluOperation == Rv32iAlu.OP_SRL || aluOperation == Rv32iAlu.OP_SRA) {
 				immediate = immediate & (0x1f as uint)
 			}
 
-			result = this.alu.Execute(aluOperation, leftValue, immediate)
-			this.registerFile.Write(rd, result)
-			this.pc = nextPc
+			result = alu.Execute(aluOperation, leftValue, immediate)
+			registerFile.Write(rd, result)
+			pc = nextPc
 			return
 		}
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_ALU_REG) {
-			aluOperation = this.control.GetAluOperation()
-			result = this.alu.Execute(aluOperation, leftValue, rightValue)
-			this.registerFile.Write(rd, result)
-			this.pc = nextPc
+			aluOperation = control.GetAluOperation()
+			result = alu.Execute(aluOperation, leftValue, rightValue)
+			registerFile.Write(rd, result)
+			pc = nextPc
 			return
 		}
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_FENCE) {
-			this.pc = nextPc
+			pc = nextPc
 			return
 		}
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_ECALL) {
-			this.traps.Trap(Rv32iConstants.TRAP_ECALL, this.pc)
+			traps.Trap(Rv32iConstants.TRAP_ECALL, pc)
 			return
 		}
 
 		if (instructionClass == Rv32iControlDecoder.CLASS_EBREAK) {
-			this.traps.Trap(Rv32iConstants.TRAP_EBREAK, this.pc)
+			traps.Trap(Rv32iConstants.TRAP_EBREAK, pc)
 			return
 		}
 
-		this.traps.Trap(Rv32iConstants.TRAP_ILLEGAL_INSTRUCTION, this.pc)
+		traps.Trap(Rv32iConstants.TRAP_ILLEGAL_INSTRUCTION, pc)
 	}
 
+	/**
+	 * Issues the selected signed or unsigned load and waits for the borrowed bus to complete.
+	 * The instruction path must already have checked alignment; consume status before reuse.
+	 */
 	fn ExecuteBusLoad(address: uint, loadKind: int)
 	{
-		var width: int = this.GetLoadWidth(loadKind)
-		var signedLoad: bool = this.IsSignedLoad(loadKind)
-		this.dataBus.Load(address, width, signedLoad)
+		var width: int = GetLoadWidth(loadKind)
+		var signedLoad: bool = IsSignedLoad(loadKind)
+		dataBus.Load(address, width, signedLoad)
 	}
 
+	/**
+	 * Issues a store of the selected width and waits for the borrowed bus to complete.
+	 * The instruction path must already have checked alignment; consume status before reuse.
+	 */
 	fn ExecuteBusStore(address: uint, value: uint, storeKind: int)
 	{
-		var width: int = this.GetStoreWidth(storeKind)
-		this.dataBus.Store(address, width, value)
+		var width: int = GetStoreWidth(storeKind)
+		dataBus.Store(address, width, value)
 	}
 
+	/**
+	 * Consumes the data provider result for the current completed load.
+	 * Call only after ExecuteBusLoad and before another transaction replaces the result.
+	 */
 	fn GetBusReadData() uint
 	{
-		return this.dataBus.GetReadData()
+		return dataBus.GetReadData()
 	}
 
-
+	/**
+	 * Maps a decoded load kind to its byte count; word is the fallback.
+	 * Requires a load kind accepted by the control decoder.
+	 */
 	fn GetLoadWidth(loadKind: int) int
 	{
 		if (loadKind == Rv32iControlDecoder.LOAD_LH || loadKind == Rv32iControlDecoder.LOAD_LHU) {
@@ -345,6 +392,10 @@ component Rv32iInjectedBusCore<REGISTER_STORAGE: Rv32iRegisterStorage = Rv32iReg
 		return Rv32iLoadStoreUnit.WIDTH_BYTE
 	}
 
+	/**
+	 * Maps a decoded store kind to its byte count; word is the fallback.
+	 * Requires a store kind accepted by the control decoder.
+	 */
 	fn GetStoreWidth(storeKind: int) int
 	{
 		if (storeKind == Rv32iControlDecoder.STORE_SH) {
@@ -358,6 +409,9 @@ component Rv32iInjectedBusCore<REGISTER_STORAGE: Rv32iRegisterStorage = Rv32iReg
 		return Rv32iLoadStoreUnit.WIDTH_BYTE
 	}
 
+	/**
+	 * Returns true only for decoded byte and halfword sign-extending loads.
+	 */
 	fn IsSignedLoad(loadKind: int) bool
 	{
 		if (loadKind == Rv32iControlDecoder.LOAD_LB) {

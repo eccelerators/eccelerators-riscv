@@ -1,0 +1,101 @@
+namespace Eccelerators.RiscV.Presets
+
+using Eccelerators.RiscV.Pipeline
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Contracts
+using Livt.IO
+
+/**
+ * Named RV32I + Zmmul pipeline composition with selectable iterative/DSP
+ * multiplication and a dual-read register bank (BRAM by default).
+ * Borrows instruction/data providers exclusively
+ * in the same clock/reset domain. Qualification applies to the documented memory
+ * providers and target, not to arbitrary buses supplied through these interfaces.
+ */
+component Rv32iZmmulPipelineCore<RESET_PC: uint = 0, REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block,
+	DSP_MULTIPLY: bool = false> : IRv32ControlPort
+{
+	static assert Rv32DspMultiplier.CAPABILITIES == Rv32IterativeMultiplier.CAPABILITIES, "Multiplier choices must implement the same operations"
+
+	// Owned execution components and elaboration-only compatibility checks.
+	registers: Rv32DualReadRegisterBank<REGISTER_FILE_STYLE>
+	decoder: Rv32iZmmulDecoder
+
+	static if (DSP_MULTIPLY) {
+		// The DSP implementation is absent when iterative multiplication is selected.
+		dspMultiplier: Rv32DspMultiplier
+	} else {
+		// Small default implementation; no DSP resources are requested.
+		multiplier: Rv32IterativeMultiplier
+	}
+
+	// Remaining providers and the sole architectural execution owner.
+	noCsrs: Rv32NoCsrs
+	integer: Rv32iIntegerUnit
+	engine: Rv32PipelineEngine<RESET_PC, true>
+
+	// Elaboration-only checks for operation coverage and provider timing.
+	coverage: RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iZmmulDecoder.CAPABILITIES,
+		Rv32iIntegerUnit.CAPABILITIES, Rv32PipelineEngine.CAPABILITIES,
+		Rv32iOperations.INTEGER_CAPABILITY, Rv32PipelineEngine.CAPABILITIES>
+	multiplyCoverage: RvOperationCoverage<Rv32MultiplyOperations.CAPABILITY, Rv32iZmmulDecoder.CAPABILITIES,
+		Rv32IterativeMultiplier.CAPABILITIES, 0, Rv32MultiplyOperations.CAPABILITY, 0>
+	timing: RvPipelineContract<Rv32DualReadRegisterBank.READ_PORTS, Rv32DualReadRegisterBank.READ_LATENCY,
+		Rv32DualReadRegisterBank.INDEPENDENT_WRITE, Rv32DualReadRegisterBank.WRITE_FORWARDING>
+
+	/**
+	 * Owns the CPU internals; the caller owns both bus providers.
+	 */
+	new(instructions: flip IRv32MemoryPort, data: flip IRv32MemoryPort)
+	{
+		registers = new Rv32DualReadRegisterBank<REGISTER_FILE_STYLE>()
+		decoder = new Rv32iZmmulDecoder()
+		integer = new Rv32iIntegerUnit()
+		noCsrs = new Rv32NoCsrs()
+
+		static if (DSP_MULTIPLY) {
+			dspMultiplier = new Rv32DspMultiplier()
+			engine = new Rv32PipelineEngine<RESET_PC, true>(registers, instructions, data, decoder, integer, dspMultiplier, noCsrs)
+		} else {
+			multiplier = new Rv32IterativeMultiplier()
+			engine = new Rv32PipelineEngine<RESET_PC, true>(registers, instructions, data, decoder, integer, multiplier, noCsrs)
+		}
+
+		coverage = new RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iZmmulDecoder.CAPABILITIES,
+			Rv32iIntegerUnit.CAPABILITIES, Rv32PipelineEngine.CAPABILITIES,
+			Rv32iOperations.INTEGER_CAPABILITY, Rv32PipelineEngine.CAPABILITIES>()
+		multiplyCoverage = new RvOperationCoverage<Rv32MultiplyOperations.CAPABILITY, Rv32iZmmulDecoder.CAPABILITIES,
+			Rv32IterativeMultiplier.CAPABILITIES, 0, Rv32MultiplyOperations.CAPABILITY, 0>()
+
+		timing = new RvPipelineContract<Rv32DualReadRegisterBank.READ_PORTS, Rv32DualReadRegisterBank.READ_LATENCY,
+			Rv32DualReadRegisterBank.INDEPENDENT_WRITE, Rv32DualReadRegisterBank.WRITE_FORWARDING>()
+	}
+
+	/**
+	 * Pure wiring preserves the engine's edge-level control and retirement contract.
+	 */
+	process Connect[]()
+	{
+		engine.run = run
+		engine.stepRequest = stepRequest
+		engine.restartRequest = restartRequest
+		stepAck = engine.stepAck
+		restartAck = engine.restartAck
+		idle = engine.idle
+		halted = engine.halted
+		pc = engine.pc
+		faultCause = engine.faultCause
+		faultValue = engine.faultValue
+		trapped = engine.trapped
+		trapPc = engine.trapPc
+		trapCause = engine.trapCause
+		trapValue = engine.trapValue
+		retired = engine.retired
+		retiredPc = engine.retiredPc
+		retiredInstruction = engine.retiredInstruction
+		retiredRd = engine.retiredRd
+		retiredValue = engine.retiredValue
+	}
+}

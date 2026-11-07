@@ -1,0 +1,202 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Pipeline
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+using Livt.IO
+
+/**
+ * Instruction-level checks observe committed writes independently of CPU storage.
+ * Every wait is bounded so a stalled bus or controller fails the test.
+ */
+@Test
+component Rv32PipelineDspEngineTest
+{
+	// Owned platform, preset and architectural observation scoreboard.
+	instructions: Rv32WordMemory<256, 8>
+	data: Rv32WordMemory<256, 8>
+	core: Rv32iZmmulPipelineCore<0, MemoryStyle.Block, true>
+	observed: uint[32]
+	retireCount: uint
+	clearObservation: bool
+	cycles: uint
+
+	/**
+	 * Creates distinct instruction and data providers in the test clock context.
+	 */
+	new()
+	{
+		instructions = new Rv32WordMemory<256, 8>()
+		data = new Rv32WordMemory<256, 8>()
+		core = new Rv32iZmmulPipelineCore<0, MemoryStyle.Block, true>(instructions, data)
+	}
+
+	/**
+	 * Checks every retirement at its sampling edge, including adjacent completions.
+	 * Constants are the shared independent oracle; no shared mutable trace buffer is used.
+	 */
+	process Observe()
+	{
+		state {
+			cycles++
+
+			if (clearObservation) {
+				retireCount = 0
+			} elif (core.retired == 0b1) {
+				assert retireCount < Rv32MultiplyRetirement.VALUES.Length as uint
+				var expectedPc = retireCount * 4
+				assert core.retiredPc as uint == expectedPc
+				assert core.retiredInstruction as uint == Rv32MultiplyRetirement.WORDS[retireCount]
+				assert core.retiredRd as uint == Rv32MultiplyRetirement.DESTINATIONS[retireCount]
+				assert core.retiredValue as uint == Rv32MultiplyRetirement.VALUES[retireCount]
+				retireCount++
+
+				if (core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	/**
+	 * Programs one word with the CPU paused; writes are sampled once.
+	 */
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			instructions.programWrite = 0b1
+			instructions.programIndex = index as logic[8]
+			instructions.programData = word as logic[32]
+		}
+
+		state {
+			instructions.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Runs to a fault stop and bounds uninterrupted cycles per retired instruction.
+	 */
+	fn RunToStop(cause: uint)
+	{
+		var start = cycles
+		core.run = 0b1
+
+		while (core.halted == 0b0 && cycles - start < 20000) {
+			state {
+			}
+		}
+
+		core.run = 0b0
+		assert core.halted == 0b1
+		assert core.faultCause as uint == cause
+		assert cycles - start < retireCount * 50 + 50
+	}
+
+	/**
+	 * Initializes every data location that a vector can read before execution.
+	 */
+	fn Prepare()
+	{
+		core.run = 0b0
+		Simulation.Wait(40)
+		assert core.idle == 0b1
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		var elapsed: uint = 0
+
+		while (core.restartAck != ticket && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.restartAck == ticket
+		clearObservation = true
+		Simulation.Wait(4)
+		clearObservation = false
+
+		for (var index: uint = 0; index < 256; index++) {
+			state {
+				data.programWrite = 0b1
+				data.programIndex = index as logic[8]
+				data.programData = 0
+			}
+		}
+
+		state {
+			data.programWrite = 0b0
+		}
+
+		assert core.idle == 0b1
+	}
+
+	/**
+	 * Checks all multiply modes, source/destination aliases, x0 and ordered commits.
+	 */
+	@Test
+	fn MultiplyRetirement()
+	{
+		Prepare()
+
+		for (var index: uint = 0; index < (Rv32MultiplyRetirement.WORDS.Length as uint); index++) {
+			Load(index, Rv32MultiplyRetirement.WORDS[index])
+		}
+
+		RunToStop(3)
+		assert retireCount == Rv32MultiplyRetirement.VALUES.Length as uint
+	}
+
+	/**
+	 * Division/remainder funct3 4 remains illegal without committing a result.
+	 */
+	@Test
+	fn RejectDivision4()
+	{
+		Prepare()
+		Load(0, 0x020040b3)
+		RunToStop(2)
+		assert retireCount == 0 && core.pc == 0
+		assert core.faultValue == 0x020040b3
+	}
+
+	/**
+	 * Division/remainder funct3 5 remains illegal without committing a result.
+	 */
+	@Test
+	fn RejectDivision5()
+	{
+		Prepare()
+		Load(0, 0x020050b3)
+		RunToStop(2)
+		assert retireCount == 0 && core.pc == 0
+		assert core.faultValue == 0x020050b3
+	}
+
+	/**
+	 * Division/remainder funct3 6 remains illegal without committing a result.
+	 */
+	@Test
+	fn RejectDivision6()
+	{
+		Prepare()
+		Load(0, 0x020060b3)
+		RunToStop(2)
+		assert retireCount == 0 && core.pc == 0
+		assert core.faultValue == 0x020060b3
+	}
+
+	/**
+	 * Division/remainder funct3 7 remains illegal without committing a result.
+	 */
+	@Test
+	fn RejectDivision7()
+	{
+		Prepare()
+		Load(0, 0x020070b3)
+		RunToStop(2)
+		assert retireCount == 0 && core.pc == 0
+		assert core.faultValue == 0x020070b3
+	}
+}

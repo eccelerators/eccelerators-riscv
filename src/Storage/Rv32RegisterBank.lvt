@@ -1,0 +1,52 @@
+namespace Eccelerators.RiscV.Storage
+
+using Eccelerators.RiscV.Sequential
+using Livt.IO
+
+/**
+ * One-edge register bank with selectable RAM style and architectural x0 behavior.
+ * Owns one synchronous 32-word memory. Reset retains payload; the engine initializes
+ * x1..x31 before executing. All accesses share the inherited clock/reset context.
+ */
+component Rv32RegisterBank<STYLE: MemoryStyle = MemoryStyle.Block> : IRv32RegisterPort
+{
+	// Physical storage and registered zero-register selection.
+	storage: SynchronousRam<logic[32], logic[5], 32, STYLE>
+	zeroRead: bool
+
+	/**
+	 * Constructs the owned native memory, without a scheduled RAM access wrapper.
+	 */
+	new()
+	{
+		storage = new SynchronousRam<logic[32], logic[5], 32, STYLE>()
+	}
+
+	/**
+	 * Wires the single memory port and suppresses writes to x0.
+	 */
+	process Drive[]()
+	{
+		storage.enable = enable == 0b1 && (write == 0b0 || index != 0)
+		storage.writeEnable = write == 0b1
+		storage.address = index
+		storage.writeData = writeData
+		readData = storage.readData
+
+		if (zeroRead) {
+			readData = 0
+		}
+	}
+
+	/**
+	 * Remembers x0 selection on the same edge that accepts a read.
+	 */
+	process Sample()
+	{
+		state {
+			if (enable == 0b1 && write == 0b0) {
+				zeroRead = index == 0
+			}
+		}
+	}
+}

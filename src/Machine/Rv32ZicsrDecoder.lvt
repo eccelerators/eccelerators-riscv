@@ -1,0 +1,46 @@
+namespace Eccelerators.RiscV.Machine
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Contracts
+
+/**
+ * Combinational Zicsr overlay borrowing an exclusive base decoder in one context.
+ * Only six CSR encodings are added; all other instructions retain base behavior.
+ * CAPABILITIES describes the added family. Composition checks must also include
+ * the actual borrowed decoder's capabilities; no implicit extension discovery.
+ */
+component Rv32ZicsrDecoder : IRv32DecodePort
+{
+	// Added decode family; existing base capabilities remain separately checked.
+	public const CAPABILITIES: uint = Rv32CsrOperations.CAPABILITY
+
+	// Borrowed base decoder, owned by the application composition root.
+	base: IRv32DecodePort
+
+	/**
+	 * Binds a pure base decoder without changing instruction sampling.
+	 */
+	new(base: flip IRv32DecodePort)
+	{
+		this.base = base
+	}
+
+	/**
+	 * Overlays legal CSR instruction forms and distinguishes register/immediate input.
+	 */
+	process Decode[]()
+	{
+		base.instruction = instruction
+		control = base.control
+		immediate = base.immediate
+		var word = instruction as uint
+		var operation = (word >> 12) & 7
+
+		if ((word & 127) == Rv32CsrOperations.OPCODE && (operation & 3) != 0) {
+			control = RvDecoded.Pack((Rv32CsrOperations.KIND << Rv32iOperations.KIND_SHIFT) | operation,
+				(word >> 7) & 31, (word >> 15) & 31, 0,
+				(operation & Rv32CsrOperations.IMMEDIATE_BIT) == 0, false, true, true) as logic[32]
+			immediate = ((word >> 15) & 31) as logic[32]
+		}
+	}
+}

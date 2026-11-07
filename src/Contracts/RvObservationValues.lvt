@@ -1,0 +1,20 @@
+namespace Eccelerators.RiscV.Contracts
+
+/**
+ * Value-only protocol constants for IRvObservation; no component state or timing.
+ */
+public class RvObservationValues
+{
+	// Architectural event kinds; only RETIRED counts as successful retirement.
+	public const RETIRED: uint = 0
+	public const FAULT: uint = 1
+	public const INTERRUPT: uint = 2
+
+	// Memory effects recorded independently of register writes.
+	public const MEMORY_NONE: uint = 0
+	public const MEMORY_LOAD: uint = 1
+	public const MEMORY_STORE: uint = 2
+
+	// A complete word transaction covers all four byte lanes.
+	public const WORD_MASK: uint = 15
+}

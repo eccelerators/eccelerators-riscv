@@ -1,0 +1,79 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+
+/**
+ * Test-only one-word MMIO device. Completion is externally delayed, accesses at
+ * nonzero addresses fault before effects, and held requests must remain stable.
+ */
+component DelayedWordDevice : IRv32MemoryPort
+{
+	// Test-controlled backpressure and independently visible side-effect counters.
+	public clear: in logic
+	public releaseResponse: in logic
+	public accepted: out logic
+	public reads: uint
+	public writes: uint
+	public payload: uint
+
+	// Captured transaction and exactly-once response state.
+	active: bool
+	completed: bool
+	savedAddress: logic[32]
+	savedWrite: logic
+	savedMask: logic[4]
+	savedValue: logic[32]
+
+	/**
+	 * Checks stability and performs an effect once, then holds the response.
+	 */
+	process Respond()
+	{
+		state {
+			if (clear == 0b1) {
+				active = false
+				completed = false
+				accepted = 0b0
+				ready = 0b0
+				error = 0b0
+				reads = 0
+				writes = 0
+				payload = 0
+			} elif (!active && request == 0b1) {
+				active = true
+				accepted = 0b1
+				savedAddress = address
+				savedWrite = write
+				savedMask = byteEnable
+				savedValue = writeData
+			} elif (active && request == 0b1) {
+				assert address == savedAddress
+				assert write == savedWrite
+				assert byteEnable == savedMask
+				assert writeData == savedValue
+
+				if (!completed && releaseResponse == 0b1) {
+					completed = true
+					ready = 0b1
+					error = 0b0
+
+					if (savedAddress != 0) {
+						error = 0b1
+					} elif (savedWrite == 0b1) {
+						assert savedMask == 15
+						payload = savedValue as uint
+						writes++
+					} else {
+						readData = payload as logic[32]
+						reads++
+					}
+				}
+			} elif (active && request == 0b0) {
+				assert completed
+				active = false
+				completed = false
+				ready = 0b0
+			}
+		}
+	}
+}

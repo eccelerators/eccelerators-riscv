@@ -1,0 +1,148 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Platform
+
+/**
+ * Public-port checks for level aggregation, byte enables and retained events.
+ * Independent HDL tests verify exact capture, acknowledgement and reset edges.
+ */
+@Test
+component RvExternalInterruptsTest
+{
+	// Use all 32 source bits to cover unsigned masks and every byte lane.
+	interrupts: RvExternalInterrupts<32, 0>
+	events: RvInterruptEvent
+	value: uint
+
+	/**
+	 * Creates independent platform components in the test clock/reset context.
+	 */
+	new()
+	{
+		interrupts = new RvExternalInterrupts<32, 0>()
+		events = new RvInterruptEvent()
+	}
+
+	/**
+	 * Completes one bounded transaction and verifies the response is held.
+	 */
+	fn Access(address: uint, write: bool, data: uint, lanes: uint, error: bool)
+	{
+		interrupts.request = 0b0
+		Simulation.Wait(3)
+		interrupts.address = address as logic[32]
+		interrupts.write = write as logic
+		interrupts.writeData = data as logic[32]
+		interrupts.byteEnable = lanes as logic[4]
+		interrupts.request = 0b1
+		var elapsed: uint = 0
+
+		while (interrupts.ready == 0b0 && elapsed < 20) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert interrupts.ready == 0b1 && (interrupts.error == 0b1) == error
+		value = interrupts.readData as uint
+		Simulation.Wait(8)
+		assert interrupts.readData as uint == value && interrupts.ready == 0b1
+		interrupts.request = 0b0
+		Simulation.Wait(3)
+		assert interrupts.ready == 0b0
+	}
+
+	/**
+	 * Masking never clears sources; read-only registers cannot acknowledge devices.
+	 */
+	@Test
+	fn PendingMaskAndDeviceAcknowledgement()
+	{
+		interrupts.sources = 0x80000003
+		Access(4, true, 0, 15, false)
+		assert interrupts.externalPending == 0b0
+		Access(0, false, 0, 0, false)
+		assert value == 0x80000003
+		Access(4, true, 0x80000001, 15, false)
+		assert interrupts.externalPending == 0b1
+		Access(8, false, 0, 0, false)
+		assert value == 0x80000001
+		Access(0, true, 0xffffffff, 15, true)
+		Access(8, true, 0xffffffff, 15, true)
+		interrupts.sources = 2
+		Simulation.Wait(3)
+		assert interrupts.externalPending == 0b0
+		Access(4, true, 2, 15, false)
+		assert interrupts.externalPending == 0b1
+		interrupts.sources = 0
+		Simulation.Wait(3)
+		assert interrupts.externalPending == 0b0
+	}
+
+	/**
+	 * Masked byte updates and zero-mask writes preserve the other enable bits.
+	 */
+	@Test
+	fn ByteMasksAndErrors()
+	{
+		interrupts.sources = 0
+		Access(4, true, 0x12345678, 15, false)
+		Access(4, true, 0xaabbccdd, 5, false)
+		Access(4, true, 0, 0, false)
+		Access(5, true, 0, 15, true)
+		Access(12, true, 0, 15, true)
+		Access(16, false, 0, 0, true)
+		Access(0xfffffffc, true, 0, 15, true)
+		Access(4, false, 0, 0, false)
+		assert value == 0x12bb56dd
+	}
+
+	/**
+	 * New device levels do not rewrite an outstanding read's captured value.
+	 */
+	@Test
+	fn ReadSnapshotIsStable()
+	{
+		interrupts.request = 0b0
+		interrupts.sources = 1
+		Simulation.Wait(4)
+		interrupts.address = 0
+		interrupts.write = 0b0
+		interrupts.request = 0b1
+		Simulation.Wait(4)
+		assert interrupts.readData == 1 && interrupts.ready == 0b1
+		interrupts.sources = 2
+		Simulation.Wait(4)
+		assert interrupts.readData == 1
+		interrupts.request = 0b0
+		Simulation.Wait(4)
+		Access(0, false, 0, 0, false)
+		assert value == 2
+	}
+
+	/**
+	 * Event retention survives pulse withdrawal; a new event wins over clearing.
+	 */
+	@Test
+	fn EventRetentionAndConcurrentClear()
+	{
+		events.event = 0b0
+		events.clear = 0b1
+		Simulation.Wait(4)
+		assert events.pending == 0b0
+		events.clear = 0b0
+		events.event = 0b1
+		Simulation.Wait(4)
+		events.event = 0b0
+		Simulation.Wait(8)
+		assert events.pending == 0b1
+		events.clear = 0b1
+		events.event = 0b1
+		Simulation.Wait(4)
+		assert events.pending == 0b1
+		events.event = 0b0
+		Simulation.Wait(4)
+		assert events.pending == 0b0
+		events.clear = 0b0
+	}
+}

@@ -1,0 +1,154 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+using Eccelerators.RiscV.Machine
+
+/**
+ * Instruction-level checks observe committed writes independently of CPU storage.
+ * Every wait is bounded so a stalled bus or controller fails the test.
+ */
+@Test
+component Rv32TrapPolicyTest
+{
+	// Owned platform, explicit execution composition and architectural scoreboard.
+	instructions: Rv32WordMemory<512, 9>
+	data: DelayedWordDevice
+	core: Rv32SequentialEngine<0, true, true, false>
+	registers: Rv32RegisterBank
+	baseDecoder: Rv32iZmmulDecoder
+	csrDecoder: Rv32ZicsrDecoder
+	decoder: Rv32MachineDecoder
+	integer: Rv32iIntegerUnit
+	multiplier: Rv32DspMultiplier
+	csrs: Rv32MachineCsrs
+	observed: uint[32]
+	retireCount: uint
+	clearObservation: bool
+	cycles: uint
+	trapCount: uint
+	lastTrapPc: uint
+	lastTrapCause: uint
+	lastTrapValue: uint
+	tracePc: uint[512]
+	traceWord: uint[512]
+	traceRd: uint[512]
+	traceValue: uint[512]
+
+	/**
+	 * Creates distinct instruction and data providers in the test clock context.
+	 */
+	new()
+	{
+		instructions = new Rv32WordMemory<512, 9>()
+		data = new DelayedWordDevice()
+		registers = new Rv32RegisterBank()
+		baseDecoder = new Rv32iZmmulDecoder()
+		csrDecoder = new Rv32ZicsrDecoder(baseDecoder)
+		decoder = new Rv32MachineDecoder(csrDecoder)
+		integer = new Rv32iIntegerUnit()
+		multiplier = new Rv32DspMultiplier()
+		csrs = new Rv32MachineCsrs()
+		core = new Rv32SequentialEngine<0, true, true, false>(registers, instructions, data, decoder, integer, multiplier, csrs)
+	}
+
+	/**
+	 * Samples retirement every clock; tests never read a CPU-private register array.
+	 */
+	process Observe()
+	{
+		state {
+			cycles++
+
+			assert !(core.trapped == 0b1 && core.retired == 0b1)
+
+			if (clearObservation) {
+				trapCount = 0
+			} elif (core.trapped == 0b1) {
+				trapCount++
+				lastTrapPc = core.trapPc as uint
+				lastTrapCause = core.trapCause as uint
+				lastTrapValue = core.trapValue as uint
+			}
+
+			if (clearObservation) {
+				retireCount = 0
+			} elif (core.retired == 0b1) {
+				assert retireCount < 512
+				tracePc[retireCount] = core.retiredPc as uint
+				traceWord[retireCount] = core.retiredInstruction as uint
+				traceRd[retireCount] = core.retiredRd as uint
+				traceValue[retireCount] = core.retiredValue as uint
+				retireCount++
+
+				if (core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	/**
+	 * Programs one word with the CPU paused; writes are sampled once.
+	 */
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			instructions.programWrite = 0b1
+			instructions.programIndex = index as logic[9]
+			instructions.programData = word as logic[32]
+		}
+
+		state {
+			instructions.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Initializes every data location that a vector can read before execution.
+	 */
+	fn Prepare()
+	{
+		core.run = 0b0
+		Simulation.Wait(40)
+		assert core.idle == 0b1
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		var elapsed: uint = 0
+
+		while (core.restartAck != ticket && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.restartAck == ticket
+		clearObservation = true
+		Simulation.Wait(4)
+		clearObservation = false
+
+		data.clear = 0b1
+		data.releaseResponse = 0b0
+		Simulation.Wait(4)
+		data.clear = 0b0
+
+		assert core.idle == 0b1
+	}
+
+	/**
+	 * An MRET-capable decoder cannot bypass the engine's diagnostic-only policy.
+	 */
+	@Test
+	fn DisabledReturn()
+	{
+		Prepare()
+		Load(0, 0x30200073)
+		core.run = 0b1
+		Simulation.Wait(80)
+		core.run = 0b0
+		assert core.halted == 0b1 && core.faultCause == 2
+		assert core.pc == 0 && retireCount == 0 && trapCount == 0
+		assert core.faultValue == 0x30200073
+	}
+}

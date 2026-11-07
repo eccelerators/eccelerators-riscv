@@ -1,0 +1,157 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Machine
+
+/**
+ * Independent CSR expectations cover values, masks and the complete address space.
+ * Exact counter-edge and reset behavior is checked separately against generated HDL.
+ */
+@Test
+component Rv32MachineCsrsTest
+{
+	// Owned provider; no instruction engine or platform devices participate.
+	subject: Rv32MachineCsrs
+
+	/**
+	 * Creates one machine-only provider with hart ID zero.
+	 */
+	new()
+	{
+		subject = new Rv32MachineCsrs()
+	}
+
+	/**
+	 * Clears architectural state independently before each scenario.
+	 */
+	fn Prepare()
+	{
+		subject.commit = 0b0
+		subject.retire = 0b0
+		subject.clear = 0b1
+		Simulation.Wait(3)
+		subject.clear = 0b0
+	}
+
+	/**
+	 * Checks an old value and one explicit write, with an independent expected result.
+	 */
+	fn Access(address: uint, operation: uint, operand: uint, before: uint, after: uint)
+	{
+		state {
+			subject.address = address as logic[12]
+			subject.operation = operation as logic[2]
+			subject.operand = operand as logic[32]
+			subject.readEnable = 0b1
+			subject.writeEnable = 0b1
+		}
+
+		Simulation.Wait(2)
+		assert subject.illegal == 0b0
+		assert subject.readData as uint == before
+
+		state {
+			subject.commit = 0b1
+		}
+
+		state {
+			subject.commit = 0b0
+		}
+
+		Simulation.Wait(2)
+		assert subject.readData as uint == after
+	}
+
+	/**
+	 * Exercises replacement, set and clear, including high-bit data and zero operands.
+	 */
+	@Test
+	fn ReadModifyWrite()
+	{
+		Prepare()
+		Access(0x340, 1, 0x80000001, 0, 0x80000001)
+		Access(0x340, 2, 0x30, 0x80000001, 0x80000031)
+		Access(0x340, 3, 0x80000010, 0x80000031, 0x21)
+		Access(0x340, 2, 0, 0x21, 0x21)
+		Access(0x340, 1, 0, 0x21, 0)
+	}
+
+	/**
+	 * Unsupported fields normalize to explicitly documented values without faults.
+	 */
+	@Test
+	fn LegalFieldNormalization()
+	{
+		Prepare()
+		Access(0x300, 1, 0xffffffff, 0x1800, 0x1888)
+		Access(0x300, 1, 0, 0x1888, 0x1800)
+		Access(0x301, 1, 0xffffffff, 0x40000100, 0x40000100)
+		Access(0x305, 1, 0x1234567b, 0, 0x12345678)
+		Access(0x341, 1, 0xffffffff, 0, 0xfffffffc)
+		Access(0x342, 1, 0x8000000b, 0, 0x8000000b)
+		Access(0x343, 1, 0xdeadbeef, 0, 0xdeadbeef)
+		Access(0x304, 1, 0xffffffff, 0, 0)
+		Access(0x344, 1, 0xffffffff, 0, 0)
+		Access(0x310, 1, 0xffffffff, 0, 0)
+		Access(0x306, 1, 0xffffffff, 0, 0)
+		Access(0x320, 1, 0xffffffff, 0, 5)
+		Access(0xb03, 1, 0xffffffff, 0, 0)
+		Access(0xb9f, 1, 0xffffffff, 0, 0)
+		Access(0x323, 1, 0xffffffff, 0, 0)
+	}
+
+	/**
+	 * Exhaustively distinguishes the audited address surface from unknown CSRs.
+	 */
+	@Test
+	fn AddressAndWriteMatrix()
+	{
+		Prepare()
+		subject.operation = 1
+		subject.readEnable = 0b1
+		subject.writeEnable = 0b0
+		subject.commit = 0b0
+
+		for (var address: uint = 0; address < 4096; address++) {
+			var known = address == 0x300 || address == 0x301 || address == 0x304
+				|| address == 0x305 || address == 0x306 || address == 0x310 || address == 0x320
+				|| (address >= 0x340 && address <= 0x344)
+				|| address == 0xb00 || address == 0xb02 || address == 0xb80 || address == 0xb82
+				|| (address >= 0xb03 && address <= 0xb1f)
+				|| (address >= 0xb83 && address <= 0xb9f)
+				|| (address >= 0x323 && address <= 0x33f)
+				|| (address >= 0xf11 && address <= 0xf15)
+			subject.address = address as logic[12]
+			subject.writeEnable = 0b0
+			Simulation.Wait(1)
+			assert (subject.illegal == 0b0) == known
+			subject.writeEnable = 0b1
+			Simulation.Wait(1)
+			assert (subject.illegal == 0b0) == (known && address < 0xc00)
+		}
+	}
+
+	/**
+	 * Suppressed writes and uncommitted requests leave software-visible state intact.
+	 */
+	@Test
+	fn IntentAndCommit()
+	{
+		Prepare()
+		Access(0x340, 1, 17, 0, 17)
+		subject.operand = 99
+		Simulation.Wait(5)
+		assert subject.readData == 17
+		subject.writeEnable = 0b0
+		subject.commit = 0b1
+		Simulation.Wait(3)
+		subject.commit = 0b0
+		assert subject.readData == 17
+		subject.readEnable = 0b0
+		Simulation.Wait(2)
+		assert subject.readData == 0
+		Prepare()
+		subject.readEnable = 0b1
+		Simulation.Wait(2)
+		assert subject.readData == 0
+	}
+}

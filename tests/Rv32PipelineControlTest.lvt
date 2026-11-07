@@ -1,0 +1,368 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+
+/**
+ * Control and MMIO tests cover delayed completion, pause, stepping and restart drain.
+ */
+@Test
+component Rv32PipelineControlTest
+{
+	// Owned instruction storage, delayable device, core and retirement observations.
+	instructions: PipelineFetchMemory
+	data: PipelineWordDevice
+	core: Rv32iPipelineCore
+	clearObservation: bool
+	count: uint
+	lastValue: uint
+
+	/**
+	 * Creates exclusively owned providers in one reset context.
+	 */
+	new()
+	{
+		instructions = new PipelineFetchMemory()
+		data = new PipelineWordDevice()
+		core = new Rv32iPipelineCore(instructions, data)
+	}
+
+	/**
+	 * Observes successful commits independently of stepping acknowledgements.
+	 */
+	process Observe()
+	{
+		state {
+			if (clearObservation) {
+				count = 0
+				lastValue = 0
+			} elif (core.retired == 0b1) {
+				count++
+				lastValue = core.retiredValue as uint
+			}
+		}
+	}
+
+	/**
+	 * Restarts the core and independently clears the test device and observations.
+	 */
+	fn Prepare()
+	{
+		core.run = 0b0
+		instructions.hold = 0b0
+		instructions.fail = 0b0
+		WaitIdle()
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		Simulation.Wait(50)
+		assert core.restartAck == ticket
+		clearObservation = true
+		data.clear = 0b1
+		data.releaseResponse = 0b0
+		Simulation.Wait(4)
+		data.clear = 0b0
+		clearObservation = false
+
+		for (var index: uint = 0; index < 32; index++) {
+			Load(index, 0x00100073)
+		}
+	}
+
+	/**
+	 * Provisions one instruction while paused.
+	 */
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			instructions.programWrite = 0b1
+			instructions.programIndex = index as logic[8]
+			instructions.programData = word as logic[32]
+		}
+
+		state {
+			instructions.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Bounds initialization or instruction completion while run is low.
+	 */
+	fn WaitIdle()
+	{
+		var elapsed: uint = 0
+
+		while (core.idle == 0b0 && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.idle == 0b1
+	}
+
+	/**
+	 * Toggles exactly one pending step and waits for its completion acknowledgement.
+	 */
+	fn Step()
+	{
+		core.stepRequest = ~core.stepRequest
+		var elapsed: uint = 0
+
+		while (core.stepAck != core.stepRequest && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.stepAck == core.stepRequest
+	}
+
+	/**
+	 * A held step request executes once; restart clears registers and restarts at zero.
+	 */
+	@Test
+	fn TestStepPauseRestart()
+	{
+		Prepare()
+		Load(0, 0x00700093)
+		Load(1, 0x00108113)
+		Load(2, 0x00100073)
+		WaitIdle()
+		Step()
+		assert count == 1 && lastValue == 7
+		assert core.pc == 4
+		Simulation.Wait(20)
+		assert count == 1
+		Step()
+		assert count == 2 && lastValue == 8
+		Step()
+		assert core.halted == 0b1 && core.faultCause == 3
+		assert count == 2
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		Simulation.Wait(50)
+		assert core.restartAck == ticket && core.halted == 0b0
+		assert core.pc == 0
+		Load(0, 0x00008193)
+		Step()
+		assert count == 3 && lastValue == 0
+	}
+
+	/**
+	 * Software restart drains a pending store exactly once before clearing CPU state.
+	 */
+	@Test
+	fn TestRestartDrainsDelayedStore()
+	{
+		Prepare()
+		Load(0, 0x02a00093)
+		Load(1, 0x00102023)
+		Load(2, 0x00002103)
+		Load(3, 0x00100073)
+		core.run = 0b1
+		var elapsed: uint = 0
+
+		while (data.accepted == 0b0 && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert data.accepted == 0b1
+		core.run = 0b0
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		Simulation.Wait(20)
+		assert core.restartAck != ticket
+		assert data.writes == 0 && count == 1
+		data.releaseResponse = 0b1
+		Simulation.Wait(130)
+		assert core.restartAck == ticket && core.idle == 0b1
+		assert core.pc == 0
+		assert data.writes == 1 && data.reads == 1
+		assert data.payload == 42 && count == 3
+		Load(0, 0x00002183)
+		Step()
+		assert lastValue == 42 && data.reads == 2
+	}
+
+	/**
+	 * An error response prevents retirement and MMIO effects, including a load to x0.
+	 */
+	@Test
+	fn TestDelayedAccessFault()
+	{
+		Prepare()
+		Load(0, 0x00402003)
+		data.releaseResponse = 0b1
+		WaitIdle()
+		Step()
+		assert core.halted == 0b1 && core.faultCause == 5
+		assert core.faultValue == 4 && core.pc == 0
+		assert count == 0 && data.reads == 0 && data.writes == 0
+	}
+
+	/**
+	 * A taken branch drains an uncancellable wrong-path fetch and discards its error.
+	 */
+	@Test
+	fn TestRedirectDrainsFailedFetch()
+	{
+		Prepare()
+		Load(0, 0x0100006f) // jal x0, 16
+		Load(1, 0x00002003) // wrong-path MMIO read
+		Load(4, 0x00700093)
+		instructions.holdAddress = 4
+		instructions.hold = 0b1
+		instructions.failAddress = 4
+		instructions.fail = 0b1
+		core.run = 0b1
+		var elapsed: uint = 0
+
+		while ((instructions.blocked == 0b0 || core.pc != 16) && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert instructions.blocked == 0b1 && core.pc == 16
+		core.run = 0b0
+		Simulation.Wait(20)
+		assert core.idle == 0b0 && core.halted == 0b0
+		assert count == 1 && data.reads == 0 && data.writes == 0
+		instructions.hold = 0b0
+		WaitIdle()
+		assert core.pc == 16 && core.halted == 0b0
+		Step()
+		assert count == 2 && lastValue == 7 && core.pc == 20
+	}
+
+	/**
+	 * The earliest fault blocks younger stores and side-effecting loads.
+	 */
+	@Test
+	fn TestOlderFaultBlocksMmio()
+	{
+		Prepare()
+		Load(0, 0x02a00093)
+		Load(1, 0x00402103) // failing load
+		Load(2, 0x00102023) // younger store must not escape
+		Load(3, 0x00002003) // younger load to x0 must not escape
+		core.run = 0b1
+		var elapsed: uint = 0
+
+		while (data.accepted == 0b0 && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert data.accepted == 0b1
+		Simulation.Wait(60)
+		assert count == 1 && data.reads == 0 && data.writes == 0
+		data.releaseResponse = 0b1
+		elapsed = 0
+
+		while (core.halted == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		core.run = 0b0
+		WaitIdle()
+		assert core.halted == 0b1 && core.faultCause == 5 && core.pc == 4
+		assert count == 1 && data.reads == 0 && data.writes == 0
+	}
+
+	/**
+	 * Taken branches suppress both kinds of wrong-path device access.
+	 */
+	@Test
+	fn TestBranchBlocksMmio()
+	{
+		Prepare()
+		Load(0, 0x00c0006f)
+		Load(1, 0x00002003)
+		Load(2, 0x00002023)
+		Load(3, 0x00900093)
+		data.releaseResponse = 0b1
+		core.run = 0b1
+		var elapsed: uint = 0
+
+		while (core.halted == 0b0 && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		core.run = 0b0
+		WaitIdle()
+		assert core.halted == 0b1 && core.faultCause == 3 && core.pc == 16
+		assert count == 2 && lastValue == 9
+		assert data.reads == 0 && data.writes == 0
+	}
+
+	/**
+	 * Vary the pause edge across fetch/read/execute/commit occupancy. Draining
+	 * leaves an architectural PC matching exactly the admitted instruction prefix.
+	 */
+	@Test
+	fn TestPauseAtEveryOffset()
+	{
+		for (var offset: uint = 1; offset <= 30; offset++) {
+			Prepare()
+
+			// Scheduled loop overhead allows more clocks than the offset itself.
+			// Keep the final step inside the arithmetic stream at every pause offset.
+			for (var index: uint = 0; index < 64; index++) {
+				Load(index, 0x00108093) // addi x1, x1, 1
+			}
+
+			core.run = 0b1
+
+			for (var tick: uint = 0; tick < offset; tick++) {
+				state {
+				}
+			}
+
+			core.run = 0b0
+			WaitIdle()
+			assert core.halted == 0b0
+			assert core.pc as uint == count * 4
+			assert lastValue == count
+			var pausedCount = count
+			Simulation.Wait(8)
+			assert count == pausedCount
+			Step()
+			assert count == pausedCount + 1 && lastValue == count
+		}
+	}
+
+	/**
+	 * Diagnostic halt can precede completion of a speculative fetch; idle cannot.
+	 */
+	@Test
+	fn TestFaultDrainsFetchBeforeIdle()
+	{
+		Prepare()
+		instructions.holdAddress = 4
+		instructions.hold = 0b1
+		core.run = 0b1
+		var elapsed: uint = 0
+
+		while (core.halted == 0b0 && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.halted == 0b1 && core.pc == 0 && count == 0
+		core.run = 0b0
+		assert core.idle == 0b0
+		instructions.hold = 0b0
+		WaitIdle()
+		assert count == 0
+	}
+}

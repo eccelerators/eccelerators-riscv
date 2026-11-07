@@ -1,0 +1,2714 @@
+[
+  {
+    "operation": 0,
+    "left": 0,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 0,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 0,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 0,
+    "right": 2147483647,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 0,
+    "right": 2147483648,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 0,
+    "right": 4294967295,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 0,
+    "right": 4294967294,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 0,
+    "right": 1431655765,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 0,
+    "right": 2863311530,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 1,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 1,
+    "right": 1,
+    "expected": 1
+  },
+  {
+    "operation": 0,
+    "left": 1,
+    "right": 2,
+    "expected": 2
+  },
+  {
+    "operation": 0,
+    "left": 1,
+    "right": 2147483647,
+    "expected": 2147483647
+  },
+  {
+    "operation": 0,
+    "left": 1,
+    "right": 2147483648,
+    "expected": 2147483648
+  },
+  {
+    "operation": 0,
+    "left": 1,
+    "right": 4294967295,
+    "expected": 4294967295
+  },
+  {
+    "operation": 0,
+    "left": 1,
+    "right": 4294967294,
+    "expected": 4294967294
+  },
+  {
+    "operation": 0,
+    "left": 1,
+    "right": 1431655765,
+    "expected": 1431655765
+  },
+  {
+    "operation": 0,
+    "left": 1,
+    "right": 2863311530,
+    "expected": 2863311530
+  },
+  {
+    "operation": 0,
+    "left": 2,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 2,
+    "right": 1,
+    "expected": 2
+  },
+  {
+    "operation": 0,
+    "left": 2,
+    "right": 2,
+    "expected": 4
+  },
+  {
+    "operation": 0,
+    "left": 2,
+    "right": 2147483647,
+    "expected": 4294967294
+  },
+  {
+    "operation": 0,
+    "left": 2,
+    "right": 2147483648,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 2,
+    "right": 4294967295,
+    "expected": 4294967294
+  },
+  {
+    "operation": 0,
+    "left": 2,
+    "right": 4294967294,
+    "expected": 4294967292
+  },
+  {
+    "operation": 0,
+    "left": 2,
+    "right": 1431655765,
+    "expected": 2863311530
+  },
+  {
+    "operation": 0,
+    "left": 2,
+    "right": 2863311530,
+    "expected": 1431655764
+  },
+  {
+    "operation": 0,
+    "left": 2147483647,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 2147483647,
+    "right": 1,
+    "expected": 2147483647
+  },
+  {
+    "operation": 0,
+    "left": 2147483647,
+    "right": 2,
+    "expected": 4294967294
+  },
+  {
+    "operation": 0,
+    "left": 2147483647,
+    "right": 2147483647,
+    "expected": 1
+  },
+  {
+    "operation": 0,
+    "left": 2147483647,
+    "right": 2147483648,
+    "expected": 2147483648
+  },
+  {
+    "operation": 0,
+    "left": 2147483647,
+    "right": 4294967295,
+    "expected": 2147483649
+  },
+  {
+    "operation": 0,
+    "left": 2147483647,
+    "right": 4294967294,
+    "expected": 2
+  },
+  {
+    "operation": 0,
+    "left": 2147483647,
+    "right": 1431655765,
+    "expected": 715827883
+  },
+  {
+    "operation": 0,
+    "left": 2147483647,
+    "right": 2863311530,
+    "expected": 1431655766
+  },
+  {
+    "operation": 0,
+    "left": 2147483648,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 2147483648,
+    "right": 1,
+    "expected": 2147483648
+  },
+  {
+    "operation": 0,
+    "left": 2147483648,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 2147483648,
+    "right": 2147483647,
+    "expected": 2147483648
+  },
+  {
+    "operation": 0,
+    "left": 2147483648,
+    "right": 2147483648,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 2147483648,
+    "right": 4294967295,
+    "expected": 2147483648
+  },
+  {
+    "operation": 0,
+    "left": 2147483648,
+    "right": 4294967294,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 2147483648,
+    "right": 1431655765,
+    "expected": 2147483648
+  },
+  {
+    "operation": 0,
+    "left": 2147483648,
+    "right": 2863311530,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 4294967295,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 4294967295,
+    "right": 1,
+    "expected": 4294967295
+  },
+  {
+    "operation": 0,
+    "left": 4294967295,
+    "right": 2,
+    "expected": 4294967294
+  },
+  {
+    "operation": 0,
+    "left": 4294967295,
+    "right": 2147483647,
+    "expected": 2147483649
+  },
+  {
+    "operation": 0,
+    "left": 4294967295,
+    "right": 2147483648,
+    "expected": 2147483648
+  },
+  {
+    "operation": 0,
+    "left": 4294967295,
+    "right": 4294967295,
+    "expected": 1
+  },
+  {
+    "operation": 0,
+    "left": 4294967295,
+    "right": 4294967294,
+    "expected": 2
+  },
+  {
+    "operation": 0,
+    "left": 4294967295,
+    "right": 1431655765,
+    "expected": 2863311531
+  },
+  {
+    "operation": 0,
+    "left": 4294967295,
+    "right": 2863311530,
+    "expected": 1431655766
+  },
+  {
+    "operation": 0,
+    "left": 4294967294,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 4294967294,
+    "right": 1,
+    "expected": 4294967294
+  },
+  {
+    "operation": 0,
+    "left": 4294967294,
+    "right": 2,
+    "expected": 4294967292
+  },
+  {
+    "operation": 0,
+    "left": 4294967294,
+    "right": 2147483647,
+    "expected": 2
+  },
+  {
+    "operation": 0,
+    "left": 4294967294,
+    "right": 2147483648,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 4294967294,
+    "right": 4294967295,
+    "expected": 2
+  },
+  {
+    "operation": 0,
+    "left": 4294967294,
+    "right": 4294967294,
+    "expected": 4
+  },
+  {
+    "operation": 0,
+    "left": 4294967294,
+    "right": 1431655765,
+    "expected": 1431655766
+  },
+  {
+    "operation": 0,
+    "left": 4294967294,
+    "right": 2863311530,
+    "expected": 2863311532
+  },
+  {
+    "operation": 0,
+    "left": 1431655765,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 1431655765,
+    "right": 1,
+    "expected": 1431655765
+  },
+  {
+    "operation": 0,
+    "left": 1431655765,
+    "right": 2,
+    "expected": 2863311530
+  },
+  {
+    "operation": 0,
+    "left": 1431655765,
+    "right": 2147483647,
+    "expected": 715827883
+  },
+  {
+    "operation": 0,
+    "left": 1431655765,
+    "right": 2147483648,
+    "expected": 2147483648
+  },
+  {
+    "operation": 0,
+    "left": 1431655765,
+    "right": 4294967295,
+    "expected": 2863311531
+  },
+  {
+    "operation": 0,
+    "left": 1431655765,
+    "right": 4294967294,
+    "expected": 1431655766
+  },
+  {
+    "operation": 0,
+    "left": 1431655765,
+    "right": 1431655765,
+    "expected": 954437177
+  },
+  {
+    "operation": 0,
+    "left": 1431655765,
+    "right": 2863311530,
+    "expected": 1908874354
+  },
+  {
+    "operation": 0,
+    "left": 2863311530,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 2863311530,
+    "right": 1,
+    "expected": 2863311530
+  },
+  {
+    "operation": 0,
+    "left": 2863311530,
+    "right": 2,
+    "expected": 1431655764
+  },
+  {
+    "operation": 0,
+    "left": 2863311530,
+    "right": 2147483647,
+    "expected": 1431655766
+  },
+  {
+    "operation": 0,
+    "left": 2863311530,
+    "right": 2147483648,
+    "expected": 0
+  },
+  {
+    "operation": 0,
+    "left": 2863311530,
+    "right": 4294967295,
+    "expected": 1431655766
+  },
+  {
+    "operation": 0,
+    "left": 2863311530,
+    "right": 4294967294,
+    "expected": 2863311532
+  },
+  {
+    "operation": 0,
+    "left": 2863311530,
+    "right": 1431655765,
+    "expected": 1908874354
+  },
+  {
+    "operation": 0,
+    "left": 2863311530,
+    "right": 2863311530,
+    "expected": 3817748708
+  },
+  {
+    "operation": 0,
+    "left": 4175201447,
+    "right": 2204439860,
+    "expected": 1854907628
+  },
+  {
+    "operation": 0,
+    "left": 3372648102,
+    "right": 2696156133,
+    "expected": 3146564734
+  },
+  {
+    "operation": 0,
+    "left": 2145223642,
+    "right": 1751718089,
+    "expected": 3451057706
+  },
+  {
+    "operation": 0,
+    "left": 4200241039,
+    "right": 4108029518,
+    "expected": 2063630226
+  },
+  {
+    "operation": 0,
+    "left": 2471785754,
+    "right": 1502794046,
+    "expected": 1961006668
+  },
+  {
+    "operation": 0,
+    "left": 3861171930,
+    "right": 3435834680,
+    "expected": 668635568
+  },
+  {
+    "operation": 0,
+    "left": 260599236,
+    "right": 3503661953,
+    "expected": 1169628100
+  },
+  {
+    "operation": 0,
+    "left": 1725947448,
+    "right": 4205929720,
+    "expected": 1885677120
+  },
+  {
+    "operation": 0,
+    "left": 2941156840,
+    "right": 3677375819,
+    "expected": 190687992
+  },
+  {
+    "operation": 0,
+    "left": 3762569261,
+    "right": 2144060449,
+    "expected": 1620949453
+  },
+  {
+    "operation": 0,
+    "left": 3684416776,
+    "right": 2267260184,
+    "expected": 126345408
+  },
+  {
+    "operation": 0,
+    "left": 248033810,
+    "right": 186888823,
+    "expected": 2308000350
+  },
+  {
+    "operation": 0,
+    "left": 1940719386,
+    "right": 3968178916,
+    "expected": 3303143208
+  },
+  {
+    "operation": 0,
+    "left": 768198480,
+    "right": 2678860009,
+    "expected": 3448432592
+  },
+  {
+    "operation": 0,
+    "left": 2399476206,
+    "right": 3194305250,
+    "expected": 1229377564
+  },
+  {
+    "operation": 0,
+    "left": 157512196,
+    "right": 19261546,
+    "expected": 2165626280
+  },
+  {
+    "operation": 0,
+    "left": 2157555963,
+    "right": 675077587,
+    "expected": 1598655969
+  },
+  {
+    "operation": 0,
+    "left": 1015066857,
+    "right": 4237103124,
+    "expected": 2440127028
+  },
+  {
+    "operation": 0,
+    "left": 258204458,
+    "right": 965223542,
+    "expected": 743218524
+  },
+  {
+    "operation": 0,
+    "left": 2287004911,
+    "right": 2995216484,
+    "expected": 3095342428
+  },
+  {
+    "operation": 0,
+    "left": 3240841177,
+    "right": 244784512,
+    "expected": 1957855616
+  },
+  {
+    "operation": 0,
+    "left": 2474511408,
+    "right": 4055312058,
+    "expected": 3316906720
+  },
+  {
+    "operation": 0,
+    "left": 3126489857,
+    "right": 2875532434,
+    "expected": 170310290
+  },
+  {
+    "operation": 0,
+    "left": 1992155057,
+    "right": 3750200724,
+    "expected": 1884505940
+  },
+  {
+    "operation": 0,
+    "left": 2886252724,
+    "right": 359468083,
+    "expected": 386481116
+  },
+  {
+    "operation": 0,
+    "left": 3940949702,
+    "right": 3918735682,
+    "expected": 1274258700
+  },
+  {
+    "operation": 0,
+    "left": 3789648351,
+    "right": 2686619730,
+    "expected": 2850154862
+  },
+  {
+    "operation": 0,
+    "left": 2375356968,
+    "right": 2620043715,
+    "expected": 1152023672
+  },
+  {
+    "operation": 0,
+    "left": 2602006743,
+    "right": 580878644,
+    "expected": 4029801132
+  },
+  {
+    "operation": 0,
+    "left": 1877163229,
+    "right": 26374052,
+    "expected": 3355496596
+  },
+  {
+    "operation": 0,
+    "left": 1310326871,
+    "right": 2883899113,
+    "expected": 1819037999
+  },
+  {
+    "operation": 0,
+    "left": 1085578648,
+    "right": 2591005266,
+    "expected": 630188720
+  },
+  {
+    "operation": 1,
+    "left": 0,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 0,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 0,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 0,
+    "right": 2147483647,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 0,
+    "right": 2147483648,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 0,
+    "right": 4294967295,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 0,
+    "right": 4294967294,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 0,
+    "right": 1431655765,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 0,
+    "right": 2863311530,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 1,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 1,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 1,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 1,
+    "right": 2147483647,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 1,
+    "right": 2147483648,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 1,
+    "right": 4294967295,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 1,
+    "right": 4294967294,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 1,
+    "right": 1431655765,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 1,
+    "right": 2863311530,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 2,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2,
+    "right": 2147483647,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2,
+    "right": 2147483648,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 2,
+    "right": 4294967295,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 2,
+    "right": 4294967294,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 2,
+    "right": 1431655765,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2,
+    "right": 2863311530,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 2147483647,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2147483647,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2147483647,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2147483647,
+    "right": 2147483647,
+    "expected": 1073741823
+  },
+  {
+    "operation": 1,
+    "left": 2147483647,
+    "right": 2147483648,
+    "expected": 3221225472
+  },
+  {
+    "operation": 1,
+    "left": 2147483647,
+    "right": 4294967295,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 2147483647,
+    "right": 4294967294,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 2147483647,
+    "right": 1431655765,
+    "expected": 715827882
+  },
+  {
+    "operation": 1,
+    "left": 2147483647,
+    "right": 2863311530,
+    "expected": 3579139413
+  },
+  {
+    "operation": 1,
+    "left": 2147483648,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2147483648,
+    "right": 1,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 2147483648,
+    "right": 2,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 2147483648,
+    "right": 2147483647,
+    "expected": 3221225472
+  },
+  {
+    "operation": 1,
+    "left": 2147483648,
+    "right": 2147483648,
+    "expected": 1073741824
+  },
+  {
+    "operation": 1,
+    "left": 2147483648,
+    "right": 4294967295,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2147483648,
+    "right": 4294967294,
+    "expected": 1
+  },
+  {
+    "operation": 1,
+    "left": 2147483648,
+    "right": 1431655765,
+    "expected": 3579139413
+  },
+  {
+    "operation": 1,
+    "left": 2147483648,
+    "right": 2863311530,
+    "expected": 715827883
+  },
+  {
+    "operation": 1,
+    "left": 4294967295,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 4294967295,
+    "right": 1,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 4294967295,
+    "right": 2,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 4294967295,
+    "right": 2147483647,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 4294967295,
+    "right": 2147483648,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 4294967295,
+    "right": 4294967295,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 4294967295,
+    "right": 4294967294,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 4294967295,
+    "right": 1431655765,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 4294967295,
+    "right": 2863311530,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 4294967294,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 4294967294,
+    "right": 1,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 4294967294,
+    "right": 2,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 4294967294,
+    "right": 2147483647,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 4294967294,
+    "right": 2147483648,
+    "expected": 1
+  },
+  {
+    "operation": 1,
+    "left": 4294967294,
+    "right": 4294967295,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 4294967294,
+    "right": 4294967294,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 4294967294,
+    "right": 1431655765,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 4294967294,
+    "right": 2863311530,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 1431655765,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 1431655765,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 1431655765,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 1431655765,
+    "right": 2147483647,
+    "expected": 715827882
+  },
+  {
+    "operation": 1,
+    "left": 1431655765,
+    "right": 2147483648,
+    "expected": 3579139413
+  },
+  {
+    "operation": 1,
+    "left": 1431655765,
+    "right": 4294967295,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 1431655765,
+    "right": 4294967294,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 1431655765,
+    "right": 1431655765,
+    "expected": 477218588
+  },
+  {
+    "operation": 1,
+    "left": 1431655765,
+    "right": 2863311530,
+    "expected": 3817748707
+  },
+  {
+    "operation": 1,
+    "left": 2863311530,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2863311530,
+    "right": 1,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 2863311530,
+    "right": 2,
+    "expected": 4294967295
+  },
+  {
+    "operation": 1,
+    "left": 2863311530,
+    "right": 2147483647,
+    "expected": 3579139413
+  },
+  {
+    "operation": 1,
+    "left": 2863311530,
+    "right": 2147483648,
+    "expected": 715827883
+  },
+  {
+    "operation": 1,
+    "left": 2863311530,
+    "right": 4294967295,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2863311530,
+    "right": 4294967294,
+    "expected": 0
+  },
+  {
+    "operation": 1,
+    "left": 2863311530,
+    "right": 1431655765,
+    "expected": 3817748707
+  },
+  {
+    "operation": 1,
+    "left": 2863311530,
+    "right": 2863311530,
+    "expected": 477218588
+  },
+  {
+    "operation": 1,
+    "left": 4175201447,
+    "right": 2204439860,
+    "expected": 58294691
+  },
+  {
+    "operation": 1,
+    "left": 3372648102,
+    "right": 2696156133,
+    "expected": 343335378
+  },
+  {
+    "operation": 1,
+    "left": 2145223642,
+    "right": 1751718089,
+    "expected": 874937292
+  },
+  {
+    "operation": 1,
+    "left": 4200241039,
+    "right": 4108029518,
+    "expected": 4122945
+  },
+  {
+    "operation": 1,
+    "left": 2471785754,
+    "right": 1502794046,
+    "expected": 3657042446
+  },
+  {
+    "operation": 1,
+    "left": 3861171930,
+    "right": 3435834680,
+    "expected": 86773128
+  },
+  {
+    "operation": 1,
+    "left": 260599236,
+    "right": 3503661953,
+    "expected": 4246954458
+  },
+  {
+    "operation": 1,
+    "left": 1725947448,
+    "right": 4205929720,
+    "expected": 4259187238
+  },
+  {
+    "operation": 1,
+    "left": 2941156840,
+    "right": 3677375819,
+    "expected": 194670120
+  },
+  {
+    "operation": 1,
+    "left": 3762569261,
+    "right": 2144060449,
+    "expected": 4029192613
+  },
+  {
+    "operation": 1,
+    "left": 3684416776,
+    "right": 2267260184,
+    "expected": 288248442
+  },
+  {
+    "operation": 1,
+    "left": 248033810,
+    "right": 186888823,
+    "expected": 10792805
+  },
+  {
+    "operation": 1,
+    "left": 1940719386,
+    "right": 3968178916,
+    "expected": 4147305043
+  },
+  {
+    "operation": 1,
+    "left": 768198480,
+    "right": 2678860009,
+    "expected": 4005910109
+  },
+  {
+    "operation": 1,
+    "left": 2399476206,
+    "right": 3194305250,
+    "expected": 485753431
+  },
+  {
+    "operation": 1,
+    "left": 157512196,
+    "right": 19261546,
+    "expected": 706391
+  },
+  {
+    "operation": 1,
+    "left": 2157555963,
+    "right": 675077587,
+    "expected": 3959011656
+  },
+  {
+    "operation": 1,
+    "left": 1015066857,
+    "right": 4237103124,
+    "expected": 4281291754
+  },
+  {
+    "operation": 1,
+    "left": 258204458,
+    "right": 965223542,
+    "expected": 58027222
+  },
+  {
+    "operation": 1,
+    "left": 2287004911,
+    "right": 2995216484,
+    "expected": 607653227
+  },
+  {
+    "operation": 1,
+    "left": 3240841177,
+    "right": 244784512,
+    "expected": 4234889132
+  },
+  {
+    "operation": 1,
+    "left": 2474511408,
+    "right": 4055312058,
+    "expected": 101579769
+  },
+  {
+    "operation": 1,
+    "left": 3126489857,
+    "right": 2875532434,
+    "expected": 386167693
+  },
+  {
+    "operation": 1,
+    "left": 1992155057,
+    "right": 3750200724,
+    "expected": 4042285632
+  },
+  {
+    "operation": 1,
+    "left": 2886252724,
+    "right": 359468083,
+    "expected": 4177064669
+  },
+  {
+    "operation": 1,
+    "left": 3940949702,
+    "right": 3918735682,
+    "expected": 31011321
+  },
+  {
+    "operation": 1,
+    "left": 3789648351,
+    "right": 2686619730,
+    "expected": 189228098
+  },
+  {
+    "operation": 1,
+    "left": 2375356968,
+    "right": 2620043715,
+    "expected": 748597226
+  },
+  {
+    "operation": 1,
+    "left": 2602006743,
+    "right": 580878644,
+    "expected": 4066000562
+  },
+  {
+    "operation": 1,
+    "left": 1877163229,
+    "right": 26374052,
+    "expected": 11527072
+  },
+  {
+    "operation": 1,
+    "left": 1310326871,
+    "right": 2883899113,
+    "expected": 3864472619
+  },
+  {
+    "operation": 1,
+    "left": 1085578648,
+    "right": 2591005266,
+    "expected": 3864280711
+  },
+  {
+    "operation": 2,
+    "left": 0,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 0,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 0,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 0,
+    "right": 2147483647,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 0,
+    "right": 2147483648,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 0,
+    "right": 4294967295,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 0,
+    "right": 4294967294,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 0,
+    "right": 1431655765,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 0,
+    "right": 2863311530,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1,
+    "right": 2147483647,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1,
+    "right": 2147483648,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1,
+    "right": 4294967295,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1,
+    "right": 4294967294,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1,
+    "right": 1431655765,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1,
+    "right": 2863311530,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 2,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 2,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 2,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 2,
+    "right": 2147483647,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 2,
+    "right": 2147483648,
+    "expected": 1
+  },
+  {
+    "operation": 2,
+    "left": 2,
+    "right": 4294967295,
+    "expected": 1
+  },
+  {
+    "operation": 2,
+    "left": 2,
+    "right": 4294967294,
+    "expected": 1
+  },
+  {
+    "operation": 2,
+    "left": 2,
+    "right": 1431655765,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 2,
+    "right": 2863311530,
+    "expected": 1
+  },
+  {
+    "operation": 2,
+    "left": 2147483647,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 2147483647,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 2147483647,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 2147483647,
+    "right": 2147483647,
+    "expected": 1073741823
+  },
+  {
+    "operation": 2,
+    "left": 2147483647,
+    "right": 2147483648,
+    "expected": 1073741823
+  },
+  {
+    "operation": 2,
+    "left": 2147483647,
+    "right": 4294967295,
+    "expected": 2147483646
+  },
+  {
+    "operation": 2,
+    "left": 2147483647,
+    "right": 4294967294,
+    "expected": 2147483646
+  },
+  {
+    "operation": 2,
+    "left": 2147483647,
+    "right": 1431655765,
+    "expected": 715827882
+  },
+  {
+    "operation": 2,
+    "left": 2147483647,
+    "right": 2863311530,
+    "expected": 1431655764
+  },
+  {
+    "operation": 2,
+    "left": 2147483648,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 2147483648,
+    "right": 1,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 2147483648,
+    "right": 2,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 2147483648,
+    "right": 2147483647,
+    "expected": 3221225472
+  },
+  {
+    "operation": 2,
+    "left": 2147483648,
+    "right": 2147483648,
+    "expected": 3221225472
+  },
+  {
+    "operation": 2,
+    "left": 2147483648,
+    "right": 4294967295,
+    "expected": 2147483648
+  },
+  {
+    "operation": 2,
+    "left": 2147483648,
+    "right": 4294967294,
+    "expected": 2147483649
+  },
+  {
+    "operation": 2,
+    "left": 2147483648,
+    "right": 1431655765,
+    "expected": 3579139413
+  },
+  {
+    "operation": 2,
+    "left": 2147483648,
+    "right": 2863311530,
+    "expected": 2863311531
+  },
+  {
+    "operation": 2,
+    "left": 4294967295,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 4294967295,
+    "right": 1,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967295,
+    "right": 2,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967295,
+    "right": 2147483647,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967295,
+    "right": 2147483648,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967295,
+    "right": 4294967295,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967295,
+    "right": 4294967294,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967295,
+    "right": 1431655765,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967295,
+    "right": 2863311530,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967294,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 4294967294,
+    "right": 1,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967294,
+    "right": 2,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967294,
+    "right": 2147483647,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967294,
+    "right": 2147483648,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967294,
+    "right": 4294967295,
+    "expected": 4294967294
+  },
+  {
+    "operation": 2,
+    "left": 4294967294,
+    "right": 4294967294,
+    "expected": 4294967294
+  },
+  {
+    "operation": 2,
+    "left": 4294967294,
+    "right": 1431655765,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 4294967294,
+    "right": 2863311530,
+    "expected": 4294967294
+  },
+  {
+    "operation": 2,
+    "left": 1431655765,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1431655765,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1431655765,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 1431655765,
+    "right": 2147483647,
+    "expected": 715827882
+  },
+  {
+    "operation": 2,
+    "left": 1431655765,
+    "right": 2147483648,
+    "expected": 715827882
+  },
+  {
+    "operation": 2,
+    "left": 1431655765,
+    "right": 4294967295,
+    "expected": 1431655764
+  },
+  {
+    "operation": 2,
+    "left": 1431655765,
+    "right": 4294967294,
+    "expected": 1431655764
+  },
+  {
+    "operation": 2,
+    "left": 1431655765,
+    "right": 1431655765,
+    "expected": 477218588
+  },
+  {
+    "operation": 2,
+    "left": 1431655765,
+    "right": 2863311530,
+    "expected": 954437176
+  },
+  {
+    "operation": 2,
+    "left": 2863311530,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 2,
+    "left": 2863311530,
+    "right": 1,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 2863311530,
+    "right": 2,
+    "expected": 4294967295
+  },
+  {
+    "operation": 2,
+    "left": 2863311530,
+    "right": 2147483647,
+    "expected": 3579139413
+  },
+  {
+    "operation": 2,
+    "left": 2863311530,
+    "right": 2147483648,
+    "expected": 3579139413
+  },
+  {
+    "operation": 2,
+    "left": 2863311530,
+    "right": 4294967295,
+    "expected": 2863311530
+  },
+  {
+    "operation": 2,
+    "left": 2863311530,
+    "right": 4294967294,
+    "expected": 2863311530
+  },
+  {
+    "operation": 2,
+    "left": 2863311530,
+    "right": 1431655765,
+    "expected": 3817748707
+  },
+  {
+    "operation": 2,
+    "left": 2863311530,
+    "right": 2863311530,
+    "expected": 3340530118
+  },
+  {
+    "operation": 2,
+    "left": 4175201447,
+    "right": 2204439860,
+    "expected": 4233496138
+  },
+  {
+    "operation": 2,
+    "left": 3372648102,
+    "right": 2696156133,
+    "expected": 3715983480
+  },
+  {
+    "operation": 2,
+    "left": 2145223642,
+    "right": 1751718089,
+    "expected": 874937292
+  },
+  {
+    "operation": 2,
+    "left": 4200241039,
+    "right": 4108029518,
+    "expected": 4204363984
+  },
+  {
+    "operation": 2,
+    "left": 2471785754,
+    "right": 1502794046,
+    "expected": 3657042446
+  },
+  {
+    "operation": 2,
+    "left": 3861171930,
+    "right": 3435834680,
+    "expected": 3947945058
+  },
+  {
+    "operation": 2,
+    "left": 260599236,
+    "right": 3503661953,
+    "expected": 212586398
+  },
+  {
+    "operation": 2,
+    "left": 1725947448,
+    "right": 4205929720,
+    "expected": 1690167390
+  },
+  {
+    "operation": 2,
+    "left": 2941156840,
+    "right": 3677375819,
+    "expected": 3135826960
+  },
+  {
+    "operation": 2,
+    "left": 3762569261,
+    "right": 2144060449,
+    "expected": 4029192613
+  },
+  {
+    "operation": 2,
+    "left": 3684416776,
+    "right": 2267260184,
+    "expected": 3972665218
+  },
+  {
+    "operation": 2,
+    "left": 248033810,
+    "right": 186888823,
+    "expected": 10792805
+  },
+  {
+    "operation": 2,
+    "left": 1940719386,
+    "right": 3968178916,
+    "expected": 1793057133
+  },
+  {
+    "operation": 2,
+    "left": 768198480,
+    "right": 2678860009,
+    "expected": 479141293
+  },
+  {
+    "operation": 2,
+    "left": 2399476206,
+    "right": 3194305250,
+    "expected": 2885229637
+  },
+  {
+    "operation": 2,
+    "left": 157512196,
+    "right": 19261546,
+    "expected": 706391
+  },
+  {
+    "operation": 2,
+    "left": 2157555963,
+    "right": 675077587,
+    "expected": 3959011656
+  },
+  {
+    "operation": 2,
+    "left": 1015066857,
+    "right": 4237103124,
+    "expected": 1001391315
+  },
+  {
+    "operation": 2,
+    "left": 258204458,
+    "right": 965223542,
+    "expected": 58027222
+  },
+  {
+    "operation": 2,
+    "left": 2287004911,
+    "right": 2995216484,
+    "expected": 2894658138
+  },
+  {
+    "operation": 2,
+    "left": 3240841177,
+    "right": 244784512,
+    "expected": 4234889132
+  },
+  {
+    "operation": 2,
+    "left": 2474511408,
+    "right": 4055312058,
+    "expected": 2576091177
+  },
+  {
+    "operation": 2,
+    "left": 3126489857,
+    "right": 2875532434,
+    "expected": 3512657550
+  },
+  {
+    "operation": 2,
+    "left": 1992155057,
+    "right": 3750200724,
+    "expected": 1739473393
+  },
+  {
+    "operation": 2,
+    "left": 2886252724,
+    "right": 359468083,
+    "expected": 4177064669
+  },
+  {
+    "operation": 2,
+    "left": 3940949702,
+    "right": 3918735682,
+    "expected": 3971961023
+  },
+  {
+    "operation": 2,
+    "left": 3789648351,
+    "right": 2686619730,
+    "expected": 3978876449
+  },
+  {
+    "operation": 2,
+    "left": 2375356968,
+    "right": 2620043715,
+    "expected": 3123954194
+  },
+  {
+    "operation": 2,
+    "left": 2602006743,
+    "right": 580878644,
+    "expected": 4066000562
+  },
+  {
+    "operation": 2,
+    "left": 1877163229,
+    "right": 26374052,
+    "expected": 11527072
+  },
+  {
+    "operation": 2,
+    "left": 1310326871,
+    "right": 2883899113,
+    "expected": 879832194
+  },
+  {
+    "operation": 2,
+    "left": 1085578648,
+    "right": 2591005266,
+    "expected": 654892063
+  },
+  {
+    "operation": 3,
+    "left": 0,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 0,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 0,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 0,
+    "right": 2147483647,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 0,
+    "right": 2147483648,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 0,
+    "right": 4294967295,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 0,
+    "right": 4294967294,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 0,
+    "right": 1431655765,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 0,
+    "right": 2863311530,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1,
+    "right": 2147483647,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1,
+    "right": 2147483648,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1,
+    "right": 4294967295,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1,
+    "right": 4294967294,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1,
+    "right": 1431655765,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1,
+    "right": 2863311530,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2,
+    "right": 2147483647,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2,
+    "right": 2147483648,
+    "expected": 1
+  },
+  {
+    "operation": 3,
+    "left": 2,
+    "right": 4294967295,
+    "expected": 1
+  },
+  {
+    "operation": 3,
+    "left": 2,
+    "right": 4294967294,
+    "expected": 1
+  },
+  {
+    "operation": 3,
+    "left": 2,
+    "right": 1431655765,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2,
+    "right": 2863311530,
+    "expected": 1
+  },
+  {
+    "operation": 3,
+    "left": 2147483647,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2147483647,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2147483647,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2147483647,
+    "right": 2147483647,
+    "expected": 1073741823
+  },
+  {
+    "operation": 3,
+    "left": 2147483647,
+    "right": 2147483648,
+    "expected": 1073741823
+  },
+  {
+    "operation": 3,
+    "left": 2147483647,
+    "right": 4294967295,
+    "expected": 2147483646
+  },
+  {
+    "operation": 3,
+    "left": 2147483647,
+    "right": 4294967294,
+    "expected": 2147483646
+  },
+  {
+    "operation": 3,
+    "left": 2147483647,
+    "right": 1431655765,
+    "expected": 715827882
+  },
+  {
+    "operation": 3,
+    "left": 2147483647,
+    "right": 2863311530,
+    "expected": 1431655764
+  },
+  {
+    "operation": 3,
+    "left": 2147483648,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2147483648,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2147483648,
+    "right": 2,
+    "expected": 1
+  },
+  {
+    "operation": 3,
+    "left": 2147483648,
+    "right": 2147483647,
+    "expected": 1073741823
+  },
+  {
+    "operation": 3,
+    "left": 2147483648,
+    "right": 2147483648,
+    "expected": 1073741824
+  },
+  {
+    "operation": 3,
+    "left": 2147483648,
+    "right": 4294967295,
+    "expected": 2147483647
+  },
+  {
+    "operation": 3,
+    "left": 2147483648,
+    "right": 4294967294,
+    "expected": 2147483647
+  },
+  {
+    "operation": 3,
+    "left": 2147483648,
+    "right": 1431655765,
+    "expected": 715827882
+  },
+  {
+    "operation": 3,
+    "left": 2147483648,
+    "right": 2863311530,
+    "expected": 1431655765
+  },
+  {
+    "operation": 3,
+    "left": 4294967295,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 4294967295,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 4294967295,
+    "right": 2,
+    "expected": 1
+  },
+  {
+    "operation": 3,
+    "left": 4294967295,
+    "right": 2147483647,
+    "expected": 2147483646
+  },
+  {
+    "operation": 3,
+    "left": 4294967295,
+    "right": 2147483648,
+    "expected": 2147483647
+  },
+  {
+    "operation": 3,
+    "left": 4294967295,
+    "right": 4294967295,
+    "expected": 4294967294
+  },
+  {
+    "operation": 3,
+    "left": 4294967295,
+    "right": 4294967294,
+    "expected": 4294967293
+  },
+  {
+    "operation": 3,
+    "left": 4294967295,
+    "right": 1431655765,
+    "expected": 1431655764
+  },
+  {
+    "operation": 3,
+    "left": 4294967295,
+    "right": 2863311530,
+    "expected": 2863311529
+  },
+  {
+    "operation": 3,
+    "left": 4294967294,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 4294967294,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 4294967294,
+    "right": 2,
+    "expected": 1
+  },
+  {
+    "operation": 3,
+    "left": 4294967294,
+    "right": 2147483647,
+    "expected": 2147483646
+  },
+  {
+    "operation": 3,
+    "left": 4294967294,
+    "right": 2147483648,
+    "expected": 2147483647
+  },
+  {
+    "operation": 3,
+    "left": 4294967294,
+    "right": 4294967295,
+    "expected": 4294967293
+  },
+  {
+    "operation": 3,
+    "left": 4294967294,
+    "right": 4294967294,
+    "expected": 4294967292
+  },
+  {
+    "operation": 3,
+    "left": 4294967294,
+    "right": 1431655765,
+    "expected": 1431655764
+  },
+  {
+    "operation": 3,
+    "left": 4294967294,
+    "right": 2863311530,
+    "expected": 2863311528
+  },
+  {
+    "operation": 3,
+    "left": 1431655765,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1431655765,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1431655765,
+    "right": 2,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 1431655765,
+    "right": 2147483647,
+    "expected": 715827882
+  },
+  {
+    "operation": 3,
+    "left": 1431655765,
+    "right": 2147483648,
+    "expected": 715827882
+  },
+  {
+    "operation": 3,
+    "left": 1431655765,
+    "right": 4294967295,
+    "expected": 1431655764
+  },
+  {
+    "operation": 3,
+    "left": 1431655765,
+    "right": 4294967294,
+    "expected": 1431655764
+  },
+  {
+    "operation": 3,
+    "left": 1431655765,
+    "right": 1431655765,
+    "expected": 477218588
+  },
+  {
+    "operation": 3,
+    "left": 1431655765,
+    "right": 2863311530,
+    "expected": 954437176
+  },
+  {
+    "operation": 3,
+    "left": 2863311530,
+    "right": 0,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2863311530,
+    "right": 1,
+    "expected": 0
+  },
+  {
+    "operation": 3,
+    "left": 2863311530,
+    "right": 2,
+    "expected": 1
+  },
+  {
+    "operation": 3,
+    "left": 2863311530,
+    "right": 2147483647,
+    "expected": 1431655764
+  },
+  {
+    "operation": 3,
+    "left": 2863311530,
+    "right": 2147483648,
+    "expected": 1431655765
+  },
+  {
+    "operation": 3,
+    "left": 2863311530,
+    "right": 4294967295,
+    "expected": 2863311529
+  },
+  {
+    "operation": 3,
+    "left": 2863311530,
+    "right": 4294967294,
+    "expected": 2863311528
+  },
+  {
+    "operation": 3,
+    "left": 2863311530,
+    "right": 1431655765,
+    "expected": 954437176
+  },
+  {
+    "operation": 3,
+    "left": 2863311530,
+    "right": 2863311530,
+    "expected": 1908874352
+  },
+  {
+    "operation": 3,
+    "left": 4175201447,
+    "right": 2204439860,
+    "expected": 2142968702
+  },
+  {
+    "operation": 3,
+    "left": 3372648102,
+    "right": 2696156133,
+    "expected": 2117172317
+  },
+  {
+    "operation": 3,
+    "left": 2145223642,
+    "right": 1751718089,
+    "expected": 874937292
+  },
+  {
+    "operation": 3,
+    "left": 4200241039,
+    "right": 4108029518,
+    "expected": 4017426206
+  },
+  {
+    "operation": 3,
+    "left": 2471785754,
+    "right": 1502794046,
+    "expected": 864869196
+  },
+  {
+    "operation": 3,
+    "left": 3861171930,
+    "right": 3435834680,
+    "expected": 3088812442
+  },
+  {
+    "operation": 3,
+    "left": 260599236,
+    "right": 3503661953,
+    "expected": 212586398
+  },
+  {
+    "operation": 3,
+    "left": 1725947448,
+    "right": 4205929720,
+    "expected": 1690167390
+  },
+  {
+    "operation": 3,
+    "left": 2941156840,
+    "right": 3677375819,
+    "expected": 2518235483
+  },
+  {
+    "operation": 3,
+    "left": 3762569261,
+    "right": 2144060449,
+    "expected": 1878285766
+  },
+  {
+    "operation": 3,
+    "left": 3684416776,
+    "right": 2267260184,
+    "expected": 1944958106
+  },
+  {
+    "operation": 3,
+    "left": 248033810,
+    "right": 186888823,
+    "expected": 10792805
+  },
+  {
+    "operation": 3,
+    "left": 1940719386,
+    "right": 3968178916,
+    "expected": 1793057133
+  },
+  {
+    "operation": 3,
+    "left": 768198480,
+    "right": 2678860009,
+    "expected": 479141293
+  },
+  {
+    "operation": 3,
+    "left": 2399476206,
+    "right": 3194305250,
+    "expected": 1784567591
+  },
+  {
+    "operation": 3,
+    "left": 157512196,
+    "right": 19261546,
+    "expected": 706391
+  },
+  {
+    "operation": 3,
+    "left": 2157555963,
+    "right": 675077587,
+    "expected": 339121947
+  },
+  {
+    "operation": 3,
+    "left": 1015066857,
+    "right": 4237103124,
+    "expected": 1001391315
+  },
+  {
+    "operation": 3,
+    "left": 258204458,
+    "right": 965223542,
+    "expected": 58027222
+  },
+  {
+    "operation": 3,
+    "left": 2287004911,
+    "right": 2995216484,
+    "expected": 1594907326
+  },
+  {
+    "operation": 3,
+    "left": 3240841177,
+    "right": 244784512,
+    "expected": 184706348
+  },
+  {
+    "operation": 3,
+    "left": 2474511408,
+    "right": 4055312058,
+    "expected": 2336435939
+  },
+  {
+    "operation": 3,
+    "left": 3126489857,
+    "right": 2875532434,
+    "expected": 2093222688
+  },
+  {
+    "operation": 3,
+    "left": 1992155057,
+    "right": 3750200724,
+    "expected": 1739473393
+  },
+  {
+    "operation": 3,
+    "left": 2886252724,
+    "right": 359468083,
+    "expected": 241565456
+  },
+  {
+    "operation": 3,
+    "left": 3940949702,
+    "right": 3918735682,
+    "expected": 3595729409
+  },
+  {
+    "operation": 3,
+    "left": 3789648351,
+    "right": 2686619730,
+    "expected": 2370528883
+  },
+  {
+    "operation": 3,
+    "left": 2375356968,
+    "right": 2620043715,
+    "expected": 1449030613
+  },
+  {
+    "operation": 3,
+    "left": 2602006743,
+    "right": 580878644,
+    "expected": 351911910
+  },
+  {
+    "operation": 3,
+    "left": 1877163229,
+    "right": 26374052,
+    "expected": 11527072
+  },
+  {
+    "operation": 3,
+    "left": 1310326871,
+    "right": 2883899113,
+    "expected": 879832194
+  },
+  {
+    "operation": 3,
+    "left": 1085578648,
+    "right": 2591005266,
+    "expected": 654892063
+  }
+]

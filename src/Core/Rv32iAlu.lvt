@@ -7,28 +7,23 @@ using Eccelerators.RiscV.Isa
  */
 component Rv32iAlu
 {
+	// ALU selectors shared with the control decoder; unknown selectors produce zero.
 	public const OP_ADD: int = 1
-
 	public const OP_SUB: int = 2
-
 	public const OP_SLL: int = 3
-
 	public const OP_SLT: int = 4
-
 	public const OP_SLTU: int = 5
-
 	public const OP_XOR: int = 6
-
 	public const OP_SRL: int = 7
-
 	public const OP_SRA: int = 8
-
 	public const OP_OR: int = 9
-
 	public const OP_AND: int = 10
-
 	public const OP_PASS_RIGHT: int = 11
 
+	/**
+	 * Calculates the selected 32-bit ALU result; shifts use the low five bits of rightValue.
+	 * Comparisons return zero or one; unknown operation selectors return zero. No state is changed.
+	 */
 	public fn Execute(operation: int, leftValue: uint, rightValue: uint) uint
 	{
 		var shiftAmount: int = (rightValue & (0x1f as uint)) as int

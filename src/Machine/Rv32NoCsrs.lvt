@@ -1,0 +1,25 @@
+namespace Eccelerators.RiscV.Machine
+
+/**
+ * Stateless termination for compositions without Zicsr. Rejects all CSR queries;
+ * the owning engine must disable CSR dispatch and bind a decoder without Zicsr.
+ */
+component Rv32NoCsrs : IRv32CsrPort
+{
+	// No CSR operation coverage or storage.
+	public const CAPABILITIES: uint = 0
+	public const TRAP_CAPABILITIES: uint = 0
+
+	/**
+	 * Constant outputs disappear when the engine omits the CSR path.
+	 */
+	process Drive[]()
+	{
+		readData = 0
+		illegal = 0b1
+		trapVector = 0
+		returnPc = 0
+		interruptEligible = 0b0
+		interruptCause = 0
+	}
+}

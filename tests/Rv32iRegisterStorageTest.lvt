@@ -18,9 +18,9 @@ component Rv32iRegisterStorageTest
 	 */
 	new()
 	{
-		this.arrayChecks = new RegisterStorageChecks<Rv32iRegisterStorage.Array>()
-		this.distributedRamChecks = new RegisterStorageChecks<Rv32iRegisterStorage.DistributedRam>()
-		this.blockRamChecks = new RegisterStorageChecks<Rv32iRegisterStorage.BlockRam>()
+		arrayChecks = new RegisterStorageChecks<Rv32iRegisterStorage.Array>()
+		distributedRamChecks = new RegisterStorageChecks<Rv32iRegisterStorage.DistributedRam>()
+		blockRamChecks = new RegisterStorageChecks<Rv32iRegisterStorage.BlockRam>()
 	}
 
 	/**
@@ -29,7 +29,7 @@ component Rv32iRegisterStorageTest
 	@Test
 	fn PreservesBehaviorWithArray()
 	{
-		this.arrayChecks.Check()
+		arrayChecks.Check()
 	}
 
 	/**
@@ -38,7 +38,7 @@ component Rv32iRegisterStorageTest
 	@Test
 	fn PreservesBehaviorWithDistributedRam()
 	{
-		this.distributedRamChecks.Check()
+		distributedRamChecks.Check()
 	}
 
 	/**
@@ -47,6 +47,6 @@ component Rv32iRegisterStorageTest
 	@Test
 	fn PreservesBehaviorWithBlockRam()
 	{
-		this.blockRamChecks.Check()
+		blockRamChecks.Check()
 	}
 }

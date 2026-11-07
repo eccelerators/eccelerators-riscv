@@ -7,20 +7,19 @@ using Eccelerators.RiscV.Isa
  */
 component Rv32iBranchUnit
 {
+	// Branch selectors; NONE and unknown selectors never redirect execution.
 	public const BRANCH_NONE: int = 0
-
 	public const BRANCH_BEQ: int = 1
-
 	public const BRANCH_BNE: int = 2
-
 	public const BRANCH_BLT: int = 3
-
 	public const BRANCH_BGE: int = 4
-
 	public const BRANCH_BLTU: int = 5
-
 	public const BRANCH_BGEU: int = 6
 
+	/**
+	 * Evaluates a decoded branch condition, including signed or unsigned comparisons.
+	 * BRANCH_NONE and unknown selectors return false; this helper does not modify PC.
+	 */
 	public fn IsTaken(branchKind: int, leftValue: uint, rightValue: uint) bool
 	{
 		if (branchKind == BRANCH_BEQ) {

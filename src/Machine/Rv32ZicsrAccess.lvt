@@ -1,0 +1,45 @@
+namespace Eccelerators.RiscV.Machine
+
+/**
+ * Context-free Zicsr access rules shared by sequential and pipeline engines.
+ * Inputs describe an already decoded CSR instruction: operation is its funct3,
+ * instruction retains the encoded rs1/zimm field, and destination is rd in 0..31.
+ * These calculations own no state and neither schedule nor commit an access.
+ */
+public class Rv32ZicsrAccess
+{
+	// Encoded operation and source fields used by all six CSR instruction forms.
+	const OPERATION_MASK: uint = 3
+	const SOURCE_SHIFT: int = 15
+	const SOURCE_MASK: uint = 31
+
+	/**
+	 * Selects the zero-extended zimm or the sampled integer register value.
+	 */
+	public static fn SelectOperand[](operation: uint, instruction: uint, registerValue: uint) uint
+	{
+		if ((operation & Rv32CsrOperations.IMMEDIATE_BIT) != 0) {
+			return (instruction >> SOURCE_SHIFT) & SOURCE_MASK
+		}
+
+		return registerValue
+	}
+
+	/**
+	 * CSRRW/CSRRWI suppress reads only for rd=x0; SET/CLEAR always request a read.
+	 */
+	public static fn RequiresRead[](operation: uint, destination: uint) bool
+	{
+		return (operation & OPERATION_MASK) != Rv32CsrOperations.WRITE || destination != 0
+	}
+
+	/**
+	 * WRITE always writes. SET/CLEAR suppress writes for encoded rs1=x0/zimm=0,
+	 * independently of the runtime value stored in a nonzero integer register.
+	 */
+	public static fn RequiresWrite[](operation: uint, instruction: uint) bool
+	{
+		return (operation & OPERATION_MASK) == Rv32CsrOperations.WRITE
+			|| ((instruction >> SOURCE_SHIFT) & SOURCE_MASK) != 0
+	}
+}

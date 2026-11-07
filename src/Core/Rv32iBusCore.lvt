@@ -7,89 +7,145 @@ using Eccelerators.RiscV.Bus
  *
  * Instruction execution is provided by Rv32iInjectedBusCore; this component
  * adds convenient program and data setup helpers for simple integrations.
+ * It owns both memories in the inherited clock/reset context. Serialize provisioning,
+ * reset and execution in one controlling process; scheduled calls complete before return.
  */
 component Rv32iBusCore
 {
+	// Owned instruction/data fixtures and the engine borrowing them.
 	instructionBus: Rv32SimpleInstructionRom
-
 	dataBus: Rv32SimpleDataRam
-
 	core: Rv32iInjectedBusCore
 
+	/**
+	 * Owns the processor and local fixtures in the inherited clock/reset context.
+	 * Construction initializes their state; provision executable content before Run or Step.
+	 */
 	new()
 	{
-		this.instructionBus = new Rv32SimpleInstructionRom()
-		this.dataBus = new Rv32SimpleDataRam()
-		this.core = new Rv32iInjectedBusCore(this.instructionBus, this.dataBus)
+		instructionBus = new Rv32SimpleInstructionRom()
+		dataBus = new Rv32SimpleDataRam()
+		core = new Rv32iInjectedBusCore(instructionBus, dataBus)
 	}
 
+	/**
+	 * Restores reset PC, clears integer registers and releases diagnostic halt.
+	 * Program and data memories are preserved; call only while execution is stopped.
+	 */
 	public fn Reset()
 	{
-		this.core.Reset()
+		core.Reset()
 	}
 
+	/**
+	 * Zeros all 64 program words before returning. Call only while execution is stopped.
+	 */
 	public fn ClearProgram()
 	{
-		this.instructionBus.Clear()
+		instructionBus.Clear()
 	}
 
+	/**
+	 * Zeros the 256-byte data fixture before returning. Call only while execution is stopped.
+	 */
 	public fn ClearData()
 	{
-		this.dataBus.Clear()
+		dataBus.Clear()
 	}
 
+	/**
+	 * Stores a word at instruction index 0..63; ignores indices outside that range.
+	 * Provision only while execution is stopped; this argument is a word index, not a byte address.
+	 */
 	public fn LoadInstruction(index: int, instruction: uint)
 	{
-		this.instructionBus.LoadInstruction(index, instruction)
+		instructionBus.LoadInstruction(index, instruction)
 	}
 
+	/**
+	 * Stores a byte at local RAM offset 0..255; ignores invalid offsets.
+	 * Serialize provisioning with CPU accesses; no bus address translation is applied.
+	 */
 	public fn LoadDataByte(address: int, value: byte)
 	{
-		this.dataBus.LoadDataByte(address, value)
+		dataBus.LoadDataByte(address, value)
 	}
 
+	/**
+	 * Returns the byte at local RAM offset 0..255, or zero for an invalid offset.
+	 * Read only after any concurrent CPU access has completed.
+	 */
 	public fn ReadDataByte(address: int) byte
 	{
-		return this.dataBus.ReadDataByte(address)
+		return dataBus.ReadDataByte(address)
 	}
 
+	/**
+	 * Returns x1..x31, or zero for x0 and invalid indices. Inspect after execution completes.
+	 */
 	public fn ReadRegister(index: int) uint
 	{
-		return this.core.ReadRegister(index)
+		return core.ReadRegister(index)
 	}
 
+	/**
+	 * Returns the current architectural PC in bytes; inspect after execution completes.
+	 */
 	public fn GetPc() uint
 	{
-		return this.core.GetPc()
+		return core.GetPc()
 	}
 
+	/**
+	 * Reports whether a diagnostic fault stopped instruction execution.
+	 */
 	public fn IsHalted() bool
 	{
-		return this.core.IsHalted()
+		return core.IsHalted()
 	}
 
+	/**
+	 * Returns the last diagnostic cause from Rv32iConstants, or TRAP_NONE after reset.
+	 * These reference-core codes are separate from machine mcause encodings.
+	 */
 	public fn GetTrapCause() int
 	{
-		return this.core.GetTrapCause()
+		return core.GetTrapCause()
 	}
 
+	/**
+	 * Returns the saved faulting PC in bytes, or zero after reset. Check IsHalted first.
+	 */
 	public fn GetTrapPc() uint
 	{
-		return this.core.GetTrapPc()
+		return core.GetTrapPc()
 	}
 
+	/**
+	 * Returns the last data transaction status from the borrowed or owned data provider.
+	 * This status is replaced by the next data transaction.
+	 */
 	public fn HasDataBusError() bool
 	{
-		return this.core.HasDataBusError()
+		return core.HasDataBusError()
 	}
 
+	/**
+	 * Executes at most maxSteps instruction attempts, stopping early on a diagnostic halt.
+	 * Nonpositive bounds do nothing. Provision memory first and serialize CPU control calls;
+	 * scheduled completion does not imply a fixed number of clock cycles.
+	 */
 	public fn Run(maxSteps: int)
 	{
-		this.core.Run(maxSteps)
+		core.Run(maxSteps)
 	}
 
+	/**
+	 * Executes one instruction attempt and returns after its effects or diagnostic fault.
+	 * Does nothing while halted. Provision memory first; do not overlap reset or other CPU calls.
+	 */
 	public fn Step()
 	{
-		this.core.Step()
+		core.Step()
 	}
 }

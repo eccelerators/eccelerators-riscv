@@ -1,0 +1,345 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+using Eccelerators.RiscV.Machine
+
+/**
+ * Instruction-level checks observe committed writes independently of CPU storage.
+ * Every wait is bounded so a stalled bus or controller fails the test.
+ */
+@Test
+component Rv32TimerInterruptTest
+{
+	// Owned platform, explicit execution composition and architectural scoreboard.
+	instructions: Rv32WordMemory<512, 9>
+	data: DelayedWordDevice
+	core: Rv32SequentialEngine<0, true, true, true, true>
+	registers: Rv32RegisterBank
+	baseDecoder: Rv32iZmmulDecoder
+	csrDecoder: Rv32ZicsrDecoder
+	decoder: Rv32MachineDecoder
+	integer: Rv32iIntegerUnit
+	multiplier: Rv32DspMultiplier
+	csrs: Rv32MachineCsrs<0, true>
+	observed: uint[32]
+	retireCount: uint
+	clearObservation: bool
+	cycles: uint
+	trapCount: uint
+	lastTrapPc: uint
+	lastTrapCause: uint
+	lastTrapValue: uint
+	tracePc: uint[512]
+	traceWord: uint[512]
+	traceRd: uint[512]
+	traceValue: uint[512]
+
+	/**
+	 * Creates distinct instruction and data providers in the test clock context.
+	 */
+	new()
+	{
+		instructions = new Rv32WordMemory<512, 9>()
+		data = new DelayedWordDevice()
+		registers = new Rv32RegisterBank()
+		baseDecoder = new Rv32iZmmulDecoder()
+		csrDecoder = new Rv32ZicsrDecoder(baseDecoder)
+		decoder = new Rv32MachineDecoder(csrDecoder)
+		integer = new Rv32iIntegerUnit()
+		multiplier = new Rv32DspMultiplier()
+		csrs = new Rv32MachineCsrs<0, true>()
+		core = new Rv32SequentialEngine<0, true, true, true, true>(registers, instructions, data, decoder, integer, multiplier, csrs)
+	}
+
+	/**
+	 * Samples retirement every clock; tests never read a CPU-private register array.
+	 */
+	process Observe()
+	{
+		state {
+			cycles++
+
+			assert !(core.trapped == 0b1 && core.retired == 0b1)
+
+			if (clearObservation) {
+				trapCount = 0
+			} elif (core.trapped == 0b1) {
+				trapCount++
+				lastTrapPc = core.trapPc as uint
+				lastTrapCause = core.trapCause as uint
+				lastTrapValue = core.trapValue as uint
+			}
+
+			if (clearObservation) {
+				retireCount = 0
+			} elif (core.retired == 0b1) {
+				assert retireCount < 512
+				tracePc[retireCount] = core.retiredPc as uint
+				traceWord[retireCount] = core.retiredInstruction as uint
+				traceRd[retireCount] = core.retiredRd as uint
+				traceValue[retireCount] = core.retiredValue as uint
+				retireCount++
+
+				if (core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	/**
+	 * Programs one word with the CPU paused; writes are sampled once.
+	 */
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			instructions.programWrite = 0b1
+			instructions.programIndex = index as logic[9]
+			instructions.programData = word as logic[32]
+		}
+
+		state {
+			instructions.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Initializes every data location that a vector can read before execution.
+	 */
+	fn Prepare()
+	{
+		core.run = 0b0
+		csrs.timerPending = 0b0
+		Simulation.Wait(40)
+		assert core.idle == 0b1
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		var elapsed: uint = 0
+
+		while (core.restartAck != ticket && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.restartAck == ticket
+		clearObservation = true
+		Simulation.Wait(4)
+		clearObservation = false
+
+		data.clear = 0b1
+		data.releaseResponse = 0b0
+		Simulation.Wait(4)
+		data.clear = 0b0
+
+		assert core.idle == 0b1
+	}
+
+	/**
+	 * Steps one attempt through retirement or trap entry, leaving the handler paused.
+	 */
+	fn Step()
+	{
+		core.stepRequest = ~core.stepRequest
+		var elapsed: uint = 0
+
+		while (core.stepAck != core.stepRequest && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.stepAck == core.stepRequest
+		Simulation.Wait(3)
+		assert core.idle == 0b1 && core.halted == 0b0
+	}
+
+	/**
+	 * Installs a handler that records state and returns to the untouched resume PC.
+	 * Foreground enables MTIE then global MIE and increments x5 at PC 20.
+	 */
+	fn Program()
+	{
+		Load(0, 0x10000093)
+		Load(1, 0x30509073)
+		Load(2, 0x08000113)
+		Load(3, 0x30411073)
+		Load(4, 0x30046073)
+		Load(5, 0x00128293)
+		Load(6, 0x00128293)
+		Load(7, 0x0000006f)
+		Load(64, 0x34102573)
+		Load(65, 0x342025f3)
+		Load(66, 0x34302673)
+		Load(67, 0x300026f3)
+		Load(68, 0x34402773)
+		Load(69, 0x30200073)
+	}
+
+	/**
+	 * Executes setup through the global enable write, remaining paused at PC 20.
+	 */
+	fn Enable()
+	{
+		for (var index = 0; index < 5; index++) {
+			Step()
+		}
+
+		assert core.pc == 20 && retireCount == 5
+	}
+
+	/**
+	 * Reads the saved machine state and performs one MRET without advancing mepc.
+	 */
+	fn Return()
+	{
+		for (var index = 0; index < 6; index++) {
+			Step()
+		}
+	}
+
+	/**
+	 * Pending remains visible while masked; a step accepts an interrupt without retirement.
+	 */
+	@Test
+	fn MasksPauseEntryAndReturn()
+	{
+		Prepare()
+		Program()
+		csrs.timerPending = 0b1
+		Enable()
+		assert trapCount == 0
+		Simulation.Wait(30)
+		assert core.pc == 20 && trapCount == 0
+		Step()
+		assert trapCount == 1 && retireCount == 5 && core.pc == 256
+		assert lastTrapPc == 20 && lastTrapCause == 0x80000007 && lastTrapValue == 0
+		Simulation.Wait(20)
+		assert trapCount == 1 && core.pc == 256
+		Return()
+		assert observed[10] == 20 && observed[11] == 0x80000007
+		assert observed[12] == 0 && observed[13] == 0x1880 && observed[14] == 0x80
+		assert core.pc == 20 && retireCount == 11
+		Step()
+		assert trapCount == 2 && retireCount == 11 && core.pc == 256
+		csrs.timerPending = 0b0
+		Return()
+		Step()
+		assert observed[5] == 1 && core.pc == 24 && trapCount == 2
+	}
+
+	/**
+	 * MTIE is independently writable and unsupported bits stay zero; MIP is hardware-owned.
+	 */
+	@Test
+	fn CsrMasksAndPendingOwnership()
+	{
+		Prepare()
+		Program()
+		Load(2, 0xfff00113)
+		Load(3, 0x30411073)
+		Load(4, 0x304021f3)
+		Load(5, 0x34402273)
+		Load(6, 0x34411073)
+		Load(7, 0x34402373)
+		Load(8, 0x30413073)
+		Load(9, 0x30046073)
+		Load(10, 0x00128293)
+		csrs.timerPending = 0b1
+
+		for (var index = 0; index < 11; index++) {
+			Step()
+		}
+
+		assert observed[3] == 0x80 && observed[4] == 0x80 && observed[6] == 0x80
+		assert observed[5] == 1 && trapCount == 0
+	}
+
+	/**
+	 * Once a store has issued, finish exactly once before accepting the pending interrupt.
+	 */
+	@Test
+	fn DelayedStoreDrainsBeforeInterrupt()
+	{
+		Prepare()
+		Program()
+		Load(5, 0x00202023)
+		Enable()
+		core.stepRequest = ~core.stepRequest
+		var elapsed: uint = 0
+
+		while (data.accepted == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert data.accepted == 0b1
+		csrs.timerPending = 0b1
+		Simulation.Wait(30)
+		assert trapCount == 0 && retireCount == 5 && data.writes == 0
+		data.releaseResponse = 0b1
+		Simulation.Wait(30)
+		assert core.idle == 0b1 && core.pc == 24 && data.writes == 1 && retireCount == 6
+		Step()
+		assert lastTrapPc == 24 && trapCount == 1 && data.writes == 1
+	}
+
+	/**
+	 * A failing outstanding transaction enters its synchronous exception before a timer.
+	 */
+	@Test
+	fn DelayedErrorWinsAndRestartClearsEnable()
+	{
+		Prepare()
+		Program()
+		Load(5, 0x00402303)
+		Enable()
+		core.stepRequest = ~core.stepRequest
+		var elapsed: uint = 0
+
+		while (data.accepted == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert data.accepted == 0b1
+		csrs.timerPending = 0b1
+		data.releaseResponse = 0b1
+		Simulation.Wait(40)
+		assert trapCount == 1 && lastTrapCause == 5 && lastTrapPc == 20
+		assert lastTrapValue == 4 && retireCount == 5 && data.reads == 0
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		Simulation.Wait(50)
+		assert core.restartAck == ticket && core.pc == 0
+		Load(0, 0x304021f3)
+		Load(1, 0x34402273)
+		Step()
+		Step()
+		assert observed[3] == 0 && observed[4] == 0x80 && trapCount == 1
+	}
+
+	/**
+	 * Disabling MIE after issue prevents delivery at the following boundary.
+	 */
+	@Test
+	fn DisableAtCommitUsesNewStatus()
+	{
+		Prepare()
+		Program()
+		Load(5, 0x30047073)
+		Load(6, 0x00128293)
+		Enable()
+		core.stepRequest = ~core.stepRequest
+		Simulation.Wait(5)
+		csrs.timerPending = 0b1
+		Simulation.Wait(25)
+		assert trapCount == 0 && core.pc == 24
+		Step()
+		assert trapCount == 0 && observed[5] == 1
+	}
+}

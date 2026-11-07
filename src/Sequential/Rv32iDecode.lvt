@@ -1,0 +1,230 @@
+namespace Eccelerators.RiscV.Sequential
+
+using Eccelerators.RiscV.Contracts
+using Eccelerators.RiscV.Isa
+
+/**
+ * Pure RV32I decode. The packed control format carries register indices, operand-use
+ * flags and an operation byte; zero denotes an illegal instruction. No scheduled
+ * getters or mutable decoder state. Reserved funct3/funct7 values remain illegal.
+ */
+public class Rv32iDecode
+{
+	// Complete base decode family coverage, checked at composition construction.
+	public const CAPABILITIES: uint = Rv32iOperations.RV32I_CAPABILITIES
+
+	/**
+	 * Maps legal funct3/funct7 combinations to an integer operation or 255.
+	 */
+	public static fn Alu[](funct3: int, funct7: int, immediate: bool) uint
+	{
+		if (!immediate && funct7 != Rv32iConstants.FUNCT7_BASE && funct7 != Rv32iConstants.FUNCT7_SUB_SRA) {
+			return Rv32iOperations.INVALID_ALU
+		}
+
+		match (funct3)
+		{
+			Rv32iConstants.FUNCT3_ADD_SUB =>
+			{
+				if (!immediate && funct7 == Rv32iConstants.FUNCT7_SUB_SRA) {
+					return Rv32iOperations.SUB
+				}
+
+				return Rv32iOperations.ADD
+			}
+			Rv32iConstants.FUNCT3_SRL_SRA =>
+			{
+				if (funct7 == Rv32iConstants.FUNCT7_BASE) {
+					return Rv32iOperations.SRL
+				}
+
+				if (funct7 == Rv32iConstants.FUNCT7_SUB_SRA) {
+					return Rv32iOperations.SRA
+				}
+
+				return Rv32iOperations.INVALID_ALU
+			}
+			_ =>
+			{
+				if ((!immediate || funct3 == Rv32iConstants.FUNCT3_SLL) && funct7 != Rv32iConstants.FUNCT7_BASE) {
+					return Rv32iOperations.INVALID_ALU
+				}
+			}
+		}
+
+		match (funct3)
+		{
+			Rv32iConstants.FUNCT3_SLL =>
+			{
+				return Rv32iOperations.SLL
+			}
+			Rv32iConstants.FUNCT3_SLT =>
+			{
+				return Rv32iOperations.SLT
+			}
+			Rv32iConstants.FUNCT3_SLTU =>
+			{
+				return Rv32iOperations.SLTU
+			}
+			Rv32iConstants.FUNCT3_XOR =>
+			{
+				return Rv32iOperations.XOR
+			}
+			Rv32iConstants.FUNCT3_OR =>
+			{
+				return Rv32iOperations.OR
+			}
+			Rv32iConstants.FUNCT3_AND =>
+			{
+				return Rv32iOperations.AND
+			}
+			_ =>
+			{
+				return Rv32iOperations.INVALID_ALU
+			}
+		}
+	}
+
+	/**
+	 * Decodes base instructions only; unsupported extensions return zero.
+	 */
+	public static fn Control[](instruction: uint) uint
+	{
+		var opcode = (instruction & 127) as int
+		var funct3 = ((instruction >> 12) & 7) as int
+		var funct7 = (instruction >> 25) as int
+		var kind = Rv32iOperations.ILLEGAL
+		var arithmeticOperation: uint = Rv32iOperations.ADD
+		var source1 = false
+		var source2 = false
+		var destination = false
+
+		match (opcode)
+		{
+			Rv32iConstants.OPCODE_LUI =>
+			{
+				kind = Rv32iOperations.LUI
+				destination = true
+			}
+			Rv32iConstants.OPCODE_AUIPC =>
+			{
+				kind = Rv32iOperations.AUIPC
+				destination = true
+			}
+			Rv32iConstants.OPCODE_JAL =>
+			{
+				kind = Rv32iOperations.JAL
+				destination = true
+			}
+			Rv32iConstants.OPCODE_JALR =>
+			{
+				if (funct3 == 0) {
+					kind = Rv32iOperations.JALR
+					source1 = true
+					destination = true
+				}
+			}
+			Rv32iConstants.OPCODE_BRANCH =>
+			{
+				if (funct3 == 0 || funct3 == 1 || funct3 >= 4) {
+					kind = Rv32iOperations.BRANCH
+					source1 = true
+					source2 = true
+				}
+			}
+			Rv32iConstants.OPCODE_LOAD =>
+			{
+				if (funct3 <= 2 || funct3 == 4 || funct3 == 5) {
+					kind = Rv32iOperations.LOAD
+					source1 = true
+					destination = true
+				}
+			}
+			Rv32iConstants.OPCODE_STORE =>
+			{
+				if (funct3 <= 2) {
+					kind = Rv32iOperations.STORE
+					source1 = true
+					source2 = true
+				}
+			}
+			Rv32iConstants.OPCODE_OP_IMM =>
+			{
+				kind = Rv32iOperations.IMMEDIATE
+				arithmeticOperation = Alu(funct3, funct7, true)
+				source1 = true
+				destination = true
+			}
+			Rv32iConstants.OPCODE_OP =>
+			{
+				kind = Rv32iOperations.REGISTER
+				arithmeticOperation = Alu(funct3, funct7, false)
+				source1 = true
+				source2 = true
+				destination = true
+			}
+			Rv32iConstants.OPCODE_MISC_MEM =>
+			{
+				if (funct3 == 0) {
+					kind = Rv32iOperations.FENCE
+				}
+			}
+			Rv32iConstants.OPCODE_SYSTEM =>
+			{
+				if (instruction == Rv32iOperations.ECALL_ENCODING) {
+					kind = Rv32iOperations.ECALL
+				} elif (instruction == Rv32iOperations.EBREAK_ENCODING) {
+					kind = Rv32iOperations.EBREAK
+				}
+			}
+			_ =>
+			{
+				kind = Rv32iOperations.ILLEGAL
+			}
+		}
+
+		if (kind == Rv32iOperations.ILLEGAL || arithmeticOperation == Rv32iOperations.INVALID_ALU) {
+			return 0
+		}
+
+		return RvDecoded.Pack((kind << Rv32iOperations.KIND_SHIFT) | arithmeticOperation, (instruction >> 7) & 31,
+			(instruction >> 15) & 31, (instruction >> 20) & 31,
+			source1, source2, destination, true)
+	}
+
+	/**
+	 * Extracts the immediate for each encoding family; register operations ignore it.
+	 */
+	public static fn Immediate[](instruction: uint) uint
+	{
+		var opcode = (instruction & 127) as int
+
+		match (opcode)
+		{
+			Rv32iConstants.OPCODE_LUI, Rv32iConstants.OPCODE_AUIPC =>
+			{
+				return instruction & 0xfffff000
+			}
+			Rv32iConstants.OPCODE_JAL =>
+			{
+				var value = ((instruction >> 31) << 20) | (instruction & 0xff000)
+					| (((instruction >> 20) & 1) << 11) | (((instruction >> 21) & 1023) << 1)
+				return Rv32iSemantics.SignExtend(value, 21)
+			}
+			Rv32iConstants.OPCODE_BRANCH =>
+			{
+				var value = ((instruction >> 31) << 12) | (((instruction >> 7) & 1) << 11)
+					| (((instruction >> 25) & 63) << 5) | (((instruction >> 8) & 15) << 1)
+				return Rv32iSemantics.SignExtend(value, 13)
+			}
+			Rv32iConstants.OPCODE_STORE =>
+			{
+				return Rv32iSemantics.SignExtend(((instruction >> 25) << 5) | ((instruction >> 7) & 31), 12)
+			}
+			_ =>
+			{
+				return Rv32iSemantics.SignExtend(instruction >> 20, 12)
+			}
+		}
+	}
+}

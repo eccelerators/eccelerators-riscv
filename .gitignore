@@ -1,5 +1,6 @@
 .livt/
 out/
+__pycache__/
 .codex/
 .agents/
 .vscode/

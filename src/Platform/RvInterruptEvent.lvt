@@ -1,0 +1,44 @@
+namespace Eccelerators.RiscV.Platform
+
+/**
+ * Captures same-clock events until explicitly cleared by their platform owner.
+ * A new event wins over clear on the same edge. Repeated events coalesce while
+ * pending; use a counter/FIFO when each occurrence must be counted. Hardware
+ * reset clears pending. This component is not an asynchronous pulse synchronizer.
+ */
+component RvInterruptEvent
+{
+	// One-edge producer event, consumer acknowledgement and retained pending state.
+	public event: in logic
+	public clear: in logic
+	public pending: out logic
+
+	// Pure boundary views prevent scheduled port-access publication latency.
+	sampledEvent: logic
+	sampledClear: logic
+	retained: logic
+
+	/**
+	 * Exposes the retained level and samples source controls without extra edges.
+	 */
+	process Connect[]()
+	{
+		sampledEvent = event
+		sampledClear = clear
+		pending = retained
+	}
+
+	/**
+	 * Retains work through masking/pause and concurrent service of an earlier event.
+	 */
+	process Capture()
+	{
+		state {
+			if (sampledEvent == 0b1) {
+				retained = 0b1
+			} elif (sampledClear == 0b1) {
+				retained = 0b0
+			}
+		}
+	}
+}

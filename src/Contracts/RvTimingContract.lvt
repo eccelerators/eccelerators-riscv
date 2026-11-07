@@ -1,0 +1,30 @@
+namespace Eccelerators.RiscV.Contracts
+
+/**
+ * Elaboration-only compatibility check for serialized, exclusively controlled units.
+ * READ_PORTS counts independently usable logical read ports, not FPGA RAM primitives.
+ * A blocking call has one outstanding operation and reset/flush must wait for return.
+ * Side-effecting units belong at an engine-controlled memory/commit boundary.
+ */
+component RvTimingContract<READ_PORTS: int = 1, REQUIRED_READS: int = 2,
+	OPERAND_STALLS: bool = true, VARIABLE_LATENCY: bool = true,
+	COMPLETION_STALLS: bool = true, OUTSTANDING: int = 1,
+	UNIT_CAPACITY: int = 1, DRAIN_REQUIRED: bool = true,
+	ENGINE_DRAINS: bool = true, EXCLUSIVE: bool = true,
+	SIDE_EFFECTS: bool = false>
+{
+	static assert READ_PORTS > 0 && REQUIRED_READS > 0, "Invalid register port requirement"
+	static assert READ_PORTS >= REQUIRED_READS || OPERAND_STALLS, "Register ports require operand stalls"
+	static assert !VARIABLE_LATENCY || COMPLETION_STALLS, "Variable latency requires completion stalls"
+	static assert OUTSTANDING > 0 && OUTSTANDING <= UNIT_CAPACITY, "Outstanding requests exceed unit capacity"
+	static assert !DRAIN_REQUIRED || ENGINE_DRAINS, "Reset or flush requires draining"
+	static assert EXCLUSIVE, "Mutable unit requires exclusive control"
+	static assert !SIDE_EFFECTS, "Execution provider must not own architectural or MMIO effects"
+
+	/**
+	 * Checks compatibility without runtime negotiation, state or clock cycles.
+	 */
+	new()
+	{
+	}
+}

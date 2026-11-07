@@ -1,0 +1,112 @@
+namespace Eccelerators.RiscV.Platform
+
+using Eccelerators.RiscV.Sequential
+
+/**
+ * Platform-owned level aggregator in the inherited clock/reset domain. Inputs
+ * must already be synchronous and remain asserted until their device is serviced.
+ * BASE+0 reads raw pending, +4 reads/writes enables, +8 reads enabled pending.
+ * Read-only or invalid writes fail before effects. Byte masks apply to enables.
+ * A read snapshots pre-edge state; completion stays held until request falls.
+ * Reset clears enables/response, never acknowledges devices. CPU pause/restart
+ * does not change state. Firmware chooses source service order from the bitmap.
+ */
+component RvExternalInterrupts<SOURCES: int = 2, BASE: uint = 0x40000200> : IRv32MemoryPort
+{
+	static assert SOURCES >= 1 && SOURCES <= 32, "Source count must be 1..32"
+	static assert (BASE & 15) == 0 && BASE <= 0xfffffff0, "Interrupt base must fit aligned window"
+
+	// Register offsets and supported bits.
+	public const PENDING: uint = 0
+	public const ENABLE: uint = 4
+	public const ACTIVE: uint = 8
+	const SOURCE_MASK: uint = 0xffffffff >> (32 - SOURCES)
+
+	// Synchronous device levels and combined enabled interrupt output.
+	public sources: in logic[SOURCES]
+	public externalPending: out logic
+
+	// Single-writer enable and held transaction state.
+	enabled: uint
+	completed: bool
+	responseError: logic
+	responseData: logic[32]
+
+	// Pure request view and write-lane expansion.
+	offset: uint
+	validAccess: bool
+	mask: uint
+	selected: uint
+
+	/**
+	 * Exposes live levels independently of CPU masks and a held read snapshot.
+	 */
+	process Decode[]()
+	{
+		ready = completed as logic
+		error = responseError
+		readData = responseData
+		externalPending = (((sources as uint) & enabled) != 0) as logic
+		offset = (address as uint) - BASE
+		validAccess = (offset == PENDING || offset == ENABLE || offset == ACTIVE)
+			&& (write == 0b0 || offset == ENABLE)
+		mask = 0
+
+		if (((byteEnable as uint) & 1) != 0) {
+			mask = mask | ((255 as uint) << 0)
+		}
+
+		if (((byteEnable as uint) & 2) != 0) {
+			mask = mask | ((255 as uint) << 8)
+		}
+
+		if (((byteEnable as uint) & 4) != 0) {
+			mask = mask | ((255 as uint) << 16)
+		}
+
+		if (((byteEnable as uint) & 8) != 0) {
+			mask = mask | ((255 as uint) << 24)
+		}
+
+		selected = 0
+
+		match (offset)
+		{
+			PENDING =>
+			{
+				selected = sources as uint
+			}
+			ENABLE =>
+			{
+				selected = enabled
+			}
+			ACTIVE =>
+			{
+				selected = (sources as uint) & enabled
+			}
+			_ =>
+			{
+			}
+		}
+	}
+
+	/**
+	 * Commits each enable update once; accepting an interrupt has no device effects.
+	 */
+	process Advance()
+	{
+		state {
+			if (!completed && request == 0b1) {
+				completed = true
+				responseError = (!validAccess) as logic
+				responseData = selected as logic[32]
+
+				if (validAccess && write == 0b1) {
+					enabled = ((enabled & ~mask) | ((writeData as uint) & mask)) & SOURCE_MASK
+				}
+			} elif (completed && request == 0b0) {
+				completed = false
+			}
+		}
+	}
+}

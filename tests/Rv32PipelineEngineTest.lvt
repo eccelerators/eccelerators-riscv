@@ -1,0 +1,1086 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+
+/**
+ * Instruction-level checks observe committed writes independently of CPU storage.
+ * Every wait is bounded so a stalled bus or controller fails the test.
+ */
+@Test
+component Rv32PipelineEngineTest
+{
+	// Owned platform, preset and architectural observation scoreboard.
+	instructions: Rv32WordMemory<256, 8>
+	data: Rv32WordMemory<256, 8>
+	core: Rv32iPipelineCore
+	observed: uint[32]
+	retireCount: uint
+	clearObservation: bool
+	cycles: uint
+	tracePc: uint[512]
+	traceWord: uint[512]
+	traceRd: uint[512]
+	traceValue: uint[512]
+
+	/**
+	 * Creates distinct instruction and data providers in the test clock context.
+	 */
+	new()
+	{
+		instructions = new Rv32WordMemory<256, 8>()
+		data = new Rv32WordMemory<256, 8>()
+		core = new Rv32iPipelineCore(instructions, data)
+	}
+
+	/**
+	 * Samples retirement every clock; tests never read a CPU-private register array.
+	 */
+	process Observe()
+	{
+		state {
+			cycles++
+
+			if (clearObservation) {
+				retireCount = 0
+			} elif (core.retired == 0b1) {
+				assert retireCount < 512
+				tracePc[retireCount] = core.retiredPc as uint
+				traceWord[retireCount] = core.retiredInstruction as uint
+				traceRd[retireCount] = core.retiredRd as uint
+				traceValue[retireCount] = core.retiredValue as uint
+				retireCount++
+
+				if (core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	/**
+	 * Programs one word with the CPU paused; writes are sampled once.
+	 */
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			instructions.programWrite = 0b1
+			instructions.programIndex = index as logic[8]
+			instructions.programData = word as logic[32]
+		}
+
+		state {
+			instructions.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Runs to a fault stop and bounds uninterrupted cycles per retired instruction.
+	 */
+	fn RunToStop(cause: uint)
+	{
+		var start = cycles
+		core.run = 0b1
+
+		while (core.halted == 0b0 && cycles - start < 20000) {
+			state {
+			}
+		}
+
+		core.run = 0b0
+		assert core.halted == 0b1
+		assert core.faultCause as uint == cause
+		assert cycles - start < retireCount * 50 + 50
+	}
+
+	/**
+	 * Exercises dependent arithmetic, x0 suppression and exact retirement count.
+	 */
+	@Test
+	fn TestDependentArithmetic()
+	{
+		Prepare()
+		Load(0, 0x00500093)
+		Load(1, 0x00308113)
+		Load(2, 0x002081b3)
+		Load(3, 0x07b00013)
+		Load(4, 0x00000213)
+		Load(5, 0x00100073)
+		RunToStop(3)
+		assert observed[1] == 5
+		assert observed[2] == 8
+		assert observed[3] == 13
+		assert observed[4] == 0
+		assert retireCount == 5
+		assert core.pc == 20
+	}
+
+	/**
+	 * Initializes every data location that a vector can read before execution.
+	 */
+	fn Prepare()
+	{
+		core.run = 0b0
+		Simulation.Wait(40)
+		assert core.idle == 0b1
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		var elapsed: uint = 0
+
+		while (core.restartAck != ticket && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.restartAck == ticket
+		clearObservation = true
+		Simulation.Wait(4)
+		clearObservation = false
+
+		for (var index: uint = 0; index < 256; index++) {
+			state {
+				data.programWrite = 0b1
+				data.programIndex = index as logic[8]
+				data.programData = 0
+			}
+		}
+
+		state {
+			data.programWrite = 0b0
+		}
+
+		assert core.idle == 0b1
+	}
+
+	/**
+	 * Compares one ordered committed event with independently computed constants.
+	 */
+	fn CheckRetirement(index: uint, pc: uint, word: uint, rd: uint, value: uint)
+	{
+		assert tracePc[index] == pc
+		assert traceWord[index] == word
+		assert traceRd[index] == rd
+		assert traceValue[index] == value
+	}
+
+	// Directed and deterministic randomized instruction/retirement vectors.
+
+	/**
+	 * Independent architectural vector: IntegerAndFence.
+	 */
+	@Test
+	fn TestIntegerAndFence()
+	{
+		Prepare()
+		Load(0, 0xfff00093)
+		Load(1, 0x01f00113)
+		Load(2, 0x800001b7)
+		Load(3, 0x12345217)
+		Load(4, 0x07b00013)
+		Load(5, 0x00208233)
+		Load(6, 0xfff18613)
+		Load(7, 0x002092b3)
+		Load(8, 0x01f19693)
+		Load(9, 0x0020a333)
+		Load(10, 0xfff1a713)
+		Load(11, 0x0020b3b3)
+		Load(12, 0xfff1b793)
+		Load(13, 0x0020c433)
+		Load(14, 0xfff1c813)
+		Load(15, 0x0020d4b3)
+		Load(16, 0x01f1d893)
+		Load(17, 0x0020e533)
+		Load(18, 0xfff1e913)
+		Load(19, 0x0020f5b3)
+		Load(20, 0xfff1f993)
+		Load(21, 0x40118a33)
+		Load(22, 0x4021dab3)
+		Load(23, 0x41f1db13)
+		Load(24, 0x4001db93)
+		Load(25, 0x02000c13)
+		Load(26, 0x01809cb3)
+		Load(27, 0x4181dd33)
+		Load(28, 0x0ff0000f)
+		Load(29, 0x8330808f)
+		Load(30, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 120
+		assert core.faultValue == 0x00000078
+		assert retireCount == 30
+		CheckRetirement(0, 0, 0xfff00093, 1, 0xffffffff)
+		CheckRetirement(1, 4, 0x01f00113, 2, 0x0000001f)
+		CheckRetirement(2, 8, 0x800001b7, 3, 0x80000000)
+		CheckRetirement(3, 12, 0x12345217, 4, 0x1234500c)
+		CheckRetirement(4, 16, 0x07b00013, 0, 0x00000000)
+		CheckRetirement(5, 20, 0x00208233, 4, 0x0000001e)
+		CheckRetirement(6, 24, 0xfff18613, 12, 0x7fffffff)
+		CheckRetirement(7, 28, 0x002092b3, 5, 0x80000000)
+		CheckRetirement(8, 32, 0x01f19693, 13, 0x00000000)
+		CheckRetirement(9, 36, 0x0020a333, 6, 0x00000001)
+		CheckRetirement(10, 40, 0xfff1a713, 14, 0x00000001)
+		CheckRetirement(11, 44, 0x0020b3b3, 7, 0x00000000)
+		CheckRetirement(12, 48, 0xfff1b793, 15, 0x00000001)
+		CheckRetirement(13, 52, 0x0020c433, 8, 0xffffffe0)
+		CheckRetirement(14, 56, 0xfff1c813, 16, 0x7fffffff)
+		CheckRetirement(15, 60, 0x0020d4b3, 9, 0x00000001)
+		CheckRetirement(16, 64, 0x01f1d893, 17, 0x00000001)
+		CheckRetirement(17, 68, 0x0020e533, 10, 0xffffffff)
+		CheckRetirement(18, 72, 0xfff1e913, 18, 0xffffffff)
+		CheckRetirement(19, 76, 0x0020f5b3, 11, 0x0000001f)
+		CheckRetirement(20, 80, 0xfff1f993, 19, 0x80000000)
+		CheckRetirement(21, 84, 0x40118a33, 20, 0x80000001)
+		CheckRetirement(22, 88, 0x4021dab3, 21, 0xffffffff)
+		CheckRetirement(23, 92, 0x41f1db13, 22, 0xffffffff)
+		CheckRetirement(24, 96, 0x4001db93, 23, 0x80000000)
+		CheckRetirement(25, 100, 0x02000c13, 24, 0x00000020)
+		CheckRetirement(26, 104, 0x01809cb3, 25, 0xffffffff)
+		CheckRetirement(27, 108, 0x4181dd33, 26, 0x80000000)
+		CheckRetirement(28, 112, 0x0ff0000f, 0, 0x00000000)
+		CheckRetirement(29, 116, 0x8330808f, 0, 0x00000000)
+	}
+
+	/**
+	 * Independent architectural vector: RandomDependencies.
+	 */
+	@Test
+	fn TestRandomDependencies()
+	{
+		Prepare()
+		Load(0, 0xf0900093)
+		Load(1, 0xd1800113)
+		Load(2, 0x7f700193)
+		Load(3, 0xdf600213)
+		Load(4, 0xf6a00293)
+		Load(5, 0x18200313)
+		Load(6, 0x0c900393)
+		Load(7, 0x63100413)
+		Load(8, 0x2e500493)
+		Load(9, 0xe9b00513)
+		Load(10, 0x72400593)
+		Load(11, 0x2b600613)
+		Load(12, 0xb0d00693)
+		Load(13, 0xb0f00713)
+		Load(14, 0x20300793)
+		Load(15, 0x6bf00813)
+		Load(16, 0xf6500893)
+		Load(17, 0xc0f00913)
+		Load(18, 0x37000993)
+		Load(19, 0x3e000a13)
+		Load(20, 0x0d300a93)
+		Load(21, 0x23a00b13)
+		Load(22, 0xb4a00b93)
+		Load(23, 0xb9100c13)
+		Load(24, 0x3f200c93)
+		Load(25, 0xd6a00d13)
+		Load(26, 0x5ff00d93)
+		Load(27, 0xd2f00e13)
+		Load(28, 0x3e900e93)
+		Load(29, 0xcbc00f13)
+		Load(30, 0x3b300f93)
+		Load(31, 0x01b7a933)
+		Load(32, 0x009bcd33)
+		Load(33, 0x0132eeb3)
+		Load(34, 0x01a10b33)
+		Load(35, 0x01cc1533)
+		Load(36, 0x002477b3)
+		Load(37, 0x01617433)
+		Load(38, 0x01d89f33)
+		Load(39, 0x01f469b3)
+		Load(40, 0x0180e2b3)
+		Load(41, 0x0182c2b3)
+		Load(42, 0x40d107b3)
+		Load(43, 0x00d1aa33)
+		Load(44, 0x00e24633)
+		Load(45, 0x00d0f233)
+		Load(46, 0x00f6fdb3)
+		Load(47, 0x0136d4b3)
+		Load(48, 0x01c77e33)
+		Load(49, 0x0019c733)
+		Load(50, 0x0088fc33)
+		Load(51, 0x01c25c33)
+		Load(52, 0x018f2133)
+		Load(53, 0x01c545b3)
+		Load(54, 0x0005f3b3)
+		Load(55, 0x00336233)
+		Load(56, 0x00067533)
+		Load(57, 0x01006eb3)
+		Load(58, 0x00ee1e33)
+		Load(59, 0x00ea22b3)
+		Load(60, 0x00c04733)
+		Load(61, 0x00f67b33)
+		Load(62, 0x007d4b33)
+		Load(63, 0x005bb733)
+		Load(64, 0x01f4f3b3)
+		Load(65, 0x016471b3)
+		Load(66, 0x0005c4b3)
+		Load(67, 0x00dbf033)
+		Load(68, 0x004fbdb3)
+		Load(69, 0x014e89b3)
+		Load(70, 0x40ae58b3)
+		Load(71, 0x017c1333)
+		Load(72, 0x417207b3)
+		Load(73, 0x0173c433)
+		Load(74, 0x41128533)
+		Load(75, 0x00798833)
+		Load(76, 0x41a40cb3)
+		Load(77, 0x0061f8b3)
+		Load(78, 0x0151cd33)
+		Load(79, 0x41fa5f33)
+		Load(80, 0x000fb3b3)
+		Load(81, 0x001a8eb3)
+		Load(82, 0x007071b3)
+		Load(83, 0x01ccd933)
+		Load(84, 0x005f2fb3)
+		Load(85, 0x401c5db3)
+		Load(86, 0x019a42b3)
+		Load(87, 0x00eb9933)
+		Load(88, 0x019263b3)
+		Load(89, 0x00831cb3)
+		Load(90, 0x01672fb3)
+		Load(91, 0x0137c5b3)
+		Load(92, 0x01fdfbb3)
+		Load(93, 0x417d56b3)
+		Load(94, 0x01c9a4b3)
+		Load(95, 0x4157d233)
+		Load(96, 0x0134a2b3)
+		Load(97, 0x009baa33)
+		Load(98, 0x008596b3)
+		Load(99, 0x00774833)
+		Load(100, 0x01c4a733)
+		Load(101, 0x01447333)
+		Load(102, 0x016c80b3)
+		Load(103, 0x01e02533)
+		Load(104, 0x01192233)
+		Load(105, 0x40838233)
+		Load(106, 0x0028fcb3)
+		Load(107, 0x0086b1b3)
+		Load(108, 0x4059d733)
+		Load(109, 0x0079ccb3)
+		Load(110, 0x008675b3)
+		Load(111, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 444
+		assert core.faultValue == 0x000001bc
+		assert retireCount == 111
+		CheckRetirement(0, 0, 0xf0900093, 1, 0xffffff09)
+		CheckRetirement(1, 4, 0xd1800113, 2, 0xfffffd18)
+		CheckRetirement(2, 8, 0x7f700193, 3, 0x000007f7)
+		CheckRetirement(3, 12, 0xdf600213, 4, 0xfffffdf6)
+		CheckRetirement(4, 16, 0xf6a00293, 5, 0xffffff6a)
+		CheckRetirement(5, 20, 0x18200313, 6, 0x00000182)
+		CheckRetirement(6, 24, 0x0c900393, 7, 0x000000c9)
+		CheckRetirement(7, 28, 0x63100413, 8, 0x00000631)
+		CheckRetirement(8, 32, 0x2e500493, 9, 0x000002e5)
+		CheckRetirement(9, 36, 0xe9b00513, 10, 0xfffffe9b)
+		CheckRetirement(10, 40, 0x72400593, 11, 0x00000724)
+		CheckRetirement(11, 44, 0x2b600613, 12, 0x000002b6)
+		CheckRetirement(12, 48, 0xb0d00693, 13, 0xfffffb0d)
+		CheckRetirement(13, 52, 0xb0f00713, 14, 0xfffffb0f)
+		CheckRetirement(14, 56, 0x20300793, 15, 0x00000203)
+		CheckRetirement(15, 60, 0x6bf00813, 16, 0x000006bf)
+		CheckRetirement(16, 64, 0xf6500893, 17, 0xffffff65)
+		CheckRetirement(17, 68, 0xc0f00913, 18, 0xfffffc0f)
+		CheckRetirement(18, 72, 0x37000993, 19, 0x00000370)
+		CheckRetirement(19, 76, 0x3e000a13, 20, 0x000003e0)
+		CheckRetirement(20, 80, 0x0d300a93, 21, 0x000000d3)
+		CheckRetirement(21, 84, 0x23a00b13, 22, 0x0000023a)
+		CheckRetirement(22, 88, 0xb4a00b93, 23, 0xfffffb4a)
+		CheckRetirement(23, 92, 0xb9100c13, 24, 0xfffffb91)
+		CheckRetirement(24, 96, 0x3f200c93, 25, 0x000003f2)
+		CheckRetirement(25, 100, 0xd6a00d13, 26, 0xfffffd6a)
+		CheckRetirement(26, 104, 0x5ff00d93, 27, 0x000005ff)
+		CheckRetirement(27, 108, 0xd2f00e13, 28, 0xfffffd2f)
+		CheckRetirement(28, 112, 0x3e900e93, 29, 0x000003e9)
+		CheckRetirement(29, 116, 0xcbc00f13, 30, 0xfffffcbc)
+		CheckRetirement(30, 120, 0x3b300f93, 31, 0x000003b3)
+		CheckRetirement(31, 124, 0x01b7a933, 18, 0x00000001)
+		CheckRetirement(32, 128, 0x009bcd33, 26, 0xfffff9af)
+		CheckRetirement(33, 132, 0x0132eeb3, 29, 0xffffff7a)
+		CheckRetirement(34, 136, 0x01a10b33, 22, 0xfffff6c7)
+		CheckRetirement(35, 140, 0x01cc1533, 10, 0xfdc88000)
+		CheckRetirement(36, 144, 0x002477b3, 15, 0x00000410)
+		CheckRetirement(37, 148, 0x01617433, 8, 0xfffff400)
+		CheckRetirement(38, 152, 0x01d89f33, 30, 0x94000000)
+		CheckRetirement(39, 156, 0x01f469b3, 19, 0xfffff7b3)
+		CheckRetirement(40, 160, 0x0180e2b3, 5, 0xffffff99)
+		CheckRetirement(41, 164, 0x0182c2b3, 5, 0x00000408)
+		CheckRetirement(42, 168, 0x40d107b3, 15, 0x0000020b)
+		CheckRetirement(43, 172, 0x00d1aa33, 20, 0x00000000)
+		CheckRetirement(44, 176, 0x00e24633, 12, 0x000006f9)
+		CheckRetirement(45, 180, 0x00d0f233, 4, 0xfffffb09)
+		CheckRetirement(46, 184, 0x00f6fdb3, 27, 0x00000209)
+		CheckRetirement(47, 188, 0x0136d4b3, 9, 0x00001fff)
+		CheckRetirement(48, 192, 0x01c77e33, 28, 0xfffff90f)
+		CheckRetirement(49, 196, 0x0019c733, 14, 0x000008ba)
+		CheckRetirement(50, 200, 0x0088fc33, 24, 0xfffff400)
+		CheckRetirement(51, 204, 0x01c25c33, 24, 0x0001ffff)
+		CheckRetirement(52, 208, 0x018f2133, 2, 0x00000001)
+		CheckRetirement(53, 212, 0x01c545b3, 11, 0x0237790f)
+		CheckRetirement(54, 216, 0x0005f3b3, 7, 0x00000000)
+		CheckRetirement(55, 220, 0x00336233, 4, 0x000007f7)
+		CheckRetirement(56, 224, 0x00067533, 10, 0x00000000)
+		CheckRetirement(57, 228, 0x01006eb3, 29, 0x000006bf)
+		CheckRetirement(58, 232, 0x00ee1e33, 28, 0x3c000000)
+		CheckRetirement(59, 236, 0x00ea22b3, 5, 0x00000001)
+		CheckRetirement(60, 240, 0x00c04733, 14, 0x000006f9)
+		CheckRetirement(61, 244, 0x00f67b33, 22, 0x00000209)
+		CheckRetirement(62, 248, 0x007d4b33, 22, 0xfffff9af)
+		CheckRetirement(63, 252, 0x005bb733, 14, 0x00000000)
+		CheckRetirement(64, 256, 0x01f4f3b3, 7, 0x000003b3)
+		CheckRetirement(65, 260, 0x016471b3, 3, 0xfffff000)
+		CheckRetirement(66, 264, 0x0005c4b3, 9, 0x0237790f)
+		CheckRetirement(67, 268, 0x00dbf033, 0, 0x00000000)
+		CheckRetirement(68, 272, 0x004fbdb3, 27, 0x00000001)
+		CheckRetirement(69, 276, 0x014e89b3, 19, 0x000006bf)
+		CheckRetirement(70, 280, 0x40ae58b3, 17, 0x3c000000)
+		CheckRetirement(71, 284, 0x017c1333, 6, 0x07fffc00)
+		CheckRetirement(72, 288, 0x417207b3, 15, 0x00000cad)
+		CheckRetirement(73, 292, 0x0173c433, 8, 0xfffff8f9)
+		CheckRetirement(74, 296, 0x41128533, 10, 0xc4000001)
+		CheckRetirement(75, 300, 0x00798833, 16, 0x00000a72)
+		CheckRetirement(76, 304, 0x41a40cb3, 25, 0xffffff4a)
+		CheckRetirement(77, 308, 0x0061f8b3, 17, 0x07fff000)
+		CheckRetirement(78, 312, 0x0151cd33, 26, 0xfffff0d3)
+		CheckRetirement(79, 316, 0x41fa5f33, 30, 0x00000000)
+		CheckRetirement(80, 320, 0x000fb3b3, 7, 0x00000000)
+		CheckRetirement(81, 324, 0x001a8eb3, 29, 0xffffffdc)
+		CheckRetirement(82, 328, 0x007071b3, 3, 0x00000000)
+		CheckRetirement(83, 332, 0x01ccd933, 18, 0xffffff4a)
+		CheckRetirement(84, 336, 0x005f2fb3, 31, 0x00000001)
+		CheckRetirement(85, 340, 0x401c5db3, 27, 0x000000ff)
+		CheckRetirement(86, 344, 0x019a42b3, 5, 0xffffff4a)
+		CheckRetirement(87, 348, 0x00eb9933, 18, 0xfffffb4a)
+		CheckRetirement(88, 352, 0x019263b3, 7, 0xffffffff)
+		CheckRetirement(89, 356, 0x00831cb3, 25, 0x00000000)
+		CheckRetirement(90, 360, 0x01672fb3, 31, 0x00000000)
+		CheckRetirement(91, 364, 0x0137c5b3, 11, 0x00000a12)
+		CheckRetirement(92, 368, 0x01fdfbb3, 23, 0x00000000)
+		CheckRetirement(93, 372, 0x417d56b3, 13, 0xfffff0d3)
+		CheckRetirement(94, 376, 0x01c9a4b3, 9, 0x00000001)
+		CheckRetirement(95, 380, 0x4157d233, 4, 0x00000000)
+		CheckRetirement(96, 384, 0x0134a2b3, 5, 0x00000001)
+		CheckRetirement(97, 388, 0x009baa33, 20, 0x00000001)
+		CheckRetirement(98, 392, 0x008596b3, 13, 0x24000000)
+		CheckRetirement(99, 396, 0x00774833, 16, 0xffffffff)
+		CheckRetirement(100, 400, 0x01c4a733, 14, 0x00000001)
+		CheckRetirement(101, 404, 0x01447333, 6, 0x00000001)
+		CheckRetirement(102, 408, 0x016c80b3, 1, 0xfffff9af)
+		CheckRetirement(103, 412, 0x01e02533, 10, 0x00000000)
+		CheckRetirement(104, 416, 0x01192233, 4, 0x00000001)
+		CheckRetirement(105, 420, 0x40838233, 4, 0x00000706)
+		CheckRetirement(106, 424, 0x0028fcb3, 25, 0x00000000)
+		CheckRetirement(107, 428, 0x0086b1b3, 3, 0x00000001)
+		CheckRetirement(108, 432, 0x4059d733, 14, 0x0000035f)
+		CheckRetirement(109, 436, 0x0079ccb3, 25, 0xfffff940)
+		CheckRetirement(110, 440, 0x008675b3, 11, 0x000000f9)
+	}
+
+	/**
+	 * Independent architectural vector: Branch0Equal0.
+	 */
+	@Test
+	fn TestBranch0Equal0()
+	{
+		Prepare()
+		Load(0, 0xfff00093)
+		Load(1, 0x00100113)
+		Load(2, 0x00208463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 4
+		CheckRetirement(0, 0, 0xfff00093, 1, 0xffffffff)
+		CheckRetirement(1, 4, 0x00100113, 2, 0x00000001)
+		CheckRetirement(2, 8, 0x00208463, 0, 0x00000000)
+		CheckRetirement(3, 12, 0x02a00193, 3, 0x0000002a)
+	}
+
+	/**
+	 * Independent architectural vector: Branch0Equal1.
+	 */
+	@Test
+	fn TestBranch0Equal1()
+	{
+		Prepare()
+		Load(0, 0xfff00093)
+		Load(1, 0xfff00113)
+		Load(2, 0x00208463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 3
+		CheckRetirement(0, 0, 0xfff00093, 1, 0xffffffff)
+		CheckRetirement(1, 4, 0xfff00113, 2, 0xffffffff)
+		CheckRetirement(2, 8, 0x00208463, 0, 0x00000000)
+	}
+
+	/**
+	 * Independent architectural vector: Branch1Equal0.
+	 */
+	@Test
+	fn TestBranch1Equal0()
+	{
+		Prepare()
+		Load(0, 0xfff00093)
+		Load(1, 0x00100113)
+		Load(2, 0x00209463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 3
+		CheckRetirement(0, 0, 0xfff00093, 1, 0xffffffff)
+		CheckRetirement(1, 4, 0x00100113, 2, 0x00000001)
+		CheckRetirement(2, 8, 0x00209463, 0, 0x00000000)
+	}
+
+	/**
+	 * Independent architectural vector: Branch1Equal1.
+	 */
+	@Test
+	fn TestBranch1Equal1()
+	{
+		Prepare()
+		Load(0, 0xfff00093)
+		Load(1, 0xfff00113)
+		Load(2, 0x00209463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 4
+		CheckRetirement(0, 0, 0xfff00093, 1, 0xffffffff)
+		CheckRetirement(1, 4, 0xfff00113, 2, 0xffffffff)
+		CheckRetirement(2, 8, 0x00209463, 0, 0x00000000)
+		CheckRetirement(3, 12, 0x02a00193, 3, 0x0000002a)
+	}
+
+	/**
+	 * Independent architectural vector: Branch4Equal0.
+	 */
+	@Test
+	fn TestBranch4Equal0()
+	{
+		Prepare()
+		Load(0, 0xfff00093)
+		Load(1, 0x00100113)
+		Load(2, 0x0020c463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 3
+		CheckRetirement(0, 0, 0xfff00093, 1, 0xffffffff)
+		CheckRetirement(1, 4, 0x00100113, 2, 0x00000001)
+		CheckRetirement(2, 8, 0x0020c463, 0, 0x00000000)
+	}
+
+	/**
+	 * Independent architectural vector: Branch4Equal1.
+	 */
+	@Test
+	fn TestBranch4Equal1()
+	{
+		Prepare()
+		Load(0, 0xfff00093)
+		Load(1, 0xfff00113)
+		Load(2, 0x0020c463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 4
+		CheckRetirement(0, 0, 0xfff00093, 1, 0xffffffff)
+		CheckRetirement(1, 4, 0xfff00113, 2, 0xffffffff)
+		CheckRetirement(2, 8, 0x0020c463, 0, 0x00000000)
+		CheckRetirement(3, 12, 0x02a00193, 3, 0x0000002a)
+	}
+
+	/**
+	 * Independent architectural vector: Branch5Equal0.
+	 */
+	@Test
+	fn TestBranch5Equal0()
+	{
+		Prepare()
+		Load(0, 0xfff00093)
+		Load(1, 0x00100113)
+		Load(2, 0x0020d463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 4
+		CheckRetirement(0, 0, 0xfff00093, 1, 0xffffffff)
+		CheckRetirement(1, 4, 0x00100113, 2, 0x00000001)
+		CheckRetirement(2, 8, 0x0020d463, 0, 0x00000000)
+		CheckRetirement(3, 12, 0x02a00193, 3, 0x0000002a)
+	}
+
+	/**
+	 * Independent architectural vector: Branch5Equal1.
+	 */
+	@Test
+	fn TestBranch5Equal1()
+	{
+		Prepare()
+		Load(0, 0xfff00093)
+		Load(1, 0xfff00113)
+		Load(2, 0x0020d463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 3
+		CheckRetirement(0, 0, 0xfff00093, 1, 0xffffffff)
+		CheckRetirement(1, 4, 0xfff00113, 2, 0xffffffff)
+		CheckRetirement(2, 8, 0x0020d463, 0, 0x00000000)
+	}
+
+	/**
+	 * Independent architectural vector: Branch6Equal0.
+	 */
+	@Test
+	fn TestBranch6Equal0()
+	{
+		Prepare()
+		Load(0, 0x00100093)
+		Load(1, 0xfff00113)
+		Load(2, 0x0020e463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 3
+		CheckRetirement(0, 0, 0x00100093, 1, 0x00000001)
+		CheckRetirement(1, 4, 0xfff00113, 2, 0xffffffff)
+		CheckRetirement(2, 8, 0x0020e463, 0, 0x00000000)
+	}
+
+	/**
+	 * Independent architectural vector: Branch6Equal1.
+	 */
+	@Test
+	fn TestBranch6Equal1()
+	{
+		Prepare()
+		Load(0, 0x00100093)
+		Load(1, 0x00100113)
+		Load(2, 0x0020e463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 4
+		CheckRetirement(0, 0, 0x00100093, 1, 0x00000001)
+		CheckRetirement(1, 4, 0x00100113, 2, 0x00000001)
+		CheckRetirement(2, 8, 0x0020e463, 0, 0x00000000)
+		CheckRetirement(3, 12, 0x02a00193, 3, 0x0000002a)
+	}
+
+	/**
+	 * Independent architectural vector: Branch7Equal0.
+	 */
+	@Test
+	fn TestBranch7Equal0()
+	{
+		Prepare()
+		Load(0, 0x00100093)
+		Load(1, 0xfff00113)
+		Load(2, 0x0020f463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 4
+		CheckRetirement(0, 0, 0x00100093, 1, 0x00000001)
+		CheckRetirement(1, 4, 0xfff00113, 2, 0xffffffff)
+		CheckRetirement(2, 8, 0x0020f463, 0, 0x00000000)
+		CheckRetirement(3, 12, 0x02a00193, 3, 0x0000002a)
+	}
+
+	/**
+	 * Independent architectural vector: Branch7Equal1.
+	 */
+	@Test
+	fn TestBranch7Equal1()
+	{
+		Prepare()
+		Load(0, 0x00100093)
+		Load(1, 0x00100113)
+		Load(2, 0x0020f463)
+		Load(3, 0x02a00193)
+		Load(4, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 16
+		assert core.faultValue == 0x00000010
+		assert retireCount == 3
+		CheckRetirement(0, 0, 0x00100093, 1, 0x00000001)
+		CheckRetirement(1, 4, 0x00100113, 2, 0x00000001)
+		CheckRetirement(2, 8, 0x0020f463, 0, 0x00000000)
+	}
+
+	/**
+	 * Independent architectural vector: LoopAndJumps.
+	 */
+	@Test
+	fn TestLoopAndJumps()
+	{
+		Prepare()
+		Load(0, 0x00000093)
+		Load(1, 0x00300113)
+		Load(2, 0x00108093)
+		Load(3, 0xfe209ee3)
+		Load(4, 0x01800093)
+		Load(5, 0x001082e7)
+		Load(6, 0x0080036f)
+		Load(7, 0x06300393)
+		Load(8, 0x04d00413)
+		Load(9, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 36
+		assert core.faultValue == 0x00000024
+		assert retireCount == 12
+		CheckRetirement(0, 0, 0x00000093, 1, 0x00000000)
+		CheckRetirement(1, 4, 0x00300113, 2, 0x00000003)
+		CheckRetirement(2, 8, 0x00108093, 1, 0x00000001)
+		CheckRetirement(3, 12, 0xfe209ee3, 0, 0x00000000)
+		CheckRetirement(4, 8, 0x00108093, 1, 0x00000002)
+		CheckRetirement(5, 12, 0xfe209ee3, 0, 0x00000000)
+		CheckRetirement(6, 8, 0x00108093, 1, 0x00000003)
+		CheckRetirement(7, 12, 0xfe209ee3, 0, 0x00000000)
+		CheckRetirement(8, 16, 0x01800093, 1, 0x00000018)
+		CheckRetirement(9, 20, 0x001082e7, 5, 0x00000018)
+		CheckRetirement(10, 24, 0x0080036f, 6, 0x0000001c)
+		CheckRetirement(11, 32, 0x04d00413, 8, 0x0000004d)
+	}
+
+	/**
+	 * Independent architectural vector: MemoryLanes.
+	 */
+	@Test
+	fn TestMemoryLanes()
+	{
+		Prepare()
+		Load(0, 0x89abc0b7)
+		Load(1, 0x7ef08093)
+		Load(2, 0x00102023)
+		Load(3, 0x00000103)
+		Load(4, 0x00004303)
+		Load(5, 0x00100183)
+		Load(6, 0x00104383)
+		Load(7, 0x00200203)
+		Load(8, 0x00204403)
+		Load(9, 0x00300283)
+		Load(10, 0x00304483)
+		Load(11, 0x00001503)
+		Load(12, 0x00205583)
+		Load(13, 0xfff00613)
+		Load(14, 0x00c00223)
+		Load(15, 0x00402683)
+		Load(16, 0x00c002a3)
+		Load(17, 0x00402703)
+		Load(18, 0x00c00323)
+		Load(19, 0x00402783)
+		Load(20, 0x00c003a3)
+		Load(21, 0x00402803)
+		Load(22, 0x00101323)
+		Load(23, 0x00601883)
+		Load(24, 0x00605903)
+		Load(25, 0x00402983)
+		Load(26, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 104
+		assert core.faultValue == 0x00000068
+		assert retireCount == 26
+		CheckRetirement(0, 0, 0x89abc0b7, 1, 0x89abc000)
+		CheckRetirement(1, 4, 0x7ef08093, 1, 0x89abc7ef)
+		CheckRetirement(2, 8, 0x00102023, 0, 0x00000000)
+		CheckRetirement(3, 12, 0x00000103, 2, 0xffffffef)
+		CheckRetirement(4, 16, 0x00004303, 6, 0x000000ef)
+		CheckRetirement(5, 20, 0x00100183, 3, 0xffffffc7)
+		CheckRetirement(6, 24, 0x00104383, 7, 0x000000c7)
+		CheckRetirement(7, 28, 0x00200203, 4, 0xffffffab)
+		CheckRetirement(8, 32, 0x00204403, 8, 0x000000ab)
+		CheckRetirement(9, 36, 0x00300283, 5, 0xffffff89)
+		CheckRetirement(10, 40, 0x00304483, 9, 0x00000089)
+		CheckRetirement(11, 44, 0x00001503, 10, 0xffffc7ef)
+		CheckRetirement(12, 48, 0x00205583, 11, 0x000089ab)
+		CheckRetirement(13, 52, 0xfff00613, 12, 0xffffffff)
+		CheckRetirement(14, 56, 0x00c00223, 0, 0x00000000)
+		CheckRetirement(15, 60, 0x00402683, 13, 0x000000ff)
+		CheckRetirement(16, 64, 0x00c002a3, 0, 0x00000000)
+		CheckRetirement(17, 68, 0x00402703, 14, 0x0000ffff)
+		CheckRetirement(18, 72, 0x00c00323, 0, 0x00000000)
+		CheckRetirement(19, 76, 0x00402783, 15, 0x00ffffff)
+		CheckRetirement(20, 80, 0x00c003a3, 0, 0x00000000)
+		CheckRetirement(21, 84, 0x00402803, 16, 0xffffffff)
+		CheckRetirement(22, 88, 0x00101323, 0, 0x00000000)
+		CheckRetirement(23, 92, 0x00601883, 17, 0xffffc7ef)
+		CheckRetirement(24, 96, 0x00605903, 18, 0x0000c7ef)
+		CheckRetirement(25, 100, 0x00402983, 19, 0xc7efffff)
+	}
+
+	/**
+	 * Independent architectural vector: NotTakenMisalignedBranch.
+	 */
+	@Test
+	fn TestNotTakenMisalignedBranch()
+	{
+		Prepare()
+		Load(0, 0x00100093)
+		Load(1, 0x00008163)
+		Load(2, 0x00100073)
+		RunToStop(3)
+		assert core.pc == 8
+		assert core.faultValue == 0x00000008
+		assert retireCount == 2
+		CheckRetirement(0, 0, 0x00100093, 1, 0x00000001)
+		CheckRetirement(1, 4, 0x00008163, 0, 0x00000000)
+	}
+
+	/**
+	 * Independent architectural vector: Illegal.
+	 */
+	@Test
+	fn TestIllegal()
+	{
+		Prepare()
+		Load(0, 0xffffffff)
+		RunToStop(2)
+		assert core.pc == 0
+		assert core.faultValue == 0xffffffff
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: MultiplyUnavailable.
+	 */
+	@Test
+	fn TestMultiplyUnavailable()
+	{
+		for (var operation: uint = 0; operation < 4; operation++) {
+			Prepare()
+			var instruction = 0x020000b3 | (operation << 12)
+			Load(0, instruction)
+			RunToStop(2)
+			assert core.pc == 0
+			assert core.faultValue as uint == instruction
+			assert retireCount == 0
+		}
+	}
+
+	/**
+	 * Independent architectural vector: CsrUnavailable.
+	 */
+	@Test
+	fn TestCsrUnavailable()
+	{
+		Prepare()
+		Load(0, 0x300010f3)
+		RunToStop(2)
+		assert core.pc == 0
+		assert core.faultValue == 0x300010f3
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: FenceIUnavailable.
+	 */
+	@Test
+	fn TestFenceIUnavailable()
+	{
+		Prepare()
+		Load(0, 0x0000100f)
+		RunToStop(2)
+		assert core.pc == 0
+		assert core.faultValue == 0x0000100f
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: ReservedShift.
+	 */
+	@Test
+	fn TestReservedShift()
+	{
+		Prepare()
+		Load(0, 0x02001093)
+		RunToStop(2)
+		assert core.pc == 0
+		assert core.faultValue == 0x02001093
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: ReservedRegister.
+	 */
+	@Test
+	fn TestReservedRegister()
+	{
+		Prepare()
+		Load(0, 0x400010b3)
+		RunToStop(2)
+		assert core.pc == 0
+		assert core.faultValue == 0x400010b3
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: Ecall.
+	 */
+	@Test
+	fn TestEcall()
+	{
+		Prepare()
+		Load(0, 0x00000073)
+		RunToStop(11)
+		assert core.pc == 0
+		assert core.faultValue == 0x00000000
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: JalMisaligned.
+	 */
+	@Test
+	fn TestJalMisaligned()
+	{
+		Prepare()
+		Load(0, 0x002000ef)
+		RunToStop(0)
+		assert core.pc == 0
+		assert core.faultValue == 0x00000002
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: JalrMisaligned.
+	 */
+	@Test
+	fn TestJalrMisaligned()
+	{
+		Prepare()
+		Load(0, 0x00200093)
+		Load(1, 0x00008167)
+		RunToStop(0)
+		assert core.pc == 4
+		assert core.faultValue == 0x00000002
+		assert retireCount == 1
+		CheckRetirement(0, 0, 0x00200093, 1, 0x00000002)
+	}
+
+	/**
+	 * Independent architectural vector: BranchMisaligned.
+	 */
+	@Test
+	fn TestBranchMisaligned()
+	{
+		Prepare()
+		Load(0, 0x00000163)
+		RunToStop(0)
+		assert core.pc == 0
+		assert core.faultValue == 0x00000002
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: LoadHalfMisaligned.
+	 */
+	@Test
+	fn TestLoadHalfMisaligned()
+	{
+		Prepare()
+		Load(0, 0x00101083)
+		RunToStop(4)
+		assert core.pc == 0
+		assert core.faultValue == 0x00000001
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: LoadWordMisaligned.
+	 */
+	@Test
+	fn TestLoadWordMisaligned()
+	{
+		Prepare()
+		Load(0, 0x00202083)
+		RunToStop(4)
+		assert core.pc == 0
+		assert core.faultValue == 0x00000002
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: StoreMisaligned.
+	 */
+	@Test
+	fn TestStoreMisaligned()
+	{
+		Prepare()
+		Load(0, 0x001020a3)
+		RunToStop(6)
+		assert core.pc == 0
+		assert core.faultValue == 0x00000001
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: LoadAccessX0.
+	 */
+	@Test
+	fn TestLoadAccessX0()
+	{
+		Prepare()
+		Load(0, 0x40002003)
+		RunToStop(5)
+		assert core.pc == 0
+		assert core.faultValue == 0x00000400
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: StoreAccess.
+	 */
+	@Test
+	fn TestStoreAccess()
+	{
+		Prepare()
+		Load(0, 0x40102023)
+		RunToStop(7)
+		assert core.pc == 0
+		assert core.faultValue == 0x00000400
+		assert retireCount == 0
+	}
+
+	/**
+	 * Independent architectural vector: FetchAccess.
+	 */
+	@Test
+	fn TestFetchAccess()
+	{
+		Prepare()
+		Load(0, 0x400000e7)
+		RunToStop(1)
+		assert core.pc == 1024
+		assert core.faultValue == 0x00000400
+		assert retireCount == 1
+		CheckRetirement(0, 0, 0x400000e7, 1, 0x00000004)
+	}
+}

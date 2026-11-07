@@ -2,40 +2,60 @@ namespace Eccelerators.RiscV.Tests
 
 using Eccelerators.RiscV.Isa
 
+/**
+ * Checks immediate extraction, placement and sign extension.
+ * Stateful scenarios initialize their inputs independently before execution.
+ */
 @Test
 component Rv32iImmediateDecoderTest
 {
+	// Owned subjects and fixtures; scenarios initialize mutable state before use.
 	decoder: Rv32iImmediateDecoder
 
+	/**
+	 * Constructs the owned subjects and fixtures; each stateful scenario supplies its own initialization.
+	 */
 	new()
 	{
-		this.decoder = new Rv32iImmediateDecoder()
+		decoder = new Rv32iImmediateDecoder()
 	}
 
+	/**
+	 * Checks positive and sign-extended negative I-format offsets.
+	 */
 	@Test
 	fn TestIImmediatePositiveAndNegative()
 	{
-		assert this.decoder.DecodeI(0x00500093) == 5
-		assert this.decoder.DecodeI(0xfff00093) == (0xffffffff as uint)
+		assert decoder.DecodeI(0x00500093) == 5
+		assert decoder.DecodeI(0xfff00093) == (0xffffffff as uint)
 	}
 
+	/**
+	 * Checks reconstruction and sign extension of the split store offset.
+	 */
 	@Test
 	fn TestSImmediate()
 	{
-		assert this.decoder.DecodeS(0x00102023) == 0
-		assert this.decoder.DecodeS(0xfe102e23) == (0xfffffffc as uint)
+		assert decoder.DecodeS(0x00102023) == 0
+		assert decoder.DecodeS(0xfe102e23) == (0xfffffffc as uint)
 	}
 
+	/**
+	 * Checks reconstruction of a branch byte offset, including its implicit low zero bit.
+	 */
 	@Test
 	fn TestBImmediate()
 	{
-		assert this.decoder.DecodeB(0x00208463) == 8
+		assert decoder.DecodeB(0x00208463) == 8
 	}
 
+	/**
+	 * Checks upper-immediate placement and reconstruction of jump byte offsets.
+	 */
 	@Test
 	fn TestUAndJImmediate()
 	{
-		assert this.decoder.DecodeU(0x123450b7) == (0x12345000 as uint)
-		assert this.decoder.DecodeJ(0x008000ef) == 8
+		assert decoder.DecodeU(0x123450b7) == (0x12345000 as uint)
+		assert decoder.DecodeJ(0x008000ef) == 8
 	}
 }

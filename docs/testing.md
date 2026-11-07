@@ -1,38 +1,26 @@
-# Testing
+# Testing and release validation
 
-Run all package tests with:
+From the package root:
 
 ```sh
+livt sync
 livt test
 ```
 
-The current suite covers:
+The manifest lists the functional test components. Tests include instruction
+semantics and decode, reference APIs, register-file behavior, memory protocols,
+sequential/pipeline execution, control draining, multiplication, CSR access,
+precise traps and timer/external interrupts. Checked-in Livt vectors make these
+tests independent of a firmware compiler, a physical board and benchmark tools.
+JSON fixtures retain the independent expected traces used to generate the tables.
 
-- RV32I constants and field extraction.
-- I/S/B/U/J immediate decoding.
-- Register file `x0` behavior.
-- ALU, branch, and load/store helpers.
-- Control decoding for representative legal and illegal instructions.
-- Simple instruction ROM and data RAM bus fixture behavior.
-- Minimal system and local-memory reference-wrapper execution.
-- Full RV32I decode and core instruction matrices.
-- Full `Rv32iBusCore` wrapper integration through synchronous ROM/RAM fixtures
-  and package API examples.
-- Canonical `Rv32iInjectedBusCore` execution with a caller-owned test data bus,
-  pre-bus alignment traps, and a full instruction-surface matrix using simple
-  bus fixtures.
-- Compact programs running through `Rv32iReferenceCore`.
-- UART MMIO hello-world execution through `Rv32iUartMmioSystem`.
+Passing simulation establishes functional regression coverage. It does not prove
+ISA certification, resource use, timing closure, power or correctness on a physical
+board. Changed sources, tools, providers or parameters require their own relevant
+validation; historical hardware records describe only their exact source trees.
 
-The Livt.IO 1.2.0 migration was validated on 2026-10-20: 62 tests passed,
-zero failed or skipped. The UART regression also checks serial loopback delivery
-of two bytes (including zero), receive occupancy, and empty-receive behavior.
-
-The three README examples were also extracted into an isolated consumer project
-and checked for their documented local-memory, UART enqueue, and borrowed-bus
-behavior: three passed, zero failed or skipped.
-
-Release 0.1.2 adds checks for all three register-storage configurations and CPU
-execution/reset with both RAM styles: 67 package tests pass, with zero failures
-or skips. RAM checks cover all registers, high bits, x0, invalid indices, and
-reset, followed by dependent ALU/load/store/branch instructions and restart.
+Before a release, run the suite from the intended source revision, review public
+contracts and update the changelog/version. The current Livt publisher selects
+`livt.toml` and files under the configured source and test directories. It does not
+upload the repository's `docs` directory. Keep generated output outside `src` and
+`tests`; host the documentation with the repository/release.

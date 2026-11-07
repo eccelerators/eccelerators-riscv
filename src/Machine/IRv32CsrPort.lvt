@@ -1,0 +1,53 @@
+namespace Eccelerators.RiscV.Machine
+
+/**
+ * Exclusive single-clock CSR query/commit port, consumer to provider. Address,
+ * operation (WRITE/SET/CLEAR), operand and read/write intent remain stable through
+ * the commit edge. readData is the pre-edge CSR value when readEnable is high;
+ * illegal depends on address/intent, never on mutable CSR contents. commit samples
+ * one access; a high commit on two edges means two accesses, not a held request.
+ * retire marks the same architectural commit edge, including non-CSR instructions.
+ * clear has priority over commit/retire and resets all state; hardware reset also
+ * cancels effects. Invalid CSR accesses never mutate CSR state. Only the engine writes
+ * integer registers/PC; the provider owns CSR mutation and automatic counters.
+ * Machine trap inputs are a separate command group on this same state-owner port.
+ * Entry and return are one-edge commands. Priority: clear, enterTrap, returnTrap,
+ * explicit CSR write. Entry suppresses retirement; return may retire. Elapsed cycle
+ * counting continues on entry/return. Engines must not issue conflicting commands.
+ * trapVector/returnPc are pre-edge views of mtvec/mepc, not scheduled reads.
+ * Tie trap commands low for diagnostic-only compositions.
+ */
+interface IRv32CsrPort
+{
+	// Consumer-owned query and explicit access intent.
+	address: in logic[12]
+	operation: in logic[2]
+	operand: in logic[32]
+	readEnable: in logic
+	writeEnable: in logic
+
+	// Consumer-owned architectural edges; clear is synchronous software restart.
+	commit: in logic
+	retire: in logic
+	clear: in logic
+
+	// Engine-owned trap/return command group, sampled with the exception/return edge.
+	enterTrap: in logic
+	returnTrap: in logic
+	entryPc: in logic[32]
+	entryCause: in logic[32]
+	entryValue: in logic[32]
+
+	// State-owner redirect views; engine remains the only writer of its own PC.
+	trapVector: out logic[32]
+	returnPc: out logic[32]
+
+	// Eligible machine interrupt after current enable/mask state. Sample only at a
+	// drained instruction boundary; cause is meaningful only with interruptEligible.
+	interruptEligible: out logic
+	interruptCause: out logic[32]
+
+	// Combinational validation and old value; no read side effects in this provider.
+	readData: out logic[32]
+	illegal: out logic
+}

@@ -16,17 +16,12 @@ component RegisterStorageChecks<STORAGE: Rv32iRegisterStorage>
 	 */
 	new()
 	{
-		static if (STORAGE == Rv32iRegisterStorage.Array)
-		{
-			this.registers = new Rv32iRegisterFile()
-		}
-		elif (STORAGE == Rv32iRegisterStorage.DistributedRam)
-		{
-			this.registers = new Rv32iRamRegisterFile<MemoryStyle.Distributed>()
-		}
-		else
-		{
-			this.registers = new Rv32iRamRegisterFile<MemoryStyle.Block>()
+		static if (STORAGE == Rv32iRegisterStorage.Array) {
+			registers = new Rv32iRegisterFile()
+		} elif (STORAGE == Rv32iRegisterStorage.DistributedRam) {
+			registers = new Rv32iRamRegisterFile<MemoryStyle.Distributed>()
+		} else {
+			registers = new Rv32iRamRegisterFile<MemoryStyle.Block>()
 		}
 	}
 
@@ -35,29 +30,29 @@ component RegisterStorageChecks<STORAGE: Rv32iRegisterStorage>
 	 */
 	public fn Check()
 	{
-		this.registers.Reset()
+		registers.Reset()
 
 		for (var index = 1; index < 32; index++) {
 			var expected: uint = (0x80000000 as uint) | (index as uint)
-			this.registers.Write(index, expected)
-			assert this.registers.Read(index) == expected
+			registers.Write(index, expected)
+			assert registers.Read(index) == expected
 		}
 
 		for (var index = 1; index < 32; index++) {
 			var expected: uint = (0x80000000 as uint) | (index as uint)
-			assert this.registers.Read(index) == expected
+			assert registers.Read(index) == expected
 		}
 
-		this.registers.Write(0, 99)
-		this.registers.Write(-1, 99)
-		this.registers.Write(32, 99)
-		assert this.registers.Read(0) == (0 as uint)
-		assert this.registers.Read(-1) == (0 as uint)
-		assert this.registers.Read(32) == (0 as uint)
-		this.registers.Reset()
+		registers.Write(0, 99)
+		registers.Write(-1, 99)
+		registers.Write(32, 99)
+		assert registers.Read(0) == (0 as uint)
+		assert registers.Read(-1) == (0 as uint)
+		assert registers.Read(32) == (0 as uint)
+		registers.Reset()
 
 		for (var index = 0; index < 32; index++) {
-			assert this.registers.Read(index) == (0 as uint)
+			assert registers.Read(index) == (0 as uint)
 		}
 	}
 }

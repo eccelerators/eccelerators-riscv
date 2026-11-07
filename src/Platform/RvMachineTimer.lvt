@@ -1,0 +1,167 @@
+namespace Eccelerators.RiscV.Platform
+
+using Eccelerators.RiscV.Sequential
+
+/**
+ * Platform-owned 64-bit time and deadline in the inherited clock/reset domain.
+ * Four little-endian words at BASE: mtime low/high, mtimecmp low/high. Accepts one
+ * aligned word request; byte masks apply to writes. Completion/data remain stable
+ * until request falls. Errors precede effects; a held request never repeats a write.
+ * Time advances every TICK_DIVISOR clocks even while the CPU is paused/restarted.
+ * Hardware reset zeros time/divider and sets the comparison to all ones. A nonzero
+ * mtime write suppresses that edge's complete 64-bit tick; divider phase continues.
+ * Reads snapshot pre-edge state. Comparison writes and ticks may occur together.
+ * timerPending is the live unsigned comparison, not an edge latch or acknowledge.
+ */
+component RvMachineTimer<BASE: uint = 0x40000100, TICK_DIVISOR: uint = 50,
+	TICK_BITS: int = 6> : IRv32MemoryPort
+{
+	static assert (BASE & 15) == 0 && BASE <= 0xfffffff0, "Timer base must fit four aligned words"
+	static assert TICK_BITS > 0 && TICK_BITS <= 30, "Timer divider width must be 1..30"
+	static assert TICK_DIVISOR > 0 && TICK_DIVISOR <= ((1 << TICK_BITS) as uint), "Timer divisor exceeds width"
+
+	// Register offsets and lane expansion constants.
+	public const TIME_LOW: uint = 0
+	public const TIME_HIGH: uint = 4
+	public const COMPARE_LOW: uint = 8
+	public const COMPARE_HIGH: uint = 12
+	const BYTE_MASK: uint = 255
+
+	// Same-clock interrupt level, independent of CPU masking and monitor controls.
+	public timerPending: out logic
+
+	// Continuously updated timebase and inverted software deadline. Zero-reset bits
+	// represent an all-ones deadline without constructor publication latency.
+	timeLow: uint
+	timeHigh: uint
+	compareLowInverted: uint
+	compareHighInverted: uint
+	divider: logic[TICK_BITS]
+
+	// Held completion and read snapshot for exactly-once MMIO.
+	completed: bool
+	responseError: logic
+	responseData: logic[32]
+
+	// Pure transaction decode and byte write merge, sampled by the single writer.
+	validAddress: bool
+	offset: uint
+	mask: uint
+	selected: uint
+	merged: uint
+	acceptWrite: bool
+
+	/**
+	 * Publishes registered completion and a live comparison without scheduled latency.
+	 */
+	process Decode[]()
+	{
+		ready = completed as logic
+		error = responseError
+		readData = responseData
+		timerPending = (timeHigh > ~compareHighInverted
+			|| (timeHigh == ~compareHighInverted && timeLow >= ~compareLowInverted)) as logic
+		offset = (address as uint) - BASE
+		validAddress = offset < 16 && (offset & 3) == 0
+		mask = 0
+
+		if ((byteEnable as uint & 1) != 0) {
+			mask = mask | BYTE_MASK
+		}
+
+		if ((byteEnable as uint & 2) != 0) {
+			mask = mask | (BYTE_MASK << 8)
+		}
+
+		if ((byteEnable as uint & 4) != 0) {
+			mask = mask | (BYTE_MASK << 16)
+		}
+
+		if ((byteEnable as uint & 8) != 0) {
+			mask = mask | (BYTE_MASK << 24)
+		}
+
+		selected = 0
+
+		match (offset)
+		{
+			TIME_LOW =>
+			{
+				selected = timeLow
+			}
+			TIME_HIGH =>
+			{
+				selected = timeHigh
+			}
+			COMPARE_LOW =>
+			{
+				selected = ~compareLowInverted
+			}
+			COMPARE_HIGH =>
+			{
+				selected = ~compareHighInverted
+			}
+			_ => {
+				// Unmapped requests complete as errors without effects.
+			}
+		}
+
+		merged = (selected & ~mask) | ((writeData as uint) & mask)
+		acceptWrite = !completed && request == 0b1 && write == 0b1 && validAddress && mask != 0
+	}
+
+	/**
+	 * Owns time, deadline and bus state; each accepted operation happens on one edge.
+	 */
+	process Advance()
+	{
+		state {
+			if (divider as uint == TICK_DIVISOR - 1) {
+				divider = 0
+
+				if (!(acceptWrite && offset < COMPARE_LOW)) {
+					if (timeLow == 0xffffffff) {
+						timeHigh++
+					}
+
+					timeLow++
+				}
+			} else {
+				divider = (divider as uint + 1) as logic[TICK_BITS]
+			}
+
+			if (!completed && request == 0b1) {
+				completed = true
+				responseError = (!validAddress) as logic
+				responseData = selected as logic[32]
+
+				if (acceptWrite) {
+					match (offset)
+					{
+						TIME_LOW =>
+						{
+							timeLow = merged
+						}
+						TIME_HIGH =>
+						{
+							timeHigh = merged
+						}
+						COMPARE_LOW =>
+						{
+							compareLowInverted = ~merged
+						}
+						COMPARE_HIGH =>
+						{
+							compareHighInverted = ~merged
+						}
+						_ => {
+							// validAddress excludes this branch.
+						}
+					}
+				}
+			} elif (completed && request == 0b0) {
+				completed = false
+			}
+		}
+	}
+}

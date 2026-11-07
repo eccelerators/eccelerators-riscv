@@ -5,6 +5,10 @@ namespace Eccelerators.RiscV.Isa
  */
 class Rv32iWord
 {
+	/**
+	 * Sign-extends the low bitCount bits to a 32-bit word. Requires bitCount >= 1;
+	 * values of 32 or more return value unchanged.
+	 */
 	public static fn SignExtend(value: uint, bitCount: int) uint
 	{
 		var masked: uint = value
@@ -29,6 +33,9 @@ class Rv32iWord
 		return masked | extendMask
 	}
 
+	/**
+	 * Compares two words as signed two's-complement integers without changing either input.
+	 */
 	public static fn IsSignedLessThan(leftValue: uint, rightValue: uint) bool
 	{
 		var leftSign: bool = (leftValue & (0x80000000 as uint)) != 0
@@ -45,6 +52,10 @@ class Rv32iWord
 		return leftValue < rightValue
 	}
 
+	/**
+	 * Shifts a word right with sign fill. Requires amount in 0..31;
+	 * nonpositive amounts return the input unchanged.
+	 */
 	public static fn ArithmeticShiftRight(value: uint, amount: int) uint
 	{
 		var shifted: uint = value

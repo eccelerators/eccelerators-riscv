@@ -1,0 +1,109 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+
+/**
+ * Test-only programmable instruction provider with selected-address backpressure
+ * and access faults. Checks every held request and only completes once per low gap.
+ * The test owns provisioning while the core is idle; reset cancels transactions.
+ */
+component PipelineFetchMemory : IRv32MemoryPort
+{
+	// Test-controlled storage provisioning and fault/backpressure injection.
+	public programWrite: in logic
+	public programIndex: in logic[8]
+	public programData: in logic[32]
+	public hold: in logic
+	public holdAddress: in logic[32]
+	public fail: in logic
+	public failAddress: in logic[32]
+	public blocked: out logic
+	public completions: uint
+
+	// Private test storage and captured request lifetime.
+	words: uint[256]
+	active: bool
+	completed: bool
+	savedAddress: logic[32]
+	remaining: uint
+	clockCount: uint
+
+	// Explicit combinational publication keeps the test device's bus contract exact.
+	requestActive: bool
+	inputAddress: logic[32]
+	inputWrite: logic
+	inputMask: logic[4]
+	inputData: logic[32]
+	responseReady: logic
+	responseError: logic
+	responseData: logic[32]
+
+	/**
+	 * Exposes response state directly and samples unbuffered request signals.
+	 */
+	process Connect[]()
+	{
+		requestActive = request == 0b1
+		inputAddress = address
+		inputWrite = write
+		inputMask = byteEnable
+		inputData = writeData
+		ready = responseReady
+		error = responseError
+		readData = responseData
+	}
+
+	/**
+	 * Varies response delay deterministically, preserving request stability checks.
+	 */
+	process Respond()
+	{
+		state {
+			clockCount++
+			blocked = 0b0
+
+			if (programWrite == 0b1) {
+				assert !active
+				words[programIndex as uint] = programData as uint
+			}
+
+			if (!active && requestActive) {
+				assert inputWrite == 0b0
+				active = true
+				completed = false
+				savedAddress = inputAddress
+				remaining = clockCount & 3
+			} elif (active && requestActive) {
+				assert inputAddress == savedAddress
+				assert inputWrite == 0b0 && inputMask == 0 && inputData == 0
+
+				if (!completed) {
+					if (hold == 0b1 && savedAddress == holdAddress) {
+						blocked = 0b1
+					} elif (remaining != 0) {
+						remaining--
+					} else {
+						completed = true
+						completions++
+						responseReady = 0b1
+						responseError = 0b0
+						responseData = 0
+
+						if ((savedAddress as uint & 3) != 0 || savedAddress as uint >= 1024
+							|| (fail == 0b1 && savedAddress == failAddress)) {
+							responseError = 0b1
+						} else {
+							responseData = words[(savedAddress as uint) >> 2] as logic[32]
+						}
+					}
+				}
+			} elif (active && !requestActive) {
+				assert completed, "Fetch request was cancelled before completion"
+				active = false
+				completed = false
+				responseReady = 0b0
+				responseError = 0b0
+			}
+		}
+	}
+}

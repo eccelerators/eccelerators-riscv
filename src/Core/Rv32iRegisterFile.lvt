@@ -5,7 +5,7 @@ namespace Eccelerators.RiscV.Core
  * inherited context; x0 reads zero and ignores writes. Serialize calls with
  * instruction execution and use Reset to initialize runtime processor state.
  */
-component Rv32iRegisterFile: IRv32iRegisterFile
+component Rv32iRegisterFile : IRv32iRegisterFile
 {
 	// Expected: original array storage; no particular RAM mapping is promised.
 	registers: uint[32]
@@ -18,7 +18,7 @@ component Rv32iRegisterFile: IRv32iRegisterFile
 		var index: int = 0
 
 		while (index < 32) {
-			this.registers[index] = 0
+			registers[index] = 0
 			index++
 		}
 	}
@@ -36,7 +36,7 @@ component Rv32iRegisterFile: IRv32iRegisterFile
 			return 0
 		}
 
-		return this.registers[index]
+		return registers[index]
 	}
 
 	/**
@@ -52,6 +52,6 @@ component Rv32iRegisterFile: IRv32iRegisterFile
 			return
 		}
 
-		this.registers[index] = value
+		registers[index] = value
 	}
 }

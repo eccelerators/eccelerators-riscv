@@ -1,0 +1,28 @@
+namespace Eccelerators.RiscV.Storage
+
+/**
+ * Exclusive same-clock two-read/one-write register interface. An enabled pair of
+ * reads is accepted at an edge and produces both operands after that edge, for
+ * capture at the following edge. Writes are independent and commit at the edge.
+ * A simultaneous read of the written index returns the NEW value. x0 always
+ * returns zero and ignores writes. Disabled reads hold both outputs, even during
+ * writes. Reset clears responses and suppresses commands but retains cells;
+ * the owner must initialize x1..x31 before reading them after startup/restart.
+ * There is no backpressure: the owner reserves response storage before reading.
+ */
+interface IRv32DualReadRegisterPort
+{
+	// Consumer-owned operand pair, accepted together when readEnable is high.
+	readEnable: in logic
+	leftIndex: in logic[5]
+	rightIndex: in logic[5]
+
+	// Independent consumer-owned architectural write, including initialization.
+	writeEnable: in logic
+	writeIndex: in logic[5]
+	writeData: in logic[32]
+
+	// Provider-owned registered response pair; x0 and collision handling are included.
+	leftData: out logic[32]
+	rightData: out logic[32]
+}

@@ -1,0 +1,128 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+
+/**
+ * Independent Python big-integer vectors exercise all signedness modes and carries.
+ * Protocol checks require bounded completion and stable responses until release.
+ */
+@Test
+component Rv32DspMultiplierTest
+{
+	// Owned multiplier; no architectural state is shared with this test.
+	subject: Rv32DspMultiplier
+
+	/**
+	 * Constructs the unit in the test clock/reset domain.
+	 */
+	new()
+	{
+		subject = new Rv32DspMultiplier()
+	}
+
+	/**
+	 * Runs one command and checks bounded completion, the product and held completion.
+	 */
+	fn Check(operation: uint, left: uint, right: uint, expected: uint)
+	{
+		subject.request = 0b0
+		Simulation.Wait(2)
+		assert subject.ready == 0b0
+		subject.operation = operation as logic[2]
+		subject.left = left as logic[32]
+		subject.right = right as logic[32]
+		subject.request = 0b1
+		var attempts: uint = 0
+
+		while (subject.ready == 0b0 && attempts < 40) {
+			state {
+				attempts++
+			}
+		}
+
+		assert subject.ready == 0b1
+		assert subject.result as uint == expected
+		assert attempts < 40
+		Simulation.Wait(3)
+		assert subject.ready == 0b1
+		assert subject.result as uint == expected
+		subject.request = 0b0
+		Simulation.Wait(2)
+		assert subject.ready == 0b0
+	}
+
+	/**
+	 * Checks all boundary pairs and deterministic random products for Low.
+	 */
+	@Test
+	fn Low()
+	{
+		for (var index: uint = 0; index < 113; index++) {
+			Check(0, Rv32MultiplyVectors.LEFT_WORDS[index], Rv32MultiplyVectors.RIGHT_WORDS[index],
+				Rv32MultiplyVectors.EXPECTED[index + (0 as uint)])
+		}
+	}
+
+	/**
+	 * Checks all boundary pairs and deterministic random products for SignedHigh.
+	 */
+	@Test
+	fn SignedHigh()
+	{
+		for (var index: uint = 0; index < 113; index++) {
+			Check(1, Rv32MultiplyVectors.LEFT_WORDS[index], Rv32MultiplyVectors.RIGHT_WORDS[index],
+				Rv32MultiplyVectors.EXPECTED[index + (113 as uint)])
+		}
+	}
+
+	/**
+	 * Checks all boundary pairs and deterministic random products for MixedHigh.
+	 */
+	@Test
+	fn MixedHigh()
+	{
+		for (var index: uint = 0; index < 113; index++) {
+			Check(2, Rv32MultiplyVectors.LEFT_WORDS[index], Rv32MultiplyVectors.RIGHT_WORDS[index],
+				Rv32MultiplyVectors.EXPECTED[index + (226 as uint)])
+		}
+	}
+
+	/**
+	 * Checks all boundary pairs and deterministic random products for UnsignedHigh.
+	 */
+	@Test
+	fn UnsignedHigh()
+	{
+		for (var index: uint = 0; index < 113; index++) {
+			Check(3, Rv32MultiplyVectors.LEFT_WORDS[index], Rv32MultiplyVectors.RIGHT_WORDS[index],
+				Rv32MultiplyVectors.EXPECTED[index + (339 as uint)])
+		}
+	}
+
+	/**
+	 * Captures inputs once and does not reaccept a request held through completion.
+	 */
+	@Test
+	fn CapturesAndHolds()
+	{
+		subject.request = 0b0
+		Simulation.Wait(2)
+		subject.operation = 0
+		subject.left = 7
+		subject.right = 9
+		subject.request = 0b1
+		Simulation.Wait(5)
+		subject.operation = 3
+		subject.left = 0xffffffff
+		subject.right = 0xffffffff
+		Simulation.Wait(35)
+		assert subject.ready == 0b1
+		assert subject.result == 63
+		Simulation.Wait(40)
+		assert subject.ready == 0b1
+		assert subject.result == 63
+		subject.request = 0b0
+		Simulation.Wait(2)
+		Check(3, 0xffffffff, 0xffffffff, 0xfffffffe)
+	}
+}

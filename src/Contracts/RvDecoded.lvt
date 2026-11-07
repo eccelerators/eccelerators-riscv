@@ -1,0 +1,118 @@
+namespace Eccelerators.RiscV.Contracts
+
+/**
+ * Value-only decode control word. PC, instruction and immediate travel separately.
+ * Bits 0..4 rd, 5..9 rs1, 10..14 rs2, 15 usesRs1, 16 usesRs2,
+ * 17 writesRd, 18 legal, 19..26 operation. Bits 27..31 reserved zero.
+ * No component instance, scheduled getters or architectural state.
+ */
+public class RvDecoded
+{
+	// Masks for packed register indices and operation IDs.
+	public const REGISTER_MASK: uint = 31
+	public const OPERATION_MASK: uint = 255
+
+	// Bit offsets of the remaining packed fields; rd starts at bit zero.
+	public const RS1_SHIFT: int = 5
+	public const RS2_SHIFT: int = 10
+	public const USES_RS1_SHIFT: int = 15
+	public const USES_RS2_SHIFT: int = 16
+	public const WRITES_RD_SHIFT: int = 17
+	public const LEGAL_SHIFT: int = 18
+	public const OPERATION_SHIFT: int = 19
+
+	/**
+	 * Packs operation (0..255), register indices (0..31) and decode flags.
+	 * Values outside those ranges are masked; callers retain PC and immediate separately.
+	 */
+	public static fn Pack[](operation: uint, rd: uint, rs1: uint, rs2: uint,
+		usesRs1: bool, usesRs2: bool, writesRd: bool, legal: bool) uint
+	{
+		var word = (rd & REGISTER_MASK)
+			| ((rs1 & REGISTER_MASK) << RS1_SHIFT)
+			| ((rs2 & REGISTER_MASK) << RS2_SHIFT)
+			| ((operation & OPERATION_MASK) << OPERATION_SHIFT)
+
+		if (usesRs1) {
+			word = word | (1 << USES_RS1_SHIFT)
+		}
+
+		if (usesRs2) {
+			word = word | (1 << USES_RS2_SHIFT)
+		}
+
+		if (writesRd) {
+			word = word | (1 << WRITES_RD_SHIFT)
+		}
+
+		if (legal) {
+			word = word | (1 << LEGAL_SHIFT)
+		}
+
+		return word
+	}
+
+	/**
+	 * Returns the five-bit destination index; x0 still suppresses architectural writes.
+	 */
+	public static fn Rd[](word: uint) uint
+	{
+		return word & REGISTER_MASK
+	}
+
+	/**
+	 * Returns source register 1; consult HasSource1 before reading it.
+	 */
+	public static fn Rs1[](word: uint) uint
+	{
+		return (word >> RS1_SHIFT) & REGISTER_MASK
+	}
+
+	/**
+	 * Returns source register 2; consult HasSource2 before reading it.
+	 */
+	public static fn Rs2[](word: uint) uint
+	{
+		return (word >> RS2_SHIFT) & REGISTER_MASK
+	}
+
+	/**
+	 * Returns the eight-bit operation ID agreed by the decoder and execution unit.
+	 */
+	public static fn Operation[](word: uint) uint
+	{
+		return (word >> OPERATION_SHIFT) & OPERATION_MASK
+	}
+
+	/**
+	 * Reports whether execution consumes source register 1.
+	 */
+	public static fn HasSource1[](word: uint) bool
+	{
+		return (word & (1 << USES_RS1_SHIFT)) != 0
+	}
+
+	/**
+	 * Reports whether execution consumes source register 2.
+	 */
+	public static fn HasSource2[](word: uint) bool
+	{
+		return (word & (1 << USES_RS2_SHIFT)) != 0
+	}
+
+	/**
+	 * Reports destination-write intent; the engine must still suppress x0 and faults.
+	 */
+	public static fn HasDestinationWrite[](word: uint) bool
+	{
+		return (word & (1 << WRITES_RD_SHIFT)) != 0
+	}
+
+	/**
+	 * Reports whether the decoder accepted the instruction in the selected ISA.
+	 */
+	public static fn IsLegal[](word: uint) bool
+	{
+		return (word & (1 << LEGAL_SHIFT)) != 0
+	}
+}

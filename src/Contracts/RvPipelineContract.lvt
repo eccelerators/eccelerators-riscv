@@ -1,0 +1,27 @@
+namespace Eccelerators.RiscV.Contracts
+
+/**
+ * Elaboration obligations for the bounded four-stage, single-issue pipeline.
+ * Metadata describes actual connected providers, never arbitrary user promises.
+ * Runtime ordering, draining and forwarding still require independent tests.
+ * This checker does not construct or qualify a pipeline engine.
+ */
+component RvPipelineContract<READ_PORTS: int = 2, READ_LATENCY: int = 1,
+	INDEPENDENT_WRITE: bool = true, WRITE_FORWARDING: bool = true,
+	MEMORY_CAPACITY: int = 1, ENGINE_DRAINS: bool = true,
+	ORDERED_EFFECTS: bool = true, FETCH_SIDE_EFFECT_FREE: bool = true>
+{
+	static assert READ_PORTS == 2 && READ_LATENCY == 1, "Register operands require two synchronous one-edge reads"
+	static assert INDEPENDENT_WRITE && WRITE_FORWARDING, "Independent write and new-value collision forwarding required"
+	static assert MEMORY_CAPACITY == 1, "Only one outstanding transaction per memory port is supported"
+	static assert ENGINE_DRAINS, "Uncancellable requests must drain before restart or redirect reuse"
+	static assert ORDERED_EFFECTS, "Architectural and MMIO effects must be ordered"
+	static assert FETCH_SIDE_EFFECT_FREE, "Speculative instruction reads must have no device side effects"
+
+	/**
+	 * Checks the fixed pipeline protocol without adding runtime state.
+	 */
+	new()
+	{
+	}
+}

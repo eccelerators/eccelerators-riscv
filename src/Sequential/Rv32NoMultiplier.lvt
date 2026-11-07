@@ -1,0 +1,20 @@
+namespace Eccelerators.RiscV.Sequential
+
+/**
+ * Constant port termination for an RV32I-only composition; owns no arithmetic
+ * state. Its engine must disable multiplication dispatch and decoder acceptance.
+ */
+component Rv32NoMultiplier : IRv32MultiplyPort
+{
+	// No supported multiplication operations.
+	public const CAPABILITIES: uint = 0
+
+	/**
+	 * Produces no completion; there is no instruction provider behind this port.
+	 */
+	process Drive[]()
+	{
+		ready = 0b0
+		result = 0
+	}
+}

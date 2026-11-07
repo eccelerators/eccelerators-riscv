@@ -1,0 +1,336 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Pipeline
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+using Eccelerators.RiscV.Machine
+
+/**
+ * Instruction-level checks observe committed writes independently of CPU storage.
+ * Every wait is bounded so a stalled bus or controller fails the test.
+ */
+@Test
+component Rv32PipelineCsrEngineTest
+{
+	// Owned platform, explicit execution composition and architectural scoreboard.
+	instructions: Rv32WordMemory<512, 9>
+	data: Rv32WordMemory<256, 8>
+	core: Rv32PipelineEngine<0, true, true>
+	registers: Rv32DualReadRegisterBank
+	baseDecoder: Rv32iZmmulDecoder
+	decoder: Rv32ZicsrDecoder
+	integer: Rv32iIntegerUnit
+	multiplier: Rv32DspMultiplier
+	csrs: Rv32MachineCsrs
+	observed: uint[32]
+	retireCount: uint
+	clearObservation: bool
+	cycles: uint
+	csrCommits: uint
+	lastCsrCycle: uint
+	previousWasCsr: bool
+	tracePc: uint[512]
+	traceWord: uint[512]
+	traceRd: uint[512]
+	traceValue: uint[512]
+
+	/**
+	 * Creates distinct instruction and data providers in the test clock context.
+	 */
+	new()
+	{
+		instructions = new Rv32WordMemory<512, 9>()
+		data = new Rv32WordMemory<256, 8>()
+		registers = new Rv32DualReadRegisterBank()
+		baseDecoder = new Rv32iZmmulDecoder()
+		decoder = new Rv32ZicsrDecoder(baseDecoder)
+		integer = new Rv32iIntegerUnit()
+		multiplier = new Rv32DspMultiplier()
+		csrs = new Rv32MachineCsrs()
+		core = new Rv32PipelineEngine<0, true, true>(registers, instructions, data, decoder, integer, multiplier, csrs)
+	}
+
+	/**
+	 * Samples retirement every clock; tests never read a CPU-private register array.
+	 */
+	process Observe()
+	{
+		state {
+			cycles++
+
+			if (clearObservation) {
+				csrCommits = 0
+				previousWasCsr = false
+			} elif (csrs.retire == 0b1) {
+				if (csrs.commit == 0b1) {
+					lastCsrCycle = cycles
+					csrCommits++
+					Simulation.Report("CSR commit")
+				}
+
+				previousWasCsr = csrs.commit == 0b1
+			}
+
+			assert csrs.commit == 0b0 || (csrs.retire == 0b1 && csrs.illegal == 0b0)
+
+			if (clearObservation) {
+				retireCount = 0
+			} elif (core.retired == 0b1) {
+				assert retireCount < 512
+				tracePc[retireCount] = core.retiredPc as uint
+				traceWord[retireCount] = core.retiredInstruction as uint
+				traceRd[retireCount] = core.retiredRd as uint
+				traceValue[retireCount] = core.retiredValue as uint
+				retireCount++
+
+				if (core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	/**
+	 * Programs one word with the CPU paused; writes are sampled once.
+	 */
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			instructions.programWrite = 0b1
+			instructions.programIndex = index as logic[9]
+			instructions.programData = word as logic[32]
+		}
+
+		state {
+			instructions.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Runs to a fault stop with a generous bound independent of engine cycle timing.
+	 */
+	fn RunToStop(cause: uint)
+	{
+		var start = cycles
+		core.run = 0b1
+
+		while (core.halted == 0b0 && cycles - start < 20000) {
+			state {
+			}
+		}
+
+		core.run = 0b0
+		assert core.halted == 0b1
+		assert core.faultCause as uint == cause
+		assert cycles - start < retireCount * 50 + 50
+	}
+
+	/**
+	 * Initializes every data location that a vector can read before execution.
+	 */
+	fn Prepare()
+	{
+		core.run = 0b0
+		Simulation.Wait(40)
+		assert core.idle == 0b1
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		var elapsed: uint = 0
+
+		while (core.restartAck != ticket && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.restartAck == ticket
+		clearObservation = true
+		Simulation.Wait(4)
+		clearObservation = false
+
+		for (var index: uint = 0; index < 256; index++) {
+			state {
+				data.programWrite = 0b1
+				data.programIndex = index as logic[8]
+				data.programData = 0
+			}
+		}
+
+		state {
+			data.programWrite = 0b0
+		}
+
+		assert core.idle == 0b1
+	}
+
+	/**
+	 * Compares one ordered committed event with independently computed constants.
+	 */
+	fn CheckRetirement(index: uint, pc: uint, word: uint, rd: uint, value: uint)
+	{
+		assert tracePc[index] == pc
+		assert traceWord[index] == word
+		assert traceRd[index] == rd
+		assert traceValue[index] == value
+	}
+
+	/**
+	 * Checks all CSR forms, encoded-zero suppression, aliases, WARL and counter commits.
+	 */
+	@Test
+	fn CsrRetirement()
+	{
+		Prepare()
+
+		for (var index: uint = 0; index < (Rv32CsrRetirement.WORDS.Length as uint); index++) {
+			Load(index, Rv32CsrRetirement.WORDS[index])
+		}
+
+		RunToStop(3)
+		assert retireCount == Rv32CsrRetirement.VALUES.Length as uint
+
+		for (var index: uint = 0; index < (Rv32CsrRetirement.VALUES.Length as uint); index++) {
+			CheckRetirement(index, index * 4, Rv32CsrRetirement.WORDS[index],
+				Rv32CsrRetirement.DESTINATIONS[index], Rv32CsrRetirement.VALUES[index])
+		}
+	}
+
+	/**
+	 * Rejects UnknownCsr with no CSR access commit, retirement or destination write.
+	 */
+	@Test
+	fn UnknownCsr()
+	{
+		Prepare()
+		Load(0, 0x777020f3)
+		RunToStop(2)
+		assert retireCount == 0 && csrCommits == 0 && core.pc == 0
+		assert core.faultValue == 0x777020f3
+	}
+
+	/**
+	 * Rejects ReadOnlyWrite with no CSR access commit, retirement or destination write.
+	 */
+	@Test
+	fn ReadOnlyWrite()
+	{
+		Prepare()
+		Load(0, 0xf11110f3)
+		RunToStop(2)
+		assert retireCount == 0 && csrCommits == 0 && core.pc == 0
+		assert core.faultValue == 0xf11110f3
+	}
+
+	/**
+	 * Rejects ZeroRegisterValueStillWrites with no CSR access commit, retirement or destination write.
+	 */
+	@Test
+	fn ZeroRegisterValueStillWrites()
+	{
+		Prepare()
+		Load(0, 0xf11120f3)
+		RunToStop(2)
+		assert retireCount == 0 && csrCommits == 0 && core.pc == 0
+		assert core.faultValue == 0xf11120f3
+	}
+
+	/**
+	 * Rejects UnknownWithoutRead with no CSR access commit, retirement or destination write.
+	 */
+	@Test
+	fn UnknownWithoutRead()
+	{
+		Prepare()
+		Load(0, 0x77701073)
+		RunToStop(2)
+		assert retireCount == 0 && csrCommits == 0 && core.pc == 0
+		assert core.faultValue == 0x77701073
+	}
+
+	/**
+	 * Rejects MachineReturnUnavailable with no CSR access commit, retirement or destination write.
+	 */
+	@Test
+	fn MachineReturnUnavailable()
+	{
+		Prepare()
+		Load(0, 0x30200073)
+		RunToStop(2)
+		assert retireCount == 0 && csrCommits == 0 && core.pc == 0
+		assert core.faultValue == 0x30200073
+	}
+
+	/**
+	 * Rejects UserCounterUnavailable with no CSR access commit, retirement or destination write.
+	 */
+	@Test
+	fn UserCounterUnavailable()
+	{
+		Prepare()
+		Load(0, 0xc00020f3)
+		RunToStop(2)
+		assert retireCount == 0 && csrCommits == 0 && core.pc == 0
+		assert core.faultValue == 0xc00020f3
+	}
+
+	/**
+	 * Rejects SupervisorUnavailable with no CSR access commit, retirement or destination write.
+	 */
+	@Test
+	fn SupervisorUnavailable()
+	{
+		Prepare()
+		Load(0, 0x100020f3)
+		RunToStop(2)
+		assert retireCount == 0 && csrCommits == 0 && core.pc == 0
+		assert core.faultValue == 0x100020f3
+	}
+
+	/**
+	 * Toggles one instruction step and bounds the completion acknowledgement.
+	 */
+	fn Step()
+	{
+		core.stepRequest = ~core.stepRequest
+		var elapsed: uint = 0
+
+		while (core.stepAck != core.stepRequest && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.stepAck == core.stepRequest
+	}
+
+	/**
+	 * A held step writes once; pause retains CSR state; restart clears it.
+	 */
+	@Test
+	fn CsrStepPauseRestart()
+	{
+		Prepare()
+		Load(0, 0x3403d0f3)
+		Load(1, 0x34002173)
+		Load(2, 0x00100073)
+		Step()
+		assert retireCount == 1 && csrCommits == 1 && traceValue[0] == 0
+		Simulation.Wait(40)
+		assert retireCount == 1 && csrCommits == 1 && core.pc == 4
+		Step()
+		assert retireCount == 2 && traceValue[1] == 7
+		Step()
+		assert core.halted == 0b1 && core.faultCause == 3
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		Simulation.Wait(50)
+		assert core.restartAck == ticket && core.pc == 0 && core.halted == 0b0
+		Load(0, 0x340021f3)
+		Load(1, 0xb0202273)
+		Step()
+		assert retireCount == 3 && traceValue[2] == 0
+		Step()
+		assert retireCount == 4 && traceValue[3] == 1
+	}
+}

@@ -1,0 +1,56 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Contracts
+
+/**
+ * Tests the exact MRET overlay independently of CSR address legality.
+ */
+@Test
+component Rv32MachineDecoderTest
+{
+	// Owned decode chain; each overlay borrows its sole predecessor.
+	base: Rv32iZmmulDecoder
+	csr: Rv32ZicsrDecoder
+	subject: Rv32MachineDecoder
+
+	/**
+	 * Uses the same decoder chain as the explicit trap composition.
+	 */
+	new()
+	{
+		base = new Rv32iZmmulDecoder()
+		csr = new Rv32ZicsrDecoder(base)
+		subject = new Rv32MachineDecoder(csr)
+	}
+
+	/**
+	 * Exact MRET has no register operands/writes; every single-bit mutation differs.
+	 */
+	@Test
+	fn ExactReturn()
+	{
+		subject.instruction = 0x30200073
+		Simulation.Wait(2)
+		var control = subject.control as uint
+		assert RvDecoded.IsLegal(control)
+		assert !RvDecoded.HasSource1(control) && !RvDecoded.HasSource2(control)
+		assert !RvDecoded.HasDestinationWrite(control)
+		assert RvDecoded.Operation(control) == 240
+
+		for (var bit: uint = 0; bit < 32; bit++) {
+			subject.instruction = (0x30200073 ^ ((1 as uint) << bit)) as logic[32]
+			Simulation.Wait(2)
+			var category = RvDecoded.Operation(subject.control as uint) >> 4
+			assert category != 15
+		}
+
+		subject.instruction = 0x10200073
+		Simulation.Wait(2)
+		assert !RvDecoded.IsLegal(subject.control as uint)
+		subject.instruction = 0x10500073
+		Simulation.Wait(2)
+		assert !RvDecoded.IsLegal(subject.control as uint)
+	}
+}

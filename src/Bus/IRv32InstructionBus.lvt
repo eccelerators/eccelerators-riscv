@@ -6,9 +6,20 @@ namespace Eccelerators.RiscV.Bus
  */
 interface IRv32InstructionBus
 {
+	/**
+	 * Completes a fetch at a byte address, then exposes GetInstruction and HasError.
+	 * Consume both before the next request; invalid or misaligned accesses must report error.
+	 */
 	fn Request(address: uint)
 
+	/**
+	 * Returns the word from the last completed request; check HasError first.
+	 * A subsequent request replaces this result.
+	 */
 	fn GetInstruction() uint
 
+	/**
+	 * Reports whether the last completed transaction failed. A new transaction replaces this status.
+	 */
 	fn HasError() bool
 }

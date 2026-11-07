@@ -1,0 +1,119 @@
+namespace Eccelerators.RiscV.Sequential
+
+/**
+ * Registered partial-product Zmmul provider in the caller's clock/reset domain.
+ * Four unsigned 16x16 products preserve all 64 result bits using 32-bit arithmetic.
+ * Completes four edges after acceptance, then holds ready/result until release.
+ * Hardware reset cancels work. Physical DSP mapping requires target qualification;
+ * this component never owns architectural state or issues scheduled calls.
+ */
+component Rv32DspMultiplier : IRv32MultiplyPort
+{
+	// Concrete operation coverage and fixed completion latency.
+	public const CAPABILITIES: uint = Rv32MultiplyOperations.CAPABILITY
+	public const LATENCY: uint = 4
+
+	// Fixed transaction phases and half-word mask.
+	const IDLE: uint = 0
+	const PRODUCT: uint = 1
+	const COMBINE: uint = 2
+	const CORRECT_LEFT: uint = 3
+	const CORRECT_RIGHT: uint = 4
+	const COMPLETE: uint = 5
+	const HALF_MASK: uint = 0xffff
+
+	// Captured command and owned partial-product registers.
+	phase: logic[3]
+	selectedOperation: logic[2]
+	leftWord: logic[32]
+	rightWord: logic[32]
+	lowLow: logic[32]
+	lowHigh: logic[32]
+	highLow: logic[32]
+	highHigh: logic[32]
+	high: logic[32]
+	low: logic[32]
+
+	// Carry-preserving middle sum; its maximum requires only 18 bits.
+	middle: uint
+
+	/**
+	 * Combines cross-product low halves and exposes the held completion.
+	 */
+	process Calculate[]()
+	{
+		middle = (lowLow as uint >> 16) + (lowHigh as uint & HALF_MASK)
+			+ (highLow as uint & HALF_MASK)
+		ready = 0b0
+		result = high
+
+		if (selectedOperation as uint == Rv32MultiplyOperations.MUL) {
+			result = low
+		}
+
+		if (phase as uint == COMPLETE) {
+			ready = 0b1
+		}
+	}
+
+	/**
+	 * Samples once, registers parallel products, combines and corrects signed halves.
+	 */
+	process Advance()
+	{
+		state {
+			match (phase as uint)
+			{
+				IDLE =>
+				{
+					if (request == 0b1) {
+						leftWord = left
+						rightWord = right
+						selectedOperation = operation
+						phase = PRODUCT as logic[3]
+					}
+				}
+				PRODUCT =>
+				{
+					lowLow = ((leftWord as uint & HALF_MASK) * (rightWord as uint & HALF_MASK)) as logic[32]
+					lowHigh = ((leftWord as uint & HALF_MASK) * (rightWord as uint >> 16)) as logic[32]
+					highLow = ((leftWord as uint >> 16) * (rightWord as uint & HALF_MASK)) as logic[32]
+					highHigh = ((leftWord as uint >> 16) * (rightWord as uint >> 16)) as logic[32]
+					phase = COMBINE as logic[3]
+				}
+				COMBINE =>
+				{
+					low = ((lowLow as uint & HALF_MASK) | (middle << 16)) as logic[32]
+					high = ((highHigh as uint) + (lowHigh as uint >> 16)
+						+ (highLow as uint >> 16) + (middle >> 16)) as logic[32]
+					phase = CORRECT_LEFT as logic[3]
+				}
+				CORRECT_LEFT =>
+				{
+					if ((selectedOperation as uint == Rv32MultiplyOperations.MULH
+						|| selectedOperation as uint == Rv32MultiplyOperations.MULHSU)
+						&& (leftWord as uint >> 31) != 0) {
+						high = ((high as uint) - (rightWord as uint)) as logic[32]
+					}
+
+					phase = CORRECT_RIGHT as logic[3]
+				}
+				CORRECT_RIGHT =>
+				{
+					if (selectedOperation as uint == Rv32MultiplyOperations.MULH
+						&& (rightWord as uint >> 31) != 0) {
+						high = ((high as uint) - (leftWord as uint)) as logic[32]
+					}
+
+					phase = COMPLETE as logic[3]
+				}
+				_ =>
+				{
+					if (request == 0b0) {
+						phase = IDLE as logic[3]
+					}
+				}
+			}
+		}
+	}
+}

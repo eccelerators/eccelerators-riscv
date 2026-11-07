@@ -9,7 +9,7 @@ using Livt.IO
  * reset. Serialize Reset/Read/Write with instruction execution. Calls complete
  * before return but do not promise fixed or single-cycle latency.
  */
-component Rv32iRamRegisterFile<STYLE: MemoryStyle = MemoryStyle.Distributed>: IRv32iRegisterFile
+component Rv32iRamRegisterFile<STYLE: MemoryStyle = MemoryStyle.Distributed> : IRv32iRegisterFile
 {
 	// Expected: synchronous RAM with the explicitly selected synthesis style.
 	registerMemory: Ram<uint, 32, STYLE>
@@ -19,7 +19,7 @@ component Rv32iRamRegisterFile<STYLE: MemoryStyle = MemoryStyle.Distributed>: IR
 	 */
 	new()
 	{
-		this.registerMemory = new Ram<uint, 32, STYLE>()
+		registerMemory = new Ram<uint, 32, STYLE>()
 	}
 
 	/**
@@ -28,7 +28,7 @@ component Rv32iRamRegisterFile<STYLE: MemoryStyle = MemoryStyle.Distributed>: IR
 	override fn Reset()
 	{
 		for (var index = 0; index < 32; index++) {
-			this.registerMemory.Write(index, 0)
+			registerMemory.Write(index, 0)
 		}
 	}
 
@@ -41,7 +41,7 @@ component Rv32iRamRegisterFile<STYLE: MemoryStyle = MemoryStyle.Distributed>: IR
 			return 0
 		}
 
-		return this.registerMemory.Read(index)
+		return registerMemory.Read(index)
 	}
 
 	/**
@@ -53,6 +53,6 @@ component Rv32iRamRegisterFile<STYLE: MemoryStyle = MemoryStyle.Distributed>: IR
 			return
 		}
 
-		this.registerMemory.Write(index, value)
+		registerMemory.Write(index, value)
 	}
 }

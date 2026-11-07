@@ -1,0 +1,24 @@
+namespace Eccelerators.RiscV.Sequential
+
+/**
+ * One-clock-domain, one-outstanding aligned word transaction, consumer to provider.
+ * Hold request/address/write/mask/data stable until an edge with ready=1. That edge
+ * completes exactly once; sample readData/error there, then deassert request for at
+ * least one edge. Provider must reject errors before effects and not accept again
+ * until request falls. No cancellation; software restart drains outstanding work.
+ * Byte lane zero is bits 7..0. A read ignores mask; write mask zero has no effect.
+ */
+interface IRv32MemoryPort
+{
+	// Consumer-owned request, stable throughout the transaction.
+	request: in logic
+	address: in logic[32]
+	write: in logic
+	byteEnable: in logic[4]
+	writeData: in logic[32]
+
+	// Provider-owned completion, held until request deasserts.
+	ready: out logic
+	error: out logic
+	readData: out logic[32]
+}

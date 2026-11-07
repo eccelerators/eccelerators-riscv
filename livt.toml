@@ -1,12 +1,44 @@
 [project]
 name = "Eccelerators.RiscV"
-version = "0.1.2"
+version = "0.2.0"
 path = "src"
 outdir = "out"
 
 [tests]
 path = "tests"
 components = [
+    "Rv32ZicsrAccessTest",
+    "Rv32PipelineZmmulEngineTest",
+    "Rv32PipelineDspEngineTest",
+    "Rv32PipelineCsrEngineTest",
+    "Rv32PipelineTrapEngineTest",
+    "Rv32PipelineTimerInterruptTest",
+    "Rv32PipelineExternalInterruptTest",
+
+    "Rv32PipelineEngineTest",
+    "Rv32PipelineControlTest",
+    "Rv32DualReadRegisterBankTest",
+    "Rv32DualReadDistributedTest",
+    "Rv32InterruptCsrTest",
+    "RvExternalInterruptsTest",
+    "Rv32ExternalInterruptTest",
+    "RvMachineTimerTest",
+    "Rv32TimerInterruptTest",
+    "Rv32TrapEngineTest",
+    "Rv32MachineDecoderTest",
+    "Rv32TrapPolicyTest",
+    "Rv32MachineCsrsTest",
+    "Rv32ZicsrDecoderTest",
+    "Rv32CsrEngineTest",
+    "Rv32ZmmulDecodeTest",
+    "Rv32IterativeMultiplierTest",
+    "Rv32DspMultiplierTest",
+    "Rv32DspEngineTest",
+    "Rv32DspControlTest",
+    "Rv32ZmmulEngineTest",
+    "Rv32ZmmulControlTest",
+    "Rv32SequentialEngineTest",
+    "Rv32SequentialControlTest",
     "Rv32iConstantsTest",
     "Rv32iInstructionFieldsTest",
     "Rv32iImmediateDecoderTest",

@@ -1,0 +1,58 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Contracts
+
+/**
+ * Exhausts the OP funct7/funct3 space against independently specified legality.
+ * The base and extended decoders must differ only on the four Zmmul encodings.
+ */
+@Test
+component Rv32ZmmulDecodeTest
+{
+	// Both implementations observe the same instruction in the test domain.
+	base: Rv32iDecoder
+	extended: Rv32iZmmulDecoder
+
+	/**
+	 * Owns both combinational decoders; no execution state is involved.
+	 */
+	new()
+	{
+		base = new Rv32iDecoder()
+		extended = new Rv32iZmmulDecoder()
+	}
+
+	/**
+	 * Checks exact legality, operand flags and identities for 1,024 OP encodings.
+	 */
+	@Test
+	fn ExhaustOpEncodings()
+	{
+		for (var funct7: uint = 0; funct7 < 128; funct7++) {
+			for (var funct3: uint = 0; funct3 < 8; funct3++) {
+				var word: uint = (funct7 << 25) | ((19 as uint) << 20) | ((17 as uint) << 15)
+					| (funct3 << 12) | ((13 as uint) << 7) | (0x33 as uint)
+				base.instruction = word as logic[32]
+				extended.instruction = word as logic[32]
+				Simulation.Wait(2)
+				var baseLegal = funct7 == 0 || (funct7 == 32 && (funct3 == 0 || funct3 == 5))
+				var multiplyLegal = funct7 == 1 && funct3 < 4
+				assert RvDecoded.IsLegal(base.control as uint) == baseLegal
+				assert RvDecoded.IsLegal(extended.control as uint) == (baseLegal || multiplyLegal)
+
+				if (multiplyLegal) {
+					var control = extended.control as uint
+					assert RvDecoded.Rd(control) == 13
+					assert RvDecoded.Rs1(control) == 17 && RvDecoded.Rs2(control) == 19
+					assert RvDecoded.HasSource1(control) && RvDecoded.HasSource2(control)
+					assert RvDecoded.HasDestinationWrite(control)
+					assert RvDecoded.Operation(control) == (((13 as uint) << 4) | funct3)
+				} else {
+					assert extended.control == base.control
+					assert extended.immediate == base.immediate
+				}
+			}
+		}
+	}
+}

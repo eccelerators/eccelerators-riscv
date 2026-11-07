@@ -2,32 +2,46 @@ namespace Eccelerators.RiscV.Tests
 
 using Eccelerators.RiscV.Core
 
+/**
+ * Checks register reads, writes, reset and the immutable zero register.
+ * Stateful scenarios initialize their inputs independently before execution.
+ */
 @Test
 component Rv32iRegisterFileTest
 {
+	// Owned subjects and fixtures; scenarios initialize mutable state before use.
 	registers: Rv32iRegisterFile
 
+	/**
+	 * Constructs the owned subjects and fixtures; each stateful scenario supplies its own initialization.
+	 */
 	new()
 	{
-		this.registers = new Rv32iRegisterFile()
+		registers = new Rv32iRegisterFile()
 	}
 
+	/**
+	 * Attempts to write x0 after reset and requires it to remain zero.
+	 */
 	@Test
 	fn TestX0IsHardwiredZero()
 	{
-		this.registers.Reset()
-		this.registers.Write(0, 99)
-		assert this.registers.Read(0) == 0
+		registers.Reset()
+		registers.Write(0, 99)
+		assert registers.Read(0) == 0
 	}
 
+	/**
+	 * Checks low/high register indices and that an untouched register remains zero after reset.
+	 */
 	@Test
 	fn TestWriteAndReadRegisters()
 	{
-		this.registers.Reset()
-		this.registers.Write(1, 11)
-		this.registers.Write(31, 31)
-		assert this.registers.Read(1) == 11
-		assert this.registers.Read(31) == 31
-		assert this.registers.Read(2) == 0
+		registers.Reset()
+		registers.Write(1, 11)
+		registers.Write(31, 31)
+		assert registers.Read(1) == 11
+		assert registers.Read(31) == 31
+		assert registers.Read(2) == 0
 	}
 }

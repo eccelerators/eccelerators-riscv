@@ -1,0 +1,140 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Platform
+
+/**
+ * Exercises the timer through its public MMIO port; exact edge/reset checks use HDL.
+ */
+@Test
+component RvMachineTimerTest
+{
+	// Owned fast timebase and latest bus snapshot.
+	timer: RvMachineTimer<0, 1, 1>
+	value: uint
+
+	/**
+	 * Uses one tick per clock to expose rollover and held-request mistakes quickly.
+	 */
+	new()
+	{
+		timer = new RvMachineTimer<0, 1, 1>()
+	}
+
+	/**
+	 * Completes one request and verifies stable response while held for extra clocks.
+	 */
+	fn Access(address: uint, write: bool, data: uint, lanes: uint, error: bool)
+	{
+		timer.request = 0b0
+		Simulation.Wait(3)
+		timer.address = address as logic[32]
+		timer.write = write as logic
+		timer.writeData = data as logic[32]
+		timer.byteEnable = lanes as logic[4]
+		timer.request = 0b1
+		var elapsed: uint = 0
+
+		while (timer.ready == 0b0 && elapsed < 20) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert timer.ready == 0b1 && (timer.error == 0b1) == error
+		value = timer.readData as uint
+		Simulation.Wait(8)
+		assert timer.readData as uint == value && timer.ready == 0b1
+		timer.request = 0b0
+		Simulation.Wait(3)
+		assert timer.ready == 0b0
+	}
+
+	/**
+	 * Establishes a distant deadline and known time without depending on other tests.
+	 */
+	fn Prepare()
+	{
+		Access(8, true, 0xffffffff, 15, false)
+		Access(12, true, 0xffffffff, 15, false)
+		Access(4, true, 0, 15, false)
+		Access(0, true, 0, 15, false)
+		assert timer.timerPending == 0b0
+	}
+
+	/**
+	 * A held time write happens once while the timebase keeps advancing.
+	 */
+	@Test
+	fn HeldWritesAndReadSnapshots()
+	{
+		Prepare()
+		Access(0, true, 0, 15, false)
+		Access(0, false, 0, 0, false)
+		assert value >= 12 && value < 100
+		var before = value
+		Simulation.Wait(30)
+		Access(0, false, 0, 0, false)
+		assert value > before + 30
+	}
+
+	/**
+	 * Deadline words honor byte lanes; invalid addresses and zero masks have no effect.
+	 */
+	@Test
+	fn ByteMasksAndInvalidRequests()
+	{
+		Prepare()
+		Access(8, true, 0x12345678, 15, false)
+		Access(8, true, 0xaabbccdd, 5, false)
+		Access(8, false, 0, 0, false)
+		assert value == 0x12bb56dd
+		Access(8, true, 0, 0, false)
+		Access(9, true, 0, 15, true)
+		Access(16, true, 0, 15, true)
+		Access(0xfffffffc, true, 0, 15, true)
+		Access(8, false, 0, 0, false)
+		assert value == 0x12bb56dd
+		Access(12, false, 0, 0, false)
+		assert value == 0xffffffff && timer.timerPending == 0b0
+	}
+
+	/**
+	 * Unsigned high-word comparison dominates low words, including the sign bit.
+	 */
+	@Test
+	fn UnsignedComparisonAndRearming()
+	{
+		Prepare()
+		Access(4, true, 0x80000000, 15, false)
+		Access(12, true, 0x7fffffff, 15, false)
+		assert timer.timerPending == 0b1
+		Access(8, true, 0xffffffff, 15, false)
+		Access(12, true, 0x80000000, 15, false)
+		assert timer.timerPending == 0b0
+		Access(8, true, 0, 15, false)
+		assert timer.timerPending == 0b1
+		Simulation.Wait(20)
+		assert timer.timerPending == 0b1
+		Access(12, true, 0xffffffff, 15, false)
+		assert timer.timerPending == 0b0
+	}
+
+	/**
+	 * Carry propagates across both halves and the complete timer wraps modulo 2^64.
+	 */
+	@Test
+	fn FullWidthRollover()
+	{
+		Prepare()
+		Access(4, true, 17, 15, false)
+		Access(0, true, 0xffffffe0, 15, false)
+		Simulation.Wait(80)
+		Access(4, false, 0, 0, false)
+		assert value == 18
+		Access(4, true, 0xffffffff, 15, false)
+		Access(0, true, 0xffffffe0, 15, false)
+		Simulation.Wait(80)
+		Access(4, false, 0, 0, false)
+		assert value == 0
+	}
+}

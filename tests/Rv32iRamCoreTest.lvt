@@ -17,8 +17,8 @@ component Rv32iRamCoreTest
 	 */
 	new()
 	{
-		this.distributedRamChecks = new RamCoreChecks<Rv32iRegisterStorage.DistributedRam>()
-		this.blockRamChecks = new RamCoreChecks<Rv32iRegisterStorage.BlockRam>()
+		distributedRamChecks = new RamCoreChecks<Rv32iRegisterStorage.DistributedRam>()
+		blockRamChecks = new RamCoreChecks<Rv32iRegisterStorage.BlockRam>()
 	}
 
 	/**
@@ -27,7 +27,7 @@ component Rv32iRamCoreTest
 	@Test
 	fn PreservesBehaviorWithDistributedRam()
 	{
-		this.distributedRamChecks.Check()
+		distributedRamChecks.Check()
 	}
 
 	/**
@@ -36,6 +36,6 @@ component Rv32iRamCoreTest
 	@Test
 	fn PreservesBehaviorWithBlockRam()
 	{
-		this.blockRamChecks.Check()
+		blockRamChecks.Check()
 	}
 }
