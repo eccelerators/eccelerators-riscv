@@ -4,15 +4,15 @@ Composable RISC-V processors for FPGA applications written in Livt. Start with a
 named core, or construct an engine and its providers explicitly. Both approaches
 use the same reusable components; resource choices are compile-time parameters.
 
-Version **0.2.0** introduces sequential and pipeline core presets, optional
-multiplication, and machine-mode compositions with CSRs, traps and interrupts.
-See the [release notes](CHANGELOG.md#020---2026-11-07) for changes and migration
-guidance from the scheduled reference cores.
+Version **0.2.1** adds separate instruction-fetch and load/store ports and a
+system-level composition while retaining the sequential and pipeline core
+presets. See the [release notes](CHANGELOG.md#021) for migration guidance.
 
 ## Choose a core
 
 All presets are in `Eccelerators.RiscV.Presets` and borrow separate instruction
-and data providers implementing `flip IRv32MemoryPort`.
+and data providers implementing `flip IRv32FetchPort` and
+`flip IRv32LoadStorePort`, respectively.
 
 | Features | Sequential engine | Pipeline engine |
 |---|---|---|
@@ -48,7 +48,7 @@ Add the release under `[dependencies]` in your application's `livt.toml`:
 
 ```toml
 [dependencies]
-"Eccelerators.RiscV" = "0.2.0"
+"Eccelerators.RiscV" = "0.2.1"
 ```
 
 For development against a local checkout, use this dependency instead:
@@ -58,7 +58,7 @@ For development against a local checkout, use this dependency instead:
 "Eccelerators.RiscV" = { path = "../eccelerators-riscv" }
 ```
 
-Run `livt sync` to resolve dependencies. The package uses `Livt.IO` 1.2.0 for
+Run `livt sync` to resolve dependencies. The package uses `Livt.IO` 1.8.1 for
 memory storage and its reference UART platform.
 
 Software targets are `rv32i`, `rv32i_zmmul`, or `rv32i_zmmul_zicsr`, with the
@@ -74,8 +74,8 @@ architectural debug are absent. These cores do not boot Linux.
 - [Testing](docs/testing.md): run the functional suite with `livt test`.
 - [Change history](CHANGELOG.md) and [license](LICENSE).
 
-The functional suite passed **293 tests**, with no failures or skips, during
-pre-release validation. FPGA resources and timing depend on the complete
-composition, parameters and target; validate them for your application.
+Run the functional suite against the resolved dependencies before publishing.
+FPGA resources and timing depend on the complete composition, parameters and
+target; validate them for your application.
 
 This package contains reusable source, functional tests and user documentation.

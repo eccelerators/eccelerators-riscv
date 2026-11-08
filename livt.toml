@@ -1,12 +1,26 @@
 [project]
 name = "Eccelerators.RiscV"
-version = "0.2.0"
+version = "0.2.1"
+description = "Composable RV32I and Zmmul processors, machine-mode support, and reusable FPGA system components written in Livt."
+authors = ["Denis Vasilík"]
+repository = "https://github.com/eccelerators/eccelerators-riscv"
+homepage = "https://github.com/eccelerators/eccelerators-riscv"
+keywords = ["fpga", "riscv", "rv32i", "processor", "cpu"]
+license = "MIT"
 path = "src"
 outdir = "out"
+
+[project.organization]
+name = "Eccelerators GmbH"
+website = "https://eccelerators.com"
+
+[publish]
+files = ["README.md", "CHANGELOG.md", "LICENSE"]
 
 [tests]
 path = "tests"
 components = [
+    "RvSystemTest",
     "Rv32ZicsrAccessTest",
     "Rv32PipelineZmmulEngineTest",
     "Rv32PipelineDspEngineTest",
@@ -62,4 +76,4 @@ components = [
 ]
 
 [dependencies]
-"Livt.IO" = "1.2.0"
+"Livt.IO" = "1.8.1"

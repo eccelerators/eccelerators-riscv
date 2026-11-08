@@ -12,8 +12,8 @@ using Livt.IO
 component Rv32DspControlTest
 {
 	// Owned instruction storage, delayable device, core and retirement observations.
-	instructions: Rv32WordMemory<64, 6>
-	data: DelayedWordDevice
+	fetch: RvFetchRom<64, 6>
+	loadStore: DelayedWordDevice
 	core: Rv32iZmmulSequentialCore<0, MemoryStyle.Block, true>
 	clearObservation: bool
 	count: uint
@@ -24,9 +24,9 @@ component Rv32DspControlTest
 	 */
 	new()
 	{
-		instructions = new Rv32WordMemory<64, 6>()
-		data = new DelayedWordDevice()
-		core = new Rv32iZmmulSequentialCore<0, MemoryStyle.Block, true>(instructions, data)
+		fetch = new RvFetchRom<64, 6>()
+		loadStore = new DelayedWordDevice()
+		core = new Rv32iZmmulSequentialCore<0, MemoryStyle.Block, true>(fetch, loadStore)
 	}
 
 	/**
@@ -57,10 +57,10 @@ component Rv32DspControlTest
 		Simulation.Wait(50)
 		assert core.restartAck == ticket
 		clearObservation = true
-		data.clear = 0b1
-		data.releaseResponse = 0b0
+		loadStore.clear = 0b1
+		loadStore.releaseResponse = 0b0
 		Simulation.Wait(4)
-		data.clear = 0b0
+		loadStore.clear = 0b0
 		clearObservation = false
 	}
 
@@ -70,13 +70,13 @@ component Rv32DspControlTest
 	fn Load(index: uint, word: uint)
 	{
 		state {
-			instructions.programWrite = 0b1
-			instructions.programIndex = index as logic[6]
-			instructions.programData = word as logic[32]
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[6]
+			fetch.programData = word as logic[32]
 		}
 
 		state {
-			instructions.programWrite = 0b0
+			fetch.programWrite = 0b0
 		}
 	}
 
@@ -158,28 +158,28 @@ component Rv32DspControlTest
 		core.run = 0b1
 		var elapsed: uint = 0
 
-		while (data.accepted == 0b0 && elapsed < 300) {
+		while (loadStore.accepted == 0b0 && elapsed < 300) {
 			state {
 				elapsed++
 			}
 		}
 
-		assert data.accepted == 0b1
+		assert loadStore.accepted == 0b1
 		core.run = 0b0
 		var ticket = ~core.restartAck
 		core.restartRequest = ticket
 		Simulation.Wait(20)
 		assert core.restartAck != ticket
-		assert data.writes == 0 && count == 1
-		data.releaseResponse = 0b1
+		assert loadStore.writes == 0 && count == 1
+		loadStore.releaseResponse = 0b1
 		Simulation.Wait(70)
 		assert core.restartAck == ticket && core.idle == 0b1
 		assert core.pc == 0
-		assert data.writes == 1 && data.reads == 0
-		assert data.payload == 42 && count == 2
+		assert loadStore.writes == 1 && loadStore.reads == 0
+		assert loadStore.payload == 42 && count == 2
 		Load(0, 0x00002183)
 		Step()
-		assert lastValue == 42 && data.reads == 1
+		assert lastValue == 42 && loadStore.reads == 1
 	}
 
 	/**
@@ -190,12 +190,12 @@ component Rv32DspControlTest
 	{
 		Prepare()
 		Load(0, 0x00402003)
-		data.releaseResponse = 0b1
+		loadStore.releaseResponse = 0b1
 		WaitIdle()
 		Step()
 		assert core.halted == 0b1 && core.faultCause == 5
 		assert core.faultValue == 4 && core.pc == 0
-		assert count == 0 && data.reads == 0 && data.writes == 0
+		assert count == 0 && loadStore.reads == 0 && loadStore.writes == 0
 	}
 
 	/**

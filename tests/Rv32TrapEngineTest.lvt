@@ -13,9 +13,9 @@ using Eccelerators.RiscV.Machine
 component Rv32TrapEngineTest
 {
 	// Owned platform, explicit execution composition and architectural scoreboard.
-	instructions: Rv32WordMemory<512, 9>
-	data: DelayedWordDevice
-	core: Rv32SequentialEngine<0, true, true, true>
+	fetch: RvFetchRom<512, 9>
+	loadStore: DelayedWordDevice
+	core: Rv32SequentialEngine<0, true>
 	registers: Rv32RegisterBank
 	baseDecoder: Rv32iZmmulDecoder
 	csrDecoder: Rv32ZicsrDecoder
@@ -41,8 +41,8 @@ component Rv32TrapEngineTest
 	 */
 	new()
 	{
-		instructions = new Rv32WordMemory<512, 9>()
-		data = new DelayedWordDevice()
+		fetch = new RvFetchRom<512, 9>()
+		loadStore = new DelayedWordDevice()
 		registers = new Rv32RegisterBank()
 		baseDecoder = new Rv32iZmmulDecoder()
 		csrDecoder = new Rv32ZicsrDecoder(baseDecoder)
@@ -50,7 +50,7 @@ component Rv32TrapEngineTest
 		integer = new Rv32iIntegerUnit()
 		multiplier = new Rv32DspMultiplier()
 		csrs = new Rv32MachineCsrs()
-		core = new Rv32SequentialEngine<0, true, true, true>(registers, instructions, data, decoder, integer, multiplier, csrs)
+		core = new Rv32SequentialEngine<0, true>(registers, fetch, loadStore, decoder, integer, multiplier, csrs)
 	}
 
 	/**
@@ -95,13 +95,13 @@ component Rv32TrapEngineTest
 	fn Load(index: uint, word: uint)
 	{
 		state {
-			instructions.programWrite = 0b1
-			instructions.programIndex = index as logic[9]
-			instructions.programData = word as logic[32]
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[9]
+			fetch.programData = word as logic[32]
 		}
 
 		state {
-			instructions.programWrite = 0b0
+			fetch.programWrite = 0b0
 		}
 	}
 
@@ -128,10 +128,10 @@ component Rv32TrapEngineTest
 		Simulation.Wait(4)
 		clearObservation = false
 
-		data.clear = 0b1
-		data.releaseResponse = 0b0
+		loadStore.clear = 0b1
+		loadStore.releaseResponse = 0b0
 		Simulation.Wait(4)
-		data.clear = 0b0
+		loadStore.clear = 0b0
 
 		assert core.idle == 0b1
 	}
@@ -182,14 +182,14 @@ component Rv32TrapEngineTest
 		Load(3, 0xb0202a73)
 		Load(4, 0x30002af3)
 		Load(5, 0x00028b13)
-		data.releaseResponse = 0b1
+		loadStore.releaseResponse = 0b1
 		Step()
 		Step()
 		Step()
 		assert trapCount == 1 && retireCount == 2
 		assert core.pc == 256 && lastTrapPc == 8
 		assert lastTrapCause == cause && lastTrapValue == value
-		assert data.reads == 0 && data.writes == 0
+		assert loadStore.reads == 0 && loadStore.writes == 0
 		Simulation.Wait(30)
 		assert trapCount == 1 && retireCount == 2 && core.pc == 256
 
@@ -449,23 +449,23 @@ component Rv32TrapEngineTest
 		core.run = 0b1
 		var elapsed: uint = 0
 
-		while (data.accepted == 0b0 && elapsed < 200) {
+		while (loadStore.accepted == 0b0 && elapsed < 200) {
 			state {
 				elapsed++
 			}
 		}
 
-		assert data.accepted == 0b1
+		assert loadStore.accepted == 0b1
 		core.run = 0b0
 		var ticket = ~core.restartAck
 		core.restartRequest = ticket
 		Simulation.Wait(20)
 		assert core.restartAck != ticket && trapCount == 0 && retireCount == 2
-		assert data.writes == 0
-		data.releaseResponse = 0b1
+		assert loadStore.writes == 0
+		loadStore.releaseResponse = 0b1
 		Simulation.Wait(80)
 		assert core.restartAck == ticket && core.pc == 0 && core.idle == 0b1
-		assert trapCount == 1 && retireCount == 2 && data.writes == 0
+		assert trapCount == 1 && retireCount == 2 && loadStore.writes == 0
 		Load(0, 0x34102573)
 		Load(1, 0xb02025f3)
 		Step()

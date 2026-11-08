@@ -33,7 +33,7 @@ component Rv32iZmmulSequentialCore<RESET_PC: uint = 0, REGISTER_FILE_STYLE: Memo
 	// Remaining providers and the sole architectural execution owner.
 	noCsrs: Rv32NoCsrs
 	integer: Rv32iIntegerUnit
-	engine: Rv32SequentialEngine<RESET_PC, true>
+	engine: Rv32SequentialEngine<RESET_PC>
 
 	// Elaboration-only checks for operation coverage and provider timing.
 	coverage: RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iZmmulDecoder.CAPABILITIES,
@@ -46,7 +46,7 @@ component Rv32iZmmulSequentialCore<RESET_PC: uint = 0, REGISTER_FILE_STYLE: Memo
 	/**
 	 * Owns the CPU internals; the caller owns both bus providers.
 	 */
-	new(instructions: flip IRv32MemoryPort, data: flip IRv32MemoryPort)
+	new(fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort)
 	{
 		registers = new Rv32RegisterBank<REGISTER_FILE_STYLE>()
 		decoder = new Rv32iZmmulDecoder()
@@ -55,10 +55,10 @@ component Rv32iZmmulSequentialCore<RESET_PC: uint = 0, REGISTER_FILE_STYLE: Memo
 
 		static if (DSP_MULTIPLY) {
 			dspMultiplier = new Rv32DspMultiplier()
-			engine = new Rv32SequentialEngine<RESET_PC, true>(registers, instructions, data, decoder, integer, dspMultiplier, noCsrs)
+			engine = new Rv32SequentialEngine<RESET_PC>(registers, fetch, loadStore, decoder, integer, dspMultiplier, noCsrs)
 		} else {
 			multiplier = new Rv32IterativeMultiplier()
-			engine = new Rv32SequentialEngine<RESET_PC, true>(registers, instructions, data, decoder, integer, multiplier, noCsrs)
+			engine = new Rv32SequentialEngine<RESET_PC>(registers, fetch, loadStore, decoder, integer, multiplier, noCsrs)
 		}
 
 		coverage = new RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iZmmulDecoder.CAPABILITIES,

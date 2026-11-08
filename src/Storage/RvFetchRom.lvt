@@ -1,0 +1,115 @@
+namespace Eccelerators.RiscV.Storage
+
+using Eccelerators.RiscV.Sequential
+using Livt.IO
+
+/**
+ * Exclusive, synchronous read-only instruction ROM with one outstanding word
+ * transaction. Reads are side-effect free. Out-of-range or unaligned requests
+ * fault before a RAM access. Reset retains payload; initialize every location
+ * read. The composition root may provision whole words only while the CPU is
+ * idle and request is low. Programming and execution must never overlap.
+ */
+component RvFetchRom<WORDS: int = 1024, ADDRESS_BITS: int = 10,
+	STYLE: MemoryStyle = MemoryStyle.Block, BASE: uint = 0> : IRv32FetchPort
+{
+	static assert (BASE & 3) == 0, "Memory base must be word aligned"
+	static assert ADDRESS_BITS > 0 && ADDRESS_BITS <= 28, "Memory address width must be 1..28"
+	static assert WORDS > 0 && WORDS <= (1 << ADDRESS_BITS), "Memory capacity exceeds address width"
+
+	// Host provisioning signals, sampled on an enabled edge with an idle fetch.
+	public programWrite: in logic
+	public programIndex: in logic[ADDRESS_BITS]
+	public programData: in logic[32]
+
+	// Transaction phases.
+	const IDLE: uint = 0
+	const CAPTURE: uint = 1
+	const RESPONSE: uint = 2
+
+	// Owned native synchronous memory and transaction phase; no payload reset loop.
+	storage: SynchronousRam<logic[32], logic[ADDRESS_BITS], WORDS, STYLE>
+	phase: uint
+	responseError: logic
+	responseData: logic[32]
+
+	// Combinational address validity.
+	validAddress: bool
+
+	/**
+	 * Creates exactly one synchronous payload memory.
+	 */
+	new()
+	{
+		storage = new SynchronousRam<logic[32], logic[ADDRESS_BITS], WORDS, STYLE>()
+	}
+
+	/**
+	 * Maps fetch or provisioning operations onto the sole RAM port.
+	 */
+	process Drive[]()
+	{
+		validAddress = (address as uint & 3) == 0 && ((address as uint - BASE) >> 2) < (WORDS as uint)
+		error = responseError
+		instruction = responseData
+		ready = 0b0
+
+		if (phase == RESPONSE) {
+			ready = 0b1
+		}
+
+		storage.enable = false
+		storage.writeEnable = false
+		storage.address = ((address as uint - BASE) >> 2) as logic[ADDRESS_BITS]
+		storage.writeData = 0
+
+		if (phase == IDLE && request == 0b1 && validAddress) {
+			storage.enable = true
+		} elif (phase == IDLE && request == 0b0 && programWrite == 0b1) {
+			storage.enable = true
+			storage.writeEnable = true
+			storage.address = programIndex
+			storage.writeData = programData
+		}
+	}
+
+	/**
+	 * Completes each fetch request once, including errors.
+	 */
+	process Advance()
+	{
+		state {
+			match (phase)
+			{
+				IDLE =>
+				{
+					if (request == 0b1) {
+						responseError = 0b0
+
+						if (!validAddress) {
+							responseError = 0b1
+							phase = RESPONSE
+						} else {
+							phase = CAPTURE
+						}
+					}
+				}
+				CAPTURE =>
+				{
+					responseData = storage.readData
+					phase = RESPONSE
+				}
+				RESPONSE =>
+				{
+					if (request == 0b0) {
+						phase = IDLE
+					}
+				}
+				_ =>
+				{
+					phase = IDLE
+				}
+			}
+		}
+	}
+}

@@ -6,7 +6,7 @@ using Eccelerators.RiscV.Contracts
 using Eccelerators.RiscV.Machine
 
 /**
- * Four-stage, single-issue RV32I engine with optional multiply and machine state.
+ * Four-stage, single-issue RV32I engine with machine-capable optional state.
  * Diagnostic compositions stop on faults; machine compositions enter direct mtvec.
  * CSR effects, multiply completion and traps are ordered by the commit owner.
  * Borrows exclusive same-clock providers. Instruction reads must be side-effect
@@ -14,13 +14,12 @@ using Eccelerators.RiscV.Machine
  * restart drain admitted work; idle includes the memory release edges. A paused
  * step admits exactly one instruction. Reset must also reset the bus providers.
  * Owns all stage validity and architectural ordering in one clocked controller.
+ * Interrupt delivery samples the CSR provider at a drained boundary (a NoCsrs
+ * provider ties interruptEligible low, making delivery inert).
  */
-component Rv32PipelineEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bool = false,
-	MACHINE_TRAPS: bool = false, INTERRUPTS: bool = false> : IRv32ControlPort
+component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : IRv32ControlPort
 {
 	static assert (RESET_PC & 3) == 0, "Pipeline reset PC must be word aligned"
-	static assert !MACHINE_TRAPS || CSR, "Machine traps require CSR state"
-	static assert !INTERRUPTS || MACHINE_TRAPS, "Interrupts require machine traps"
 
 	// Semantic families implemented by the controller, excluding the borrowed ALU.
 	public const CAPABILITIES: uint = Rv32iOperations.MEMORY_CAPABILITY | Rv32iOperations.CONTROL_CAPABILITY
@@ -32,8 +31,8 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bo
 
 	// Exclusive borrowed providers; the application owns their lifetime.
 	registers: IRv32DualReadRegisterPort
-	instructions: IRv32MemoryPort
-	data: IRv32MemoryPort
+	fetch: IRv32FetchPort
+	loadStore: IRv32LoadStorePort
 	decoder: IRv32DecodePort
 	integer: Rv32iIntegerUnit
 	multiplier: IRv32MultiplyPort
@@ -145,13 +144,13 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bo
 	/**
 	 * Binds providers without scheduled wrappers. Startup clears x1..x31 before idle.
 	 */
-	new(registers: flip IRv32DualReadRegisterPort, instructions: flip IRv32MemoryPort,
-		data: flip IRv32MemoryPort, decoder: flip IRv32DecodePort, integer: Rv32iIntegerUnit,
+	new(registers: flip IRv32DualReadRegisterPort, fetch: flip IRv32FetchPort,
+		loadStore: flip IRv32LoadStorePort, decoder: flip IRv32DecodePort, integer: Rv32iIntegerUnit,
 		multiplier: flip IRv32MultiplyPort, csrs: flip IRv32CsrPort)
 	{
 		this.registers = registers
-		this.instructions = instructions
-		this.data = data
+		this.fetch = fetch
+		this.loadStore = loadStore
 		this.decoder = decoder
 		this.integer = integer
 		this.multiplier = multiplier
@@ -194,8 +193,6 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bo
 			xCause = Rv32iOperations.INSTRUCTION_ACCESS as logic[4]
 			xResult = xPc
 		} elif (!RvDecoded.IsLegal(control)
-			|| (xKind == Rv32MultiplyOperations.KIND && !MULTIPLY)
-			|| (xKind == Rv32CsrOperations.KIND && !CSR)
 			|| (xKind == Rv32TrapOperations.RETURN_KIND && !MACHINE_TRAPS)) {
 			xFault = true
 			xCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[4]
@@ -270,17 +267,17 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bo
 		var csrOperand = cOperand
 		var csrDestination = cRd as uint
 		cMemory = cKind as uint == Rv32iOperations.LOAD || cKind as uint == Rv32iOperations.STORE
-		cMultiply = MULTIPLY && cKind as uint == Rv32MultiplyOperations.KIND
-		cCsr = CSR && cKind as uint == Rv32CsrOperations.KIND
+		cMultiply = cKind as uint == Rv32MultiplyOperations.KIND
+		cCsr = cKind as uint == Rv32CsrOperations.KIND
 		cReturn = MACHINE_TRAPS && cKind as uint == Rv32TrapOperations.RETURN_KIND
-		cComplete = cValid && (cFault || (cMemory && !dataGap && data.ready == 0b1)
+		cComplete = cValid && (cFault || (cMemory && !dataGap && loadStore.ready == 0b1)
 			|| (cMultiply && !multiplyGap && multiplier.ready == 0b1) || (!cMemory && !cMultiply))
-		cFailed = cFault || (cMemory && data.error == 0b1) || (cCsr && csrs.illegal == 0b1)
+		cFailed = cFault || (cMemory && loadStore.error == 0b1) || (cCsr && csrs.illegal == 0b1)
 		cWrite = cComplete && !cFailed && cWrites && cRd != 0
 		cResult = cValue
 
 		if (cKind as uint == Rv32iOperations.LOAD) {
-			cResult = Rv32iSemantics.Load(data.readData as uint, addressValue, width)
+			cResult = Rv32iSemantics.Load(loadStore.readData as uint, addressValue, width)
 		} elif (cMultiply) {
 			cResult = multiplier.result as uint
 		} elif (cCsr) {
@@ -293,10 +290,10 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bo
 			redirectPc = csrs.returnPc as uint
 		}
 
-		cSerialize = INTERRUPTS && cComplete && !cFailed && (cCsr || cReturn)
+		cSerialize = cComplete && !cFailed && (cCsr || cReturn)
 		quiescent = !fBusy && !fValid && !fGap && !dValid && !xValid && !cValid
 			&& !dataGap && !multiplyGap && !trapPending && !boundaryCheck
-		takeInterrupt = INTERRUPTS && initialized && !stopped && !trapPending && !stepActive
+		takeInterrupt = initialized && !stopped && !trapPending && !stepActive
 			&& restartRequest == restartCompleted && csrs.interruptEligible == 0b1
 			&& (!cValid || (cComplete && !cFailed)) && !cSerialize
 			&& (run == 0b1 || (quiescent && stepRequest != stepCompleted))
@@ -338,28 +335,25 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bo
 			registers.writeEnable = 0b1
 		}
 
-		instructions.request = 0b0
-		instructions.address = fPc as logic[32]
-		instructions.write = 0b0
-		instructions.byteEnable = 0
-		instructions.writeData = 0
+		fetch.request = 0b0
+		fetch.address = fPc as logic[32]
 
 		if (fBusy) {
-			instructions.request = 0b1
+			fetch.request = 0b1
 		}
 
-		data.request = 0b0
-		data.address = (cValue & 0xfffffffc) as logic[32]
-		data.write = 0b0
-		data.byteEnable = Rv32iSemantics.StoreMask(addressValue, width) as logic[4]
-		data.writeData = (cStoreValue << (((cValue & 3) * 8) as int)) as logic[32]
+		loadStore.request = 0b0
+		loadStore.address = (cValue & 0xfffffffc) as logic[32]
+		loadStore.write = 0b0
+		loadStore.byteEnable = Rv32iSemantics.StoreMask(addressValue, width) as logic[4]
+		loadStore.writeData = (cStoreValue << (((cValue & 3) * 8) as int)) as logic[32]
 
 		if (cValid && cMemory && !cFault && !dataGap) {
-			data.request = 0b1
+			loadStore.request = 0b1
 		}
 
 		if (cKind as uint == Rv32iOperations.STORE) {
-			data.write = 0b1
+			loadStore.write = 0b1
 		}
 
 		multiplier.request = 0b0
@@ -385,32 +379,30 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bo
 		csrs.entryCause = entryCause
 		csrs.entryValue = entryValue
 
-		if (CSR) {
-			if (!initialized) {
-				csrs.clear = 0b1
+		if (!initialized) {
+			csrs.clear = 0b1
+		}
+
+		if (cValid && cCsr) {
+			csrs.operand = Rv32ZicsrAccess.SelectOperand(width, csrInstruction, csrOperand) as logic[32]
+			csrs.readEnable = Rv32ZicsrAccess.RequiresRead(width, csrDestination) as logic
+			csrs.writeEnable = Rv32ZicsrAccess.RequiresWrite(width, csrInstruction) as logic
+		}
+
+		if (cComplete && !cFailed) {
+			csrs.retire = 0b1
+
+			if (cCsr) {
+				csrs.commit = 0b1
 			}
 
-			if (cValid && cCsr) {
-				csrs.operand = Rv32ZicsrAccess.SelectOperand(width, csrInstruction, csrOperand) as logic[32]
-				csrs.readEnable = Rv32ZicsrAccess.RequiresRead(width, csrDestination) as logic
-				csrs.writeEnable = Rv32ZicsrAccess.RequiresWrite(width, csrInstruction) as logic
+			if (cReturn) {
+				csrs.returnTrap = 0b1
 			}
+		}
 
-			if (cComplete && !cFailed) {
-				csrs.retire = 0b1
-
-				if (cCsr) {
-					csrs.commit = 0b1
-				}
-
-				if (cReturn) {
-					csrs.returnTrap = 0b1
-				}
-			}
-
-			if (enterTrap) {
-				csrs.enterTrap = 0b1
-			}
+		if (enterTrap) {
+			csrs.enterTrap = 0b1
 		}
 
 		idle = 0b0
@@ -635,12 +627,12 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bo
 					fValid = false
 				}
 
-				if (fBusy && instructions.ready == 0b1) {
+				if (fBusy && fetch.ready == 0b1) {
 					fBusy = false
 					fGap = true
 					fValid = !fKilled && !flush
-					fWord = instructions.readData as uint
-					fError = instructions.error == 0b1
+					fWord = fetch.instruction as uint
+					fError = fetch.error == 0b1
 					fKilled = false
 				}
 

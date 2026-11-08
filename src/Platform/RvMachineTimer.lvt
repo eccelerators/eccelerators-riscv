@@ -14,7 +14,7 @@ using Eccelerators.RiscV.Sequential
  * timerPending is the live unsigned comparison, not an edge latch or acknowledge.
  */
 component RvMachineTimer<BASE: uint = 0x40000100, TICK_DIVISOR: uint = 50,
-	TICK_BITS: int = 6> : IRv32MemoryPort
+	TICK_BITS: int = 6> : IRv32LoadStorePort
 {
 	static assert (BASE & 15) == 0 && BASE <= 0xfffffff0, "Timer base must fit four aligned words"
 	static assert TICK_BITS > 0 && TICK_BITS <= 30, "Timer divider width must be 1..30"

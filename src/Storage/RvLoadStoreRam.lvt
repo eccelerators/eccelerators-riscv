@@ -11,8 +11,8 @@ using Livt.IO
  * The composition root may provision whole words only while the CPU is idle and
  * request is low. Programming and execution must never overlap. No bus arbitration.
  */
-component Rv32WordMemory<WORDS: int = 1024, ADDRESS_BITS: int = 10,
-	STYLE: MemoryStyle = MemoryStyle.Block, BASE: uint = 0> : IRv32MemoryPort
+component RvLoadStoreRam<WORDS: int = 1024, ADDRESS_BITS: int = 10,
+	STYLE: MemoryStyle = MemoryStyle.Block, BASE: uint = 0> : IRv32LoadStorePort
 {
 	static assert (BASE & 3) == 0, "Memory base must be word aligned"
 	static assert ADDRESS_BITS > 0 && ADDRESS_BITS <= 28, "Memory address width must be 1..28"
@@ -50,7 +50,7 @@ component Rv32WordMemory<WORDS: int = 1024, ADDRESS_BITS: int = 10,
 	}
 
 	/**
-	 * Maps bus or provisioning operations onto the sole RAM port.
+	 * Maps load/store or provisioning operations onto the sole RAM port.
 	 */
 	process Drive[]()
 	{

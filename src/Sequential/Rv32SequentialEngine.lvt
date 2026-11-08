@@ -4,19 +4,18 @@ using Eccelerators.RiscV.Contracts
 using Eccelerators.RiscV.Machine
 
 /**
- * In-order RV32I/optional Zmmul engine with one instruction and memory transaction outstanding.
+ * In-order RV32I engine with one instruction and load/store transaction outstanding.
  * Borrows all units exclusively in one clock/reset context; the composition root
  * owns their lifetime. RAM reads have one-edge latency. Decoder/integer ports are
  * combinational. One clocked controller owns PC, faults and architectural commit.
  * Diagnostic policy stops on exceptions. MACHINE_TRAPS enters direct mtvec and
- * enables MRET through the shared CSR owner. Optional interrupt delivery samples
- * the CSR provider at a drained instruction boundary before the next fetch.
+ * enables MRET through the shared CSR owner; interrupt delivery samples the CSR
+ * provider at a drained instruction boundary before the next fetch (a NoCsrs
+ * provider ties interruptEligible low, making delivery inert).
  */
-component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: bool = false, MACHINE_TRAPS: bool = false, INTERRUPTS: bool = false> : IRv32ControlPort
+component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : IRv32ControlPort
 {
 	static assert (RESET_PC & 3) == 0, "Reset PC must be word aligned"
-	static assert !MACHINE_TRAPS || CSR, "Machine traps require CSR state"
-	static assert !INTERRUPTS || MACHINE_TRAPS, "Interrupts require machine traps"
 
 	// Semantic operation families owned by the controller, separate from integer execution.
 	public const CAPABILITIES: uint = Rv32iOperations.MEMORY_CAPABILITY | Rv32iOperations.CONTROL_CAPABILITY
@@ -38,8 +37,8 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 
 	// Exclusive borrowed implementation instances, with substitutable decode/multiply ports.
 	registers: IRv32RegisterPort
-	instructions: IRv32MemoryPort
-	data: IRv32MemoryPort
+	fetch: IRv32FetchPort
+	loadStore: IRv32LoadStorePort
 	decoder: IRv32DecodePort
 	integer: Rv32iIntegerUnit
 	multiplier: IRv32MultiplyPort
@@ -76,12 +75,12 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 	 * Binds caller-owned resources. Hardware reset starts bank initialization;
 	 * wait for idle before requesting a single step or provisioning shared resources.
 	 */
-	new(registers: flip IRv32RegisterPort, instructions: flip IRv32MemoryPort, data: flip IRv32MemoryPort,
+	new(registers: flip IRv32RegisterPort, fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort,
 		decoder: flip IRv32DecodePort, integer: Rv32iIntegerUnit, multiplier: flip IRv32MultiplyPort, csrs: flip IRv32CsrPort)
 	{
 		this.registers = registers
-		this.instructions = instructions
-		this.data = data
+		this.fetch = fetch
+		this.loadStore = loadStore
 		this.decoder = decoder
 		this.integer = integer
 		this.multiplier = multiplier
@@ -129,14 +128,11 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 			halted = 0b1
 		}
 
-		instructions.request = 0b0
-		instructions.address = programCounter as logic[32]
-		instructions.write = 0b0
-		instructions.byteEnable = 0
-		instructions.writeData = 0
+		fetch.request = 0b0
+		fetch.address = programCounter as logic[32]
 
 		if (phase == FETCH) {
-			instructions.request = 0b1
+			fetch.request = 0b1
 		}
 
 		// Copy values before pure calls so state registers keep direct publication.
@@ -145,18 +141,18 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 		var csrInstruction = instruction
 		var csrOperand = leftValue
 		var csrDestination = RvDecoded.Rd(control)
-		data.request = 0b0
-		data.address = (memoryAddress & 0xfffffffc) as logic[32]
-		data.write = 0b0
-		data.byteEnable = Rv32iSemantics.StoreMask(addressValue, width) as logic[4]
-		data.writeData = (rightValue << (((memoryAddress & 3) * 8) as int)) as logic[32]
+		loadStore.request = 0b0
+		loadStore.address = (memoryAddress & 0xfffffffc) as logic[32]
+		loadStore.write = 0b0
+		loadStore.byteEnable = Rv32iSemantics.StoreMask(addressValue, width) as logic[4]
+		loadStore.writeData = (rightValue << (((memoryAddress & 3) * 8) as int)) as logic[32]
 
 		if (phase == MEMORY) {
-			data.request = 0b1
+			loadStore.request = 0b1
 		}
 
 		if (kind == Rv32iOperations.STORE) {
-			data.write = 0b1
+			loadStore.write = 0b1
 		}
 
 		registers.enable = 0b0
@@ -164,7 +160,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 		registers.index = RvDecoded.Rs1(control) as logic[5]
 		commitData = resultValue
 
-		if (CSR && kind == Rv32CsrOperations.KIND) {
+		if (kind == Rv32CsrOperations.KIND) {
 			commitData = csrs.readData as uint
 		}
 
@@ -191,7 +187,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 		multiplier.left = leftValue as logic[32]
 		multiplier.right = rightValue as logic[32]
 
-		if (MULTIPLY && kind == Rv32MultiplyOperations.KIND && (phase == EXECUTE || phase == MULTIPLY_WAIT)) {
+		if (kind == Rv32MultiplyOperations.KIND && (phase == EXECUTE || phase == MULTIPLY_WAIT)) {
 			multiplier.request = 0b1
 		}
 
@@ -220,23 +216,21 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 		csrs.retire = 0b0
 		csrs.clear = 0b0
 
-		if (CSR) {
-			if (phase == BOOT) {
-				csrs.clear = 0b1
-			}
+		if (phase == BOOT) {
+			csrs.clear = 0b1
+		}
+
+		if (phase == COMMIT) {
+			csrs.retire = 0b1
+		}
+
+		if (kind == Rv32CsrOperations.KIND) {
+			csrs.operand = Rv32ZicsrAccess.SelectOperand(width, csrInstruction, csrOperand) as logic[32]
+			csrs.readEnable = Rv32ZicsrAccess.RequiresRead(width, csrDestination) as logic
+			csrs.writeEnable = Rv32ZicsrAccess.RequiresWrite(width, csrInstruction) as logic
 
 			if (phase == COMMIT) {
-				csrs.retire = 0b1
-			}
-
-			if (kind == Rv32CsrOperations.KIND) {
-				csrs.operand = Rv32ZicsrAccess.SelectOperand(width, csrInstruction, csrOperand) as logic[32]
-				csrs.readEnable = Rv32ZicsrAccess.RequiresRead(width, csrDestination) as logic
-				csrs.writeEnable = Rv32ZicsrAccess.RequiresWrite(width, csrInstruction) as logic
-
-				if (phase == COMMIT) {
-					csrs.commit = 0b1
-				}
+				csrs.commit = 0b1
 			}
 		}
 
@@ -294,7 +288,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 					} elif (phase == IDLE && (run == 0b1 || stepRequest != stepCompleted)) {
 						activeStep = stepRequest
 
-						if (INTERRUPTS && csrs.interruptEligible == 0b1) {
+						if (csrs.interruptEligible == 0b1) {
 							stopCause = csrs.interruptCause
 							stopValue = 0
 							phase = EXCEPTION
@@ -305,22 +299,20 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 				}
 				FETCH =>
 				{
-					if (instructions.ready == 0b1) {
-						if (instructions.error == 0b1) {
+					if (fetch.ready == 0b1) {
+						if (fetch.error == 0b1) {
 							stopCause = Rv32iOperations.INSTRUCTION_ACCESS as logic[32]
 							stopValue = programCounter as logic[32]
 							phase = EXCEPTION
 						} else {
-							instruction = instructions.readData as uint
+							instruction = fetch.instruction as uint
 							phase = DECODE
 						}
 					}
 				}
 				DECODE =>
 				{
-					if (!RvDecoded.IsLegal(control) || (!MULTIPLY && kind == Rv32MultiplyOperations.KIND)
-						|| (!CSR && kind == Rv32CsrOperations.KIND)
-						|| (!MACHINE_TRAPS && kind == Rv32TrapOperations.RETURN_KIND)) {
+					if (!RvDecoded.IsLegal(control) || (!MACHINE_TRAPS && kind == Rv32TrapOperations.RETURN_KIND)) {
 						stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
 						stopValue = instruction as logic[32]
 						phase = EXCEPTION
@@ -369,7 +361,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 						}
 						Rv32CsrOperations.KIND =>
 						{
-							if (CSR && csrs.illegal == 0b1) {
+							if (csrs.illegal == 0b1) {
 								stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
 								stopValue = instruction as logic[32]
 								phase = EXCEPTION
@@ -377,9 +369,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 						}
 						Rv32MultiplyOperations.KIND =>
 						{
-							if (MULTIPLY) {
-								phase = MULTIPLY_WAIT
-							}
+							phase = MULTIPLY_WAIT
 						}
 						Rv32iOperations.JAL, Rv32iOperations.JALR =>
 						{
@@ -447,15 +437,15 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 				}
 				MULTIPLY_WAIT =>
 				{
-					if (MULTIPLY && multiplier.ready == 0b1) {
+					if (multiplier.ready == 0b1) {
 						resultValue = multiplier.result as uint
 						phase = COMMIT
 					}
 				}
 				MEMORY =>
 				{
-					if (data.ready == 0b1) {
-						if (data.error == 0b1) {
+					if (loadStore.ready == 0b1) {
+						if (loadStore.error == 0b1) {
 							if (kind == Rv32iOperations.LOAD) {
 								stopCause = Rv32iOperations.LOAD_ACCESS as logic[32]
 								stopValue = memoryAddress as logic[32]
@@ -466,7 +456,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MULTIPLY: bool = false, CSR: 
 								phase = EXCEPTION
 							}
 						} else {
-							resultValue = Rv32iSemantics.Load(data.readData as uint, addressValue, funct3)
+							resultValue = Rv32iSemantics.Load(loadStore.readData as uint, addressValue, funct3)
 							phase = COMMIT
 						}
 					}

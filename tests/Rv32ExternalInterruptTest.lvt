@@ -13,9 +13,9 @@ using Eccelerators.RiscV.Machine
 component Rv32ExternalInterruptTest
 {
 	// Owned platform, explicit execution composition and architectural scoreboard.
-	instructions: Rv32WordMemory<512, 9>
-	data: DelayedWordDevice
-	core: Rv32SequentialEngine<0, true, true, true, true>
+	fetch: RvFetchRom<512, 9>
+	loadStore: DelayedWordDevice
+	core: Rv32SequentialEngine<0, true>
 	registers: Rv32RegisterBank
 	baseDecoder: Rv32iZmmulDecoder
 	zicsr: Rv32ZicsrComposition<0, true, true>
@@ -40,15 +40,15 @@ component Rv32ExternalInterruptTest
 	 */
 	new()
 	{
-		instructions = new Rv32WordMemory<512, 9>()
-		data = new DelayedWordDevice()
+		fetch = new RvFetchRom<512, 9>()
+		loadStore = new DelayedWordDevice()
 		registers = new Rv32RegisterBank()
 		baseDecoder = new Rv32iZmmulDecoder()
 		zicsr = new Rv32ZicsrComposition<0, true, true>(baseDecoder)
 		decoder = new Rv32MachineDecoder(zicsr)
 		integer = new Rv32iIntegerUnit()
 		multiplier = new Rv32DspMultiplier()
-		core = new Rv32SequentialEngine<0, true, true, true, true>(registers, instructions, data, decoder, integer, multiplier, zicsr)
+		core = new Rv32SequentialEngine<0, true>(registers, fetch, loadStore, decoder, integer, multiplier, zicsr)
 	}
 
 	/**
@@ -93,13 +93,13 @@ component Rv32ExternalInterruptTest
 	fn Load(index: uint, word: uint)
 	{
 		state {
-			instructions.programWrite = 0b1
-			instructions.programIndex = index as logic[9]
-			instructions.programData = word as logic[32]
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[9]
+			fetch.programData = word as logic[32]
 		}
 
 		state {
-			instructions.programWrite = 0b0
+			fetch.programWrite = 0b0
 		}
 	}
 
@@ -128,10 +128,10 @@ component Rv32ExternalInterruptTest
 		Simulation.Wait(4)
 		clearObservation = false
 
-		data.clear = 0b1
-		data.releaseResponse = 0b0
+		loadStore.clear = 0b1
+		loadStore.releaseResponse = 0b0
 		Simulation.Wait(4)
-		data.clear = 0b0
+		loadStore.clear = 0b0
 
 		assert core.idle == 0b1
 	}
@@ -269,21 +269,21 @@ component Rv32ExternalInterruptTest
 		core.stepRequest = ~core.stepRequest
 		var elapsed: uint = 0
 
-		while (data.accepted == 0b0 && elapsed < 100) {
+		while (loadStore.accepted == 0b0 && elapsed < 100) {
 			state {
 				elapsed++
 			}
 		}
 
-		assert data.accepted == 0b1
+		assert loadStore.accepted == 0b1
 		zicsr.externalPending = 0b1
 		Simulation.Wait(30)
-		assert trapCount == 0 && retireCount == 5 && data.writes == 0
-		data.releaseResponse = 0b1
+		assert trapCount == 0 && retireCount == 5 && loadStore.writes == 0
+		loadStore.releaseResponse = 0b1
 		Simulation.Wait(30)
-		assert core.idle == 0b1 && core.pc == 24 && data.writes == 1 && retireCount == 6
+		assert core.idle == 0b1 && core.pc == 24 && loadStore.writes == 1 && retireCount == 6
 		Step()
-		assert lastTrapPc == 24 && trapCount == 1 && data.writes == 1
+		assert lastTrapPc == 24 && trapCount == 1 && loadStore.writes == 1
 	}
 
 	/**
@@ -299,18 +299,18 @@ component Rv32ExternalInterruptTest
 		core.stepRequest = ~core.stepRequest
 		var elapsed: uint = 0
 
-		while (data.accepted == 0b0 && elapsed < 100) {
+		while (loadStore.accepted == 0b0 && elapsed < 100) {
 			state {
 				elapsed++
 			}
 		}
 
-		assert data.accepted == 0b1
+		assert loadStore.accepted == 0b1
 		zicsr.externalPending = 0b1
-		data.releaseResponse = 0b1
+		loadStore.releaseResponse = 0b1
 		Simulation.Wait(40)
 		assert trapCount == 1 && lastTrapCause == 5 && lastTrapPc == 20
-		assert lastTrapValue == 4 && retireCount == 5 && data.reads == 0
+		assert lastTrapValue == 4 && retireCount == 5 && loadStore.reads == 0
 		var ticket = ~core.restartAck
 		core.restartRequest = ticket
 		Simulation.Wait(50)

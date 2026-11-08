@@ -13,9 +13,9 @@ using Eccelerators.RiscV.Machine
 component Rv32CsrEngineTest
 {
 	// Owned platform, explicit execution composition and architectural scoreboard.
-	instructions: Rv32WordMemory<512, 9>
-	data: Rv32WordMemory<256, 8>
-	core: Rv32SequentialEngine<0, true, true>
+	fetch: RvFetchRom<512, 9>
+	loadStore: RvLoadStoreRam<256, 8>
+	core: Rv32SequentialEngine<0>
 	registers: Rv32RegisterBank
 	baseDecoder: Rv32iZmmulDecoder
 	decoder: Rv32ZicsrDecoder
@@ -39,15 +39,15 @@ component Rv32CsrEngineTest
 	 */
 	new()
 	{
-		instructions = new Rv32WordMemory<512, 9>()
-		data = new Rv32WordMemory<256, 8>()
+		fetch = new RvFetchRom<512, 9>()
+		loadStore = new RvLoadStoreRam<256, 8>()
 		registers = new Rv32RegisterBank()
 		baseDecoder = new Rv32iZmmulDecoder()
 		decoder = new Rv32ZicsrDecoder(baseDecoder)
 		integer = new Rv32iIntegerUnit()
 		multiplier = new Rv32DspMultiplier()
 		csrs = new Rv32MachineCsrs()
-		core = new Rv32SequentialEngine<0, true, true>(registers, instructions, data, decoder, integer, multiplier, csrs)
+		core = new Rv32SequentialEngine<0>(registers, fetch, loadStore, decoder, integer, multiplier, csrs)
 	}
 
 	/**
@@ -111,13 +111,13 @@ component Rv32CsrEngineTest
 	fn Load(index: uint, word: uint)
 	{
 		state {
-			instructions.programWrite = 0b1
-			instructions.programIndex = index as logic[9]
-			instructions.programData = word as logic[32]
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[9]
+			fetch.programData = word as logic[32]
 		}
 
 		state {
-			instructions.programWrite = 0b0
+			fetch.programWrite = 0b0
 		}
 	}
 
@@ -165,14 +165,14 @@ component Rv32CsrEngineTest
 
 		for (var index: uint = 0; index < 256; index++) {
 			state {
-				data.programWrite = 0b1
-				data.programIndex = index as logic[8]
-				data.programData = 0
+				loadStore.programWrite = 0b1
+				loadStore.programIndex = index as logic[8]
+				loadStore.programData = 0
 			}
 		}
 
 		state {
-			data.programWrite = 0b0
+			loadStore.programWrite = 0b0
 		}
 
 		assert core.idle == 0b1

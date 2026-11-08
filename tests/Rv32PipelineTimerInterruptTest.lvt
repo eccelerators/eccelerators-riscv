@@ -14,9 +14,9 @@ using Eccelerators.RiscV.Machine
 component Rv32PipelineTimerInterruptTest
 {
 	// Owned platform, explicit execution composition and architectural scoreboard.
-	instructions: Rv32WordMemory<512, 9>
-	data: PipelineWordDevice
-	core: Rv32PipelineEngine<0, true, true, true, true>
+	fetch: RvFetchRom<512, 9>
+	loadStore: PipelineWordDevice
+	core: Rv32PipelineEngine<0, true>
 	registers: Rv32DualReadRegisterBank
 	baseDecoder: Rv32iZmmulDecoder
 	csrDecoder: Rv32ZicsrDecoder
@@ -42,8 +42,8 @@ component Rv32PipelineTimerInterruptTest
 	 */
 	new()
 	{
-		instructions = new Rv32WordMemory<512, 9>()
-		data = new PipelineWordDevice()
+		fetch = new RvFetchRom<512, 9>()
+		loadStore = new PipelineWordDevice()
 		registers = new Rv32DualReadRegisterBank()
 		baseDecoder = new Rv32iZmmulDecoder()
 		csrDecoder = new Rv32ZicsrDecoder(baseDecoder)
@@ -51,7 +51,7 @@ component Rv32PipelineTimerInterruptTest
 		integer = new Rv32iIntegerUnit()
 		multiplier = new Rv32DspMultiplier()
 		csrs = new Rv32MachineCsrs<0, true>()
-		core = new Rv32PipelineEngine<0, true, true, true, true>(registers, instructions, data, decoder, integer, multiplier, csrs)
+		core = new Rv32PipelineEngine<0, true>(registers, fetch, loadStore, decoder, integer, multiplier, csrs)
 	}
 
 	/**
@@ -96,13 +96,13 @@ component Rv32PipelineTimerInterruptTest
 	fn Load(index: uint, word: uint)
 	{
 		state {
-			instructions.programWrite = 0b1
-			instructions.programIndex = index as logic[9]
-			instructions.programData = word as logic[32]
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[9]
+			fetch.programData = word as logic[32]
 		}
 
 		state {
-			instructions.programWrite = 0b0
+			fetch.programWrite = 0b0
 		}
 	}
 
@@ -130,10 +130,10 @@ component Rv32PipelineTimerInterruptTest
 		Simulation.Wait(4)
 		clearObservation = false
 
-		data.clear = 0b1
-		data.releaseResponse = 0b0
+		loadStore.clear = 0b1
+		loadStore.releaseResponse = 0b0
 		Simulation.Wait(4)
-		data.clear = 0b0
+		loadStore.clear = 0b0
 
 		assert core.idle == 0b1
 	}
@@ -271,21 +271,21 @@ component Rv32PipelineTimerInterruptTest
 		core.stepRequest = ~core.stepRequest
 		var elapsed: uint = 0
 
-		while (data.accepted == 0b0 && elapsed < 100) {
+		while (loadStore.accepted == 0b0 && elapsed < 100) {
 			state {
 				elapsed++
 			}
 		}
 
-		assert data.accepted == 0b1
+		assert loadStore.accepted == 0b1
 		csrs.timerPending = 0b1
 		Simulation.Wait(30)
-		assert trapCount == 0 && retireCount == 5 && data.writes == 0
-		data.releaseResponse = 0b1
+		assert trapCount == 0 && retireCount == 5 && loadStore.writes == 0
+		loadStore.releaseResponse = 0b1
 		Simulation.Wait(30)
-		assert core.idle == 0b1 && core.pc == 24 && data.writes == 1 && retireCount == 6
+		assert core.idle == 0b1 && core.pc == 24 && loadStore.writes == 1 && retireCount == 6
 		Step()
-		assert lastTrapPc == 24 && trapCount == 1 && data.writes == 1
+		assert lastTrapPc == 24 && trapCount == 1 && loadStore.writes == 1
 	}
 
 	/**
@@ -301,18 +301,18 @@ component Rv32PipelineTimerInterruptTest
 		core.stepRequest = ~core.stepRequest
 		var elapsed: uint = 0
 
-		while (data.accepted == 0b0 && elapsed < 100) {
+		while (loadStore.accepted == 0b0 && elapsed < 100) {
 			state {
 				elapsed++
 			}
 		}
 
-		assert data.accepted == 0b1
+		assert loadStore.accepted == 0b1
 		csrs.timerPending = 0b1
-		data.releaseResponse = 0b1
+		loadStore.releaseResponse = 0b1
 		Simulation.Wait(40)
 		assert trapCount == 1 && lastTrapCause == 5 && lastTrapPc == 20
-		assert lastTrapValue == 4 && retireCount == 5 && data.reads == 0
+		assert lastTrapValue == 4 && retireCount == 5 && loadStore.reads == 0
 		var ticket = ~core.restartAck
 		core.restartRequest = ticket
 		Simulation.Wait(50)

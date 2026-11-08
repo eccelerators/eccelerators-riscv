@@ -1,0 +1,245 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+using Eccelerators.RiscV.System
+
+/**
+ * Parity checks: the same machine built two ways (RvSystem defaults vs. hand-wired
+ * preset core with identical devices) must retire identical events, carry identical
+ * stop state and hold the ordered retirement sequence. Every wait is bounded so a
+ * stalled device or controller fails the test.
+ */
+@Test
+component RvSystemTest
+{
+	// System-layer machine and hand-wired equivalent on identical device parameters.
+	viaSystem: RvSystem<Rv32iSequentialCore>
+	fetch: RvFetchRom<1024, 10>
+	loadStore: RvLoadStoreRam<1024, 10>
+	handWired: Rv32iSequentialCore<0, MemoryStyle.Block>
+	systemCount: uint
+	handCount: uint
+	clearObservation: bool
+	cycles: uint
+
+	/**
+	 * Creates the system machine and the hand-wired equivalent in the test clock context.
+	 */
+	new()
+	{
+		viaSystem = new RvSystem<Rv32iSequentialCore>()
+		fetch = new RvFetchRom<1024, 10>()
+		loadStore = new RvLoadStoreRam<1024, 10>()
+		handWired = new Rv32iSequentialCore<0, MemoryStyle.Block>(fetch, loadStore)
+	}
+
+	/**
+	 * Samples both retirement streams every clock; every paired event must match exactly.
+	 */
+	process Observe()
+	{
+		state {
+			cycles++
+
+			if (clearObservation) {
+				systemCount = 0
+				handCount = 0
+			} else {
+				if (viaSystem.retired == 0b1) {
+					assert viaSystem.retiredPc == handWired.retiredPc
+					assert viaSystem.retiredInstruction == handWired.retiredInstruction
+					assert viaSystem.retiredRd == handWired.retiredRd
+					assert viaSystem.retiredValue == handWired.retiredValue
+					systemCount++
+				}
+
+				if (handWired.retired == 0b1) {
+					handCount++
+				}
+			}
+		}
+	}
+
+	/**
+	 * Programs the same word into both instruction images with both cores idle.
+	 */
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			viaSystem.fetchProgramWrite = 0b1
+			viaSystem.fetchProgramIndex = index as logic[10]
+			viaSystem.fetchProgramData = word as logic[32]
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[10]
+			fetch.programData = word as logic[32]
+		}
+
+		state {
+			viaSystem.fetchProgramWrite = 0b0
+			fetch.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Homes both machines and clears both scoreboards before an independent scenario.
+	 */
+	fn Prepare()
+	{
+		state {
+			viaSystem.run = 0b0
+			handWired.run = 0b0
+		}
+
+		Simulation.Wait(40)
+		assert viaSystem.idle == 0b1
+		assert handWired.idle == 0b1
+		var ticket = ~viaSystem.restartRequest
+
+		state {
+			viaSystem.restartRequest = ticket
+			handWired.restartRequest = ticket
+		}
+
+		var elapsed: uint = 0
+
+		while (viaSystem.restartAck != ticket && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert viaSystem.restartAck == ticket
+		assert handWired.restartAck == ticket
+		clearObservation = true
+		Simulation.Wait(4)
+		clearObservation = false
+		assert viaSystem.idle == 0b1
+		assert handWired.idle == 0b1
+	}
+
+	/**
+	 * Runs both machines to a diagnostic stop and asserts identical stop state.
+	 */
+	fn RunToStop()
+	{
+		var start = cycles
+
+		state {
+			viaSystem.run = 0b1
+			handWired.run = 0b1
+		}
+
+		while ((viaSystem.halted == 0b0 || handWired.halted == 0b0) && cycles - start < 20000) {
+			state {
+			}
+		}
+
+		state {
+			viaSystem.run = 0b0
+			handWired.run = 0b0
+		}
+
+		assert viaSystem.halted == 0b1
+		assert handWired.halted == 0b1
+		assert viaSystem.faultCause == handWired.faultCause
+		assert viaSystem.faultValue == handWired.faultValue
+		assert viaSystem.pc == handWired.pc
+		assert systemCount == handCount
+	}
+
+	/**
+	 * Dependent arithmetic retires identically through both constructions.
+	 */
+	@Test
+	fn TestArithmeticParity()
+	{
+		Prepare()
+		Load(0, 0x00500093)
+		Load(1, 0x00308113)
+		Load(2, 0x002081b3)
+		Load(3, 0x00100073)
+		RunToStop()
+		assert viaSystem.faultCause as uint == 3
+		assert viaSystem.faultValue as uint == 12
+		assert viaSystem.pc as uint == 12
+		assert systemCount == 3
+		assert viaSystem.retiredRd as uint == 3
+		assert viaSystem.retiredValue as uint == 13
+		assert viaSystem.retiredPc as uint == 8
+	}
+
+	/**
+	 * A taken jump that skips an instruction retires identically on both machines.
+	 */
+	@Test
+	fn TestJumpParity()
+	{
+		Prepare()
+		Load(0, 0x0080036f)
+		Load(1, 0x00000213)
+		Load(2, 0x00100073)
+		RunToStop()
+		assert viaSystem.faultCause as uint == 3
+		assert viaSystem.faultValue as uint == 8
+		assert systemCount == 1
+		assert viaSystem.retiredRd as uint == 6
+		assert viaSystem.retiredValue as uint == 4
+		assert viaSystem.retiredPc as uint == 0
+		assert viaSystem.retiredInstruction as uint == 0x00100073
+	}
+
+	/**
+	 * Illegal encodings fault identically with no retirement on either machine.
+	 */
+	@Test
+	fn TestIllegalParity()
+	{
+		Prepare()
+		Load(0, 0xffffffff)
+		RunToStop()
+		assert viaSystem.faultCause as uint == 2
+		assert viaSystem.faultValue as uint == 0xffffffff
+		assert viaSystem.pc as uint == 0
+		assert systemCount == 0
+	}
+
+	/**
+	 * A store then load through both data RAMs retires identically.
+	 */
+	@Test
+	fn TestMemoryParity()
+	{
+		Prepare()
+		Load(0, 0x89abc0b7)
+		Load(1, 0x7ef08093)
+		Load(2, 0x00102023)
+		Load(3, 0x00002103)
+		Load(4, 0x00100073)
+		RunToStop()
+		assert viaSystem.faultCause as uint == 3
+		assert viaSystem.faultValue as uint == 16
+		assert systemCount == 4
+		assert viaSystem.retiredRd as uint == 2
+		assert viaSystem.retiredValue as uint == 0x89abc7ef
+	}
+
+	/**
+	 * An out-of-range load faults identically before any commit on either machine.
+	 */
+	@Test
+	fn TestLoadAccessParity()
+	{
+		Prepare()
+		Load(0, 0x000042B7)
+		Load(1, 0x00028083)
+		RunToStop()
+		assert viaSystem.faultCause as uint == 5
+		assert viaSystem.faultValue as uint == 16384
+		assert systemCount == 1
+		assert viaSystem.retiredRd as uint == 5
+		assert viaSystem.retiredValue as uint == 16384
+		assert viaSystem.retiredPc as uint == 0
+	}
+}

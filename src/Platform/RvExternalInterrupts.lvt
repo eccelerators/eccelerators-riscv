@@ -11,7 +11,7 @@ using Eccelerators.RiscV.Sequential
  * Reset clears enables/response, never acknowledges devices. CPU pause/restart
  * does not change state. Firmware chooses source service order from the bitmap.
  */
-component RvExternalInterrupts<SOURCES: int = 2, BASE: uint = 0x40000200> : IRv32MemoryPort
+component RvExternalInterrupts<SOURCES: int = 2, BASE: uint = 0x40000200> : IRv32LoadStorePort
 {
 	static assert SOURCES >= 1 && SOURCES <= 32, "Source count must be 1..32"
 	static assert (BASE & 15) == 0 && BASE <= 0xfffffff0, "Interrupt base must fit aligned window"

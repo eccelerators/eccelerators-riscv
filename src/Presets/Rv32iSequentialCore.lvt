@@ -31,14 +31,14 @@ component Rv32iSequentialCore<RESET_PC: uint = 0, REGISTER_FILE_STYLE: MemorySty
 	/**
 	 * Owns the CPU internals; the caller owns both bus providers.
 	 */
-	new(instructions: flip IRv32MemoryPort, data: flip IRv32MemoryPort)
+	new(fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort)
 	{
 		registers = new Rv32RegisterBank<REGISTER_FILE_STYLE>()
 		decoder = new Rv32iDecoder()
 		integer = new Rv32iIntegerUnit()
 		noCsrs = new Rv32NoCsrs()
 		noMultiplier = new Rv32NoMultiplier()
-		engine = new Rv32SequentialEngine<RESET_PC>(registers, instructions, data, decoder, integer, noMultiplier, noCsrs)
+		engine = new Rv32SequentialEngine<RESET_PC>(registers, fetch, loadStore, decoder, integer, noMultiplier, noCsrs)
 		coverage = new RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iDecoder.CAPABILITIES,
 			Rv32iIntegerUnit.CAPABILITIES, Rv32SequentialEngine.CAPABILITIES,
 			Rv32iOperations.INTEGER_CAPABILITY, Rv32SequentialEngine.CAPABILITIES>()

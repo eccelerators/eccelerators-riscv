@@ -7,7 +7,7 @@ using Eccelerators.RiscV.Sequential
  * and access faults. Checks every held request and only completes once per low gap.
  * The test owns provisioning while the core is idle; reset cancels transactions.
  */
-component PipelineFetchMemory : IRv32MemoryPort
+component PipelineFetchMemory : IRv32FetchPort
 {
 	// Test-controlled storage provisioning and fault/backpressure injection.
 	public programWrite: in logic
@@ -31,9 +31,6 @@ component PipelineFetchMemory : IRv32MemoryPort
 	// Explicit combinational publication keeps the test device's bus contract exact.
 	requestActive: bool
 	inputAddress: logic[32]
-	inputWrite: logic
-	inputMask: logic[4]
-	inputData: logic[32]
 	responseReady: logic
 	responseError: logic
 	responseData: logic[32]
@@ -45,12 +42,9 @@ component PipelineFetchMemory : IRv32MemoryPort
 	{
 		requestActive = request == 0b1
 		inputAddress = address
-		inputWrite = write
-		inputMask = byteEnable
-		inputData = writeData
 		ready = responseReady
 		error = responseError
-		readData = responseData
+		instruction = responseData
 	}
 
 	/**
@@ -68,14 +62,12 @@ component PipelineFetchMemory : IRv32MemoryPort
 			}
 
 			if (!active && requestActive) {
-				assert inputWrite == 0b0
 				active = true
 				completed = false
 				savedAddress = inputAddress
 				remaining = clockCount & 3
 			} elif (active && requestActive) {
 				assert inputAddress == savedAddress
-				assert inputWrite == 0b0 && inputMask == 0 && inputData == 0
 
 				if (!completed) {
 					if (hold == 0b1 && savedAddress == holdAddress) {

@@ -13,8 +13,8 @@ using Eccelerators.RiscV.Presets
 component Rv32PipelineZmmulEngineTest
 {
 	// Owned platform, preset and architectural observation scoreboard.
-	instructions: Rv32WordMemory<256, 8>
-	data: Rv32WordMemory<256, 8>
+	fetch: RvFetchRom<256, 8>
+	loadStore: RvLoadStoreRam<256, 8>
 	core: Rv32iZmmulPipelineCore
 	observed: uint[32]
 	retireCount: uint
@@ -26,9 +26,9 @@ component Rv32PipelineZmmulEngineTest
 	 */
 	new()
 	{
-		instructions = new Rv32WordMemory<256, 8>()
-		data = new Rv32WordMemory<256, 8>()
-		core = new Rv32iZmmulPipelineCore(instructions, data)
+		fetch = new RvFetchRom<256, 8>()
+		loadStore = new RvLoadStoreRam<256, 8>()
+		core = new Rv32iZmmulPipelineCore(fetch, loadStore)
 	}
 
 	/**
@@ -64,13 +64,13 @@ component Rv32PipelineZmmulEngineTest
 	fn Load(index: uint, word: uint)
 	{
 		state {
-			instructions.programWrite = 0b1
-			instructions.programIndex = index as logic[8]
-			instructions.programData = word as logic[32]
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[8]
+			fetch.programData = word as logic[32]
 		}
 
 		state {
-			instructions.programWrite = 0b0
+			fetch.programWrite = 0b0
 		}
 	}
 
@@ -118,14 +118,14 @@ component Rv32PipelineZmmulEngineTest
 
 		for (var index: uint = 0; index < 256; index++) {
 			state {
-				data.programWrite = 0b1
-				data.programIndex = index as logic[8]
-				data.programData = 0
+				loadStore.programWrite = 0b1
+				loadStore.programIndex = index as logic[8]
+				loadStore.programData = 0
 			}
 		}
 
 		state {
-			data.programWrite = 0b0
+			loadStore.programWrite = 0b0
 		}
 
 		assert core.idle == 0b1

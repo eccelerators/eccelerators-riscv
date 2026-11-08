@@ -6,7 +6,7 @@ using Eccelerators.RiscV.Sequential
  * Test-only one-word MMIO device. Completion is externally delayed, accesses at
  * nonzero addresses fault before effects, and held requests must remain stable.
  */
-component DelayedWordDevice : IRv32MemoryPort
+component DelayedWordDevice : IRv32LoadStorePort
 {
 	// Test-controlled backpressure and independently visible side-effect counters.
 	public clear: in logic

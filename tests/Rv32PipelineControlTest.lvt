@@ -11,8 +11,8 @@ using Eccelerators.RiscV.Presets
 component Rv32PipelineControlTest
 {
 	// Owned instruction storage, delayable device, core and retirement observations.
-	instructions: PipelineFetchMemory
-	data: PipelineWordDevice
+	fetch: PipelineFetchMemory
+	loadStore: PipelineWordDevice
 	core: Rv32iPipelineCore
 	clearObservation: bool
 	count: uint
@@ -23,9 +23,9 @@ component Rv32PipelineControlTest
 	 */
 	new()
 	{
-		instructions = new PipelineFetchMemory()
-		data = new PipelineWordDevice()
-		core = new Rv32iPipelineCore(instructions, data)
+		fetch = new PipelineFetchMemory()
+		loadStore = new PipelineWordDevice()
+		core = new Rv32iPipelineCore(fetch, loadStore)
 	}
 
 	/**
@@ -50,18 +50,18 @@ component Rv32PipelineControlTest
 	fn Prepare()
 	{
 		core.run = 0b0
-		instructions.hold = 0b0
-		instructions.fail = 0b0
+		fetch.hold = 0b0
+		fetch.fail = 0b0
 		WaitIdle()
 		var ticket = ~core.restartAck
 		core.restartRequest = ticket
 		Simulation.Wait(50)
 		assert core.restartAck == ticket
 		clearObservation = true
-		data.clear = 0b1
-		data.releaseResponse = 0b0
+		loadStore.clear = 0b1
+		loadStore.releaseResponse = 0b0
 		Simulation.Wait(4)
-		data.clear = 0b0
+		loadStore.clear = 0b0
 		clearObservation = false
 
 		for (var index: uint = 0; index < 32; index++) {
@@ -75,13 +75,13 @@ component Rv32PipelineControlTest
 	fn Load(index: uint, word: uint)
 	{
 		state {
-			instructions.programWrite = 0b1
-			instructions.programIndex = index as logic[8]
-			instructions.programData = word as logic[32]
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[8]
+			fetch.programData = word as logic[32]
 		}
 
 		state {
-			instructions.programWrite = 0b0
+			fetch.programWrite = 0b0
 		}
 	}
 
@@ -163,28 +163,28 @@ component Rv32PipelineControlTest
 		core.run = 0b1
 		var elapsed: uint = 0
 
-		while (data.accepted == 0b0 && elapsed < 300) {
+		while (loadStore.accepted == 0b0 && elapsed < 300) {
 			state {
 				elapsed++
 			}
 		}
 
-		assert data.accepted == 0b1
+		assert loadStore.accepted == 0b1
 		core.run = 0b0
 		var ticket = ~core.restartAck
 		core.restartRequest = ticket
 		Simulation.Wait(20)
 		assert core.restartAck != ticket
-		assert data.writes == 0 && count == 1
-		data.releaseResponse = 0b1
+		assert loadStore.writes == 0 && count == 1
+		loadStore.releaseResponse = 0b1
 		Simulation.Wait(130)
 		assert core.restartAck == ticket && core.idle == 0b1
 		assert core.pc == 0
-		assert data.writes == 1 && data.reads == 1
-		assert data.payload == 42 && count == 3
+		assert loadStore.writes == 1 && loadStore.reads == 1
+		assert loadStore.payload == 42 && count == 3
 		Load(0, 0x00002183)
 		Step()
-		assert lastValue == 42 && data.reads == 2
+		assert lastValue == 42 && loadStore.reads == 2
 	}
 
 	/**
@@ -195,12 +195,12 @@ component Rv32PipelineControlTest
 	{
 		Prepare()
 		Load(0, 0x00402003)
-		data.releaseResponse = 0b1
+		loadStore.releaseResponse = 0b1
 		WaitIdle()
 		Step()
 		assert core.halted == 0b1 && core.faultCause == 5
 		assert core.faultValue == 4 && core.pc == 0
-		assert count == 0 && data.reads == 0 && data.writes == 0
+		assert count == 0 && loadStore.reads == 0 && loadStore.writes == 0
 	}
 
 	/**
@@ -213,25 +213,25 @@ component Rv32PipelineControlTest
 		Load(0, 0x0100006f) // jal x0, 16
 		Load(1, 0x00002003) // wrong-path MMIO read
 		Load(4, 0x00700093)
-		instructions.holdAddress = 4
-		instructions.hold = 0b1
-		instructions.failAddress = 4
-		instructions.fail = 0b1
+		fetch.holdAddress = 4
+		fetch.hold = 0b1
+		fetch.failAddress = 4
+		fetch.fail = 0b1
 		core.run = 0b1
 		var elapsed: uint = 0
 
-		while ((instructions.blocked == 0b0 || core.pc != 16) && elapsed < 300) {
+		while ((fetch.blocked == 0b0 || core.pc != 16) && elapsed < 300) {
 			state {
 				elapsed++
 			}
 		}
 
-		assert instructions.blocked == 0b1 && core.pc == 16
+		assert fetch.blocked == 0b1 && core.pc == 16
 		core.run = 0b0
 		Simulation.Wait(20)
 		assert core.idle == 0b0 && core.halted == 0b0
-		assert count == 1 && data.reads == 0 && data.writes == 0
-		instructions.hold = 0b0
+		assert count == 1 && loadStore.reads == 0 && loadStore.writes == 0
+		fetch.hold = 0b0
 		WaitIdle()
 		assert core.pc == 16 && core.halted == 0b0
 		Step()
@@ -252,16 +252,16 @@ component Rv32PipelineControlTest
 		core.run = 0b1
 		var elapsed: uint = 0
 
-		while (data.accepted == 0b0 && elapsed < 300) {
+		while (loadStore.accepted == 0b0 && elapsed < 300) {
 			state {
 				elapsed++
 			}
 		}
 
-		assert data.accepted == 0b1
+		assert loadStore.accepted == 0b1
 		Simulation.Wait(60)
-		assert count == 1 && data.reads == 0 && data.writes == 0
-		data.releaseResponse = 0b1
+		assert count == 1 && loadStore.reads == 0 && loadStore.writes == 0
+		loadStore.releaseResponse = 0b1
 		elapsed = 0
 
 		while (core.halted == 0b0 && elapsed < 100) {
@@ -273,7 +273,7 @@ component Rv32PipelineControlTest
 		core.run = 0b0
 		WaitIdle()
 		assert core.halted == 0b1 && core.faultCause == 5 && core.pc == 4
-		assert count == 1 && data.reads == 0 && data.writes == 0
+		assert count == 1 && loadStore.reads == 0 && loadStore.writes == 0
 	}
 
 	/**
@@ -287,7 +287,7 @@ component Rv32PipelineControlTest
 		Load(1, 0x00002003)
 		Load(2, 0x00002023)
 		Load(3, 0x00900093)
-		data.releaseResponse = 0b1
+		loadStore.releaseResponse = 0b1
 		core.run = 0b1
 		var elapsed: uint = 0
 
@@ -301,7 +301,7 @@ component Rv32PipelineControlTest
 		WaitIdle()
 		assert core.halted == 0b1 && core.faultCause == 3 && core.pc == 16
 		assert count == 2 && lastValue == 9
-		assert data.reads == 0 && data.writes == 0
+		assert loadStore.reads == 0 && loadStore.writes == 0
 	}
 
 	/**
@@ -347,8 +347,8 @@ component Rv32PipelineControlTest
 	fn TestFaultDrainsFetchBeforeIdle()
 	{
 		Prepare()
-		instructions.holdAddress = 4
-		instructions.hold = 0b1
+		fetch.holdAddress = 4
+		fetch.hold = 0b1
 		core.run = 0b1
 		var elapsed: uint = 0
 
@@ -361,7 +361,7 @@ component Rv32PipelineControlTest
 		assert core.halted == 0b1 && core.pc == 0 && count == 0
 		core.run = 0b0
 		assert core.idle == 0b0
-		instructions.hold = 0b0
+		fetch.hold = 0b0
 		WaitIdle()
 		assert count == 0
 	}

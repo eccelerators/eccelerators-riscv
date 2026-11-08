@@ -2,6 +2,25 @@
 
 All notable changes to `Eccelerators.RiscV` are recorded here.
 
+## [0.2.1] - 2026-11-08
+
+### Changed
+
+- Split the former `IRv32MemoryPort` into independent `IRv32FetchPort` and
+  `IRv32LoadStorePort` providers; update sequential and pipeline engines and
+  presets to use separate instruction and data connections.
+- Replace `Rv32WordMemory` with `RvFetchRom` and `RvLoadStoreRam`; add
+  `RvSystem<TCORE>` to compose a constructor-bound core with default fetch and
+  load/store devices.
+- Update the Livt.IO dependency to 1.8.1 and include package discovery
+  metadata, README, changelog and license in the publication.
+
+### Migration
+
+- Existing consumers of `IRv32MemoryPort` and `Rv32WordMemory` must migrate
+  their providers and wiring to the separate fetch and load/store contracts.
+  The split changes the public API despite the patch-version release.
+
 ## [0.2.0] - 2026-11-07
 
 This release adds signal-level, composable FPGA cores alongside the scheduled

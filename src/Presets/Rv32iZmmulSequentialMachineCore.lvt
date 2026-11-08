@@ -25,7 +25,7 @@ component Rv32iZmmulSequentialMachineCore<RESET_PC: uint = 0, REGISTER_FILE_STYL
 	decoder: Rv32MachineDecoder
 	multiplier: Rv32IterativeMultiplier
 	integer: Rv32iIntegerUnit
-	engine: Rv32SequentialEngine<RESET_PC, true, true, true, true>
+	engine: Rv32SequentialEngine<RESET_PC, true>
 
 	// Elaboration-only checks for operation coverage and provider timing.
 	coverage: RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iZmmulDecoder.CAPABILITIES,
@@ -40,7 +40,7 @@ component Rv32iZmmulSequentialMachineCore<RESET_PC: uint = 0, REGISTER_FILE_STYL
 	/**
 	 * Owns the CPU internals; the caller owns both bus providers.
 	 */
-	new(instructions: flip IRv32MemoryPort, data: flip IRv32MemoryPort)
+	new(fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort)
 	{
 		registers = new Rv32RegisterBank<REGISTER_FILE_STYLE>()
 		baseDecoder = new Rv32iZmmulDecoder()
@@ -48,7 +48,7 @@ component Rv32iZmmulSequentialMachineCore<RESET_PC: uint = 0, REGISTER_FILE_STYL
 		decoder = new Rv32MachineDecoder(zicsr)
 		integer = new Rv32iIntegerUnit()
 		multiplier = new Rv32IterativeMultiplier()
-		engine = new Rv32SequentialEngine<RESET_PC, true, true, true, true>(registers, instructions, data, decoder, integer, multiplier, zicsr)
+		engine = new Rv32SequentialEngine<RESET_PC, true>(registers, fetch, loadStore, decoder, integer, multiplier, zicsr)
 		coverage = new RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iZmmulDecoder.CAPABILITIES,
 			Rv32iIntegerUnit.CAPABILITIES, Rv32SequentialEngine.CAPABILITIES,
 			Rv32iOperations.INTEGER_CAPABILITY, Rv32SequentialEngine.CAPABILITIES>()

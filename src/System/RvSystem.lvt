@@ -1,0 +1,73 @@
+namespace Eccelerators.RiscV.System
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+
+/**
+ * Generic turnkey system: one core plus the default signal-level devices.
+ * The ISA comes from TCORE; the system itself is ISA-neutral. Defaults are one
+ * read-only instruction provider and one byte-enabled data RAM at address zero;
+ * richer address maps come from inheritance overriding a device, not from more
+ * parameters here. The system only ever sees the two port interfaces.
+ * Program the devices only while the core is idle (request low); provisioning
+ * and execution must never overlap. Every control and observation signal passes
+ * through unchanged, so a system and a hand-wired core with equivalent devices
+ * retire identical events.
+ */
+component RvSystem<TCORE : IRv32ControlPort & new(flip IRv32FetchPort, flip IRv32LoadStorePort)> : IRv32ControlPort
+{
+	// Host provisioning of the owned default devices.
+	public fetchProgramWrite: in logic
+	public fetchProgramIndex: in logic[10]
+	public fetchProgramData: in logic[32]
+	public dataProgramWrite: in logic
+	public dataProgramIndex: in logic[10]
+	public dataProgramData: in logic[32]
+
+	// System-owned default devices.
+	fetchDevice: RvFetchRom
+	dataDevice: RvLoadStoreRam
+	core: TCORE
+
+	/**
+	 * Creates both default devices, then the core borrowing them exclusively.
+	 */
+	new()
+	{
+		fetchDevice = new RvFetchRom()
+		dataDevice = new RvLoadStoreRam()
+		core = new TCORE(fetchDevice, dataDevice)
+	}
+
+	/**
+	 * Pure wiring preserves the core's edge-level control and retirement contract.
+	 */
+	process Connect[]()
+	{
+		core.run = run
+		core.stepRequest = stepRequest
+		core.restartRequest = restartRequest
+		stepAck = core.stepAck
+		restartAck = core.restartAck
+		idle = core.idle
+		halted = core.halted
+		pc = core.pc
+		faultCause = core.faultCause
+		faultValue = core.faultValue
+		trapped = core.trapped
+		trapPc = core.trapPc
+		trapCause = core.trapCause
+		trapValue = core.trapValue
+		retired = core.retired
+		retiredPc = core.retiredPc
+		retiredInstruction = core.retiredInstruction
+		retiredRd = core.retiredRd
+		retiredValue = core.retiredValue
+		fetchDevice.programWrite = fetchProgramWrite
+		fetchDevice.programIndex = fetchProgramIndex
+		fetchDevice.programData = fetchProgramData
+		dataDevice.programWrite = dataProgramWrite
+		dataDevice.programIndex = dataProgramIndex
+		dataDevice.programData = dataProgramData
+	}
+}
