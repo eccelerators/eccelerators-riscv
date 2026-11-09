@@ -1,0 +1,116 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Platform
+using Livt.IO
+
+/**
+ * Exercises MMIO against an actual FIFO-backed loopback UART, including held
+ * completion and byte-lane validation. All waits have finite failure bounds.
+ */
+@Test
+@Context(ClockFrequency = 10MHz)
+component RvUartDeviceTest
+{
+	// Transport and its exclusive CPU adapter share the test clock.
+	uart: LoopbackUart<4, 4, UartDataBits.Eight, UartParity.None, UartStopBits.One, 1MHz>
+	device: RvUartDevice
+
+	/**
+	 * Creates the independently reusable UART and then its MMIO adapter.
+	 */
+	new()
+	{
+		uart = new LoopbackUart<4, 4, UartDataBits.Eight, UartParity.None, UartStopBits.One, 1MHz>()
+		device = new RvUartDevice(uart)
+	}
+
+	/**
+	 * Holding a completed TX store must enqueue exactly once. RX removes one byte.
+	 */
+	@Test
+	fn TestLoopbackAndHeldCompletion()
+	{
+		state {
+			device.request = 0b0
+		}
+		Simulation.Wait(4)
+		uart.ClearReceiveBuffer()
+		uart.ClearErrors()
+
+		state {
+			device.address = 0x40000000
+			device.write = 0b1
+			device.byteEnable = 0b0001
+			device.writeData = 0xa5
+			device.request = 0b1
+		}
+		var elapsed: uint = 0
+		while (device.ready == 0b0 && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+		assert device.ready == 0b1 && device.error == 0b0
+		Simulation.Wait(400)
+		assert device.ready == 0b1 && device.error == 0b0
+		assert uart.GetReceiveCount() == 1
+		state {
+			device.request = 0b0
+		}
+		Simulation.Wait(8)
+
+		state {
+			device.address = 0x40000008
+			device.write = 0b0
+			device.request = 0b1
+		}
+		elapsed = 0
+		while (device.ready == 0b0 && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+		assert device.ready == 0b1 && device.error == 0b0
+		assert device.readData == 0xa5
+		Simulation.Wait(20)
+		assert device.readData == 0xa5
+		assert uart.GetReceiveCount() == 0
+		state {
+			device.request = 0b0
+		}
+		Simulation.Wait(8)
+	}
+
+	/**
+	 * Invalid byte lanes fail before a transmit can be queued.
+	 */
+	@Test
+	fn TestInvalidStoreHasNoEffect()
+	{
+		state {
+			device.request = 0b0
+		}
+		Simulation.Wait(8)
+		uart.ClearReceiveBuffer()
+		state {
+			device.address = 0x40000000
+			device.write = 0b1
+			device.byteEnable = 0b0010
+			device.writeData = 0x5500
+			device.request = 0b1
+		}
+		var elapsed: uint = 0
+		while (device.ready == 0b0 && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+		assert device.ready == 0b1 && device.error == 0b1
+		Simulation.Wait(400)
+		assert uart.GetReceiveCount() == 0
+		state {
+			device.request = 0b0
+		}
+		Simulation.Wait(8)
+	}
+}

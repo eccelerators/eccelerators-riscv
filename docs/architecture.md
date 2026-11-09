@@ -10,11 +10,11 @@ borrowed providers must outlive the core and share its clock/reset domain.
 | `Presets` | Named sequential and pipeline assemblies |
 | `Sequential` | Sequential ordering, decode/integer/multiply ports and units, memory/control contracts |
 | `Pipeline` | Pipeline ordering and physical timing checks |
-| `Storage` | Synchronous one-port and dual-read register banks |
+| `Storage` | Synchronous register banks and fetch/data memories |
 | `Machine` | Zicsr composition, machine CSR state, trap vocabulary and machine instruction decoding |
-| `Platform` | Timer, external interrupt helpers and reference platform wrappers |
+| `Platform` | Timer, external interrupt helpers and buffered UART adapter |
 | `Contracts` | Static capability/timing checks and composition contracts |
-| `System` | Constructor-bound core-plus-device system composition |
+| `System` | Constructor-bound systems and fetch/load-store routers |
 
 The engine owns instruction identity, PC, scheduling, dependency handling and the
 ordered architectural decision. The register bank owns integer storage. The CSR
@@ -30,7 +30,10 @@ classDiagram
     class IntegerUnit
     class Multiplier
     class ZicsrComposition
-    class MemoryPort {
+    class FetchPort {
+        <<interface>>
+    }
+    class LoadStorePort {
         <<interface>>
     }
     NamedCore *-- Engine
@@ -44,7 +47,8 @@ classDiagram
     Engine --> IntegerUnit : borrows
     Engine --> Multiplier : borrows
     Engine --> ZicsrComposition : borrows
-    Engine --> MemoryPort : instruction and data
+    Engine --> FetchPort : instructions
+    Engine --> LoadStorePort : data
 ```
 
 The diagram summarizes a machine composition; base presets substitute stateless
@@ -63,6 +67,6 @@ operation coverage and timing requirements during elaboration. They add no runti
 registry. A passing assertion cannot prove provider behavior or arbitrary wiring;
 functional tests and implementation reports are still required.
 
-The earlier blocking contracts remain available. Their blocking call completion
-has different timing from the clocked signal-level engines; do not mix these
-APIs in one composition.
+The scheduled reference cores and their method-style buses have been removed.
+Applications control execution through run/step/restart handshakes; see
+[system composition](system.md) for complete device ownership and routing.

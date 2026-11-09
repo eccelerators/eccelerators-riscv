@@ -12,14 +12,14 @@ using Eccelerators.RiscV.Presets
 component Rv32iPackageApiTest
 {
 	// Owned system-level machine using the default ROM/RAM devices.
-	system: RvSystem<Rv32iSequentialCore>
+	system: RvMemorySystem<Rv32iSequentialCore>
 
 	/**
 	 * Constructs the owned subject; scenarios supply their own program.
 	 */
 	new()
 	{
-		system = new RvSystem<Rv32iSequentialCore>()
+		system = new RvMemorySystem<Rv32iSequentialCore>()
 	}
 
 	/**

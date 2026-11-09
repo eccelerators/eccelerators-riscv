@@ -7,7 +7,7 @@ use the same reusable components; resource choices are compile-time parameters.
 Version **0.3.0** removes the scheduled reference layer and uses separate
 instruction-fetch and load/store ports with a system-level composition,
 retaining the sequential and pipeline core presets. See the
-[release notes](CHANGELOG.md#030) for migration guidance.
+[release notes](CHANGELOG.md#030---2026-11-08) for migration guidance.
 
 ## Choose a core
 
@@ -43,6 +43,15 @@ The application owns memories, firmware provisioning, peripherals and clock/rese
 See [core selection](docs/cores.md) and [integration](docs/integration.md) before
 wiring providers or controls.
 
+## Compose a system
+
+`RvMemorySystem<Rv32iSequentialCore>` owns a default 4 KiB fetch ROM and
+4 KiB data RAM. For a custom address map, construct `RvSystem<TCORE>(fetch,
+loadStore)` with your own providers. `Rv32FetchBus` and `Rv32LoadStoreBus`
+route independent address windows; `RvUartDevice` adapts a buffered UART to
+load/store registers. See [system composition](docs/system.md) for ownership,
+provisioning and interrupt wiring.
+
 ## Use the package
 
 Add the release under `[dependencies]` in your application's `livt.toml`:
@@ -60,7 +69,7 @@ For development against a local checkout, use this dependency instead:
 ```
 
 Run `livt sync` to resolve dependencies. The package uses `Livt.IO` 1.8.1 for
-memory storage.
+memory storage and the buffered UART adapter.
 
 Software targets are `rv32i`, `rv32i_zmmul`, or `rv32i_zmmul_zicsr`, with the
 `ilp32` ABI, according to the selected core. Zmmul includes multiplication but

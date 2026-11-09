@@ -1,0 +1,507 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.System
+
+/**
+ * Direct unit tests for the two-slot load/store router: window routing with
+ * request gating, default catch-all and immediate effect-free unmapped faults.
+ * Every cell is first initialized by a store that must route to its own slot,
+ * so reading it back through the bus proves both routing and isolation.
+ */
+@Test
+component Rv32LoadStoreBusTest
+{
+	// Slot devices and routers under test in the test clock domain.
+	slotA: RvLoadStoreRam<4, 10, MemoryStyle.Block, 0>
+	slotB: RvLoadStoreRam<4, 10, MemoryStyle.Block, 16>
+	bus: Rv32LoadStoreBus<0, 16, 16, 16, false>
+	defA: RvLoadStoreRam<4, 10, MemoryStyle.Block, 0>
+	defB: RvLoadStoreRam<4, 10, MemoryStyle.Block, 16>
+	defBus: Rv32LoadStoreBus<0, 16, 16, 16, true>
+
+	/**
+	 * Instantiates both routers with concrete slot devices.
+	 */
+	new()
+	{
+		slotA = new RvLoadStoreRam<4, 10, MemoryStyle.Block, 0>()
+		slotB = new RvLoadStoreRam<4, 10, MemoryStyle.Block, 16>()
+		bus = new Rv32LoadStoreBus<0, 16, 16, 16, false>(slotA, slotB)
+		defA = new RvLoadStoreRam<4, 10, MemoryStyle.Block, 0>()
+		defB = new RvLoadStoreRam<4, 10, MemoryStyle.Block, 16>()
+		defBus = new Rv32LoadStoreBus<0, 16, 16, 16, true>(defA, defB)
+	}
+
+	/**
+	 * Stores through the plain bus initialize each slot's cell only when the
+	 * address lands in that slot's window; both words then read back intact.
+	 */
+	@Test
+	fn TestWindowRouting()
+	{
+		state {
+			bus.request = 0b0
+			defBus.request = 0b0
+		}
+		Simulation.Wait(4)
+
+		var elapsed: uint = 0
+
+		// First store targets slot B's window; slot A must stay idle.
+		state {
+			bus.request = 0b1
+			bus.write = 0b1
+			bus.byteEnable = 0b1111
+			bus.address = 16 as logic[32]
+			bus.writeData = 22 as logic[32]
+		}
+
+		while (bus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+
+		state {
+			bus.request = 0b0
+			bus.write = 0b0
+			bus.byteEnable = 0b0000
+			bus.address = 0 as logic[32]
+			bus.writeData = 0 as logic[32]
+		}
+
+		Simulation.Wait(2)
+
+		// Second store targets slot A's window at word index 1.
+		state {
+			bus.request = 0b1
+			bus.write = 0b1
+			bus.byteEnable = 0b1111
+			bus.address = 4 as logic[32]
+			bus.writeData = 0x1122aa44 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (bus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+
+		state {
+			bus.request = 0b0
+			bus.write = 0b0
+			bus.byteEnable = 0b0000
+			bus.address = 0 as logic[32]
+			bus.writeData = 0 as logic[32]
+		}
+
+		Simulation.Wait(2)
+
+		// Slot A kept its word untouched by the window B store.
+		state {
+			bus.request = 0b1
+			bus.address = 4 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (bus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+		assert bus.readData as uint == 0x1122aa44
+
+		state {
+			bus.request = 0b0
+		}
+
+		Simulation.Wait(2)
+
+		// Load of slot B's cell after the transaction above fully retired.
+		state {
+			bus.request = 0b1
+			bus.address = 16 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (bus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+		assert bus.readData as uint == 22
+
+		state {
+			bus.request = 0b0
+		}
+	}
+
+	/**
+	 * Outside both windows the access faults immediately and effect-free: the
+	 * faulted store lands nowhere, the read data is 0 and the error falls
+	 * combinationally with the request.
+	 */
+	@Test
+	fn TestUnmappedAccessFault()
+	{
+		state {
+			bus.request = 0b0
+			defBus.request = 0b0
+		}
+		Simulation.Wait(4)
+
+		var elapsed: uint = 0
+
+		// Initialize slot A's cell so effect-freeness is observable.
+		state {
+			bus.request = 0b1
+			bus.write = 0b1
+			bus.byteEnable = 0b1111
+			bus.address = 4 as logic[32]
+			bus.writeData = 77 as logic[32]
+		}
+
+		while (bus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+
+		state {
+			bus.request = 0b0
+			bus.write = 0b0
+			bus.byteEnable = 0b0000
+			bus.address = 0 as logic[32]
+			bus.writeData = 0 as logic[32]
+		}
+
+		Simulation.Wait(2)
+
+		// An unmapped store faults combinationally with the request, effect-free.
+		state {
+			bus.request = 0b1
+			bus.write = 0b1
+			bus.byteEnable = 0b1111
+			bus.address = 0x10000 as logic[32]
+			bus.writeData = 0xdeadbeef as logic[32]
+		}
+
+		Simulation.Wait(2)
+		Simulation.Wait(2)
+		assert bus.ready == 0b1 && bus.error == 0b1 && bus.readData == 0
+
+		state {
+			bus.request = 0b0
+		}
+
+		Simulation.Wait(2)
+
+		state {
+			bus.request = 0b1
+			bus.write = 0b0
+			bus.byteEnable = 0b0000
+			bus.address = 0x20000 as logic[32]
+			bus.writeData = 0 as logic[32]
+		}
+
+		Simulation.Wait(2)
+		assert bus.ready == 0b1 && bus.error == 0b1 && bus.readData == 0
+
+		state {
+			bus.request = 0b0
+			bus.address = 4 as logic[32]
+		}
+
+		Simulation.Wait(2)
+		assert bus.ready == 0b0 && bus.error == 0b0
+
+		// The faulted store never reached slot A.
+		state {
+			bus.request = 0b1
+		}
+
+		elapsed = 0
+
+		while (bus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+		assert bus.readData as uint == 77
+
+		state {
+			bus.request = 0b0
+		}
+	}
+
+	/**
+	 * A byte-lane store through the bus lands only on the enabled lane.
+	 */
+	@Test
+	fn TestByteLaneStore()
+	{
+		state {
+			bus.request = 0b0
+			defBus.request = 0b0
+		}
+		Simulation.Wait(4)
+
+		var elapsed: uint = 0
+
+		state {
+			bus.request = 0b1
+			bus.write = 0b1
+			bus.byteEnable = 0b1111
+			bus.address = 0 as logic[32]
+			bus.writeData = 0xaabbccdd as logic[32]
+		}
+
+		while (bus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+
+		state {
+			bus.request = 0b0
+			bus.write = 0b0
+			bus.byteEnable = 0b0000
+			bus.writeData = 0 as logic[32]
+		}
+
+		Simulation.Wait(2)
+
+		state {
+			bus.request = 0b1
+			bus.write = 0b1
+			bus.byteEnable = 0b0010
+			bus.address = 0 as logic[32]
+			bus.writeData = 0x0000ff00 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (bus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+
+		state {
+			bus.request = 0b0
+			bus.write = 0b0
+			bus.byteEnable = 0b0000
+			bus.writeData = 0 as logic[32]
+		}
+
+		Simulation.Wait(2)
+
+		state {
+			bus.request = 0b1
+			bus.address = 0 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (bus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+		assert bus.readData as uint == 0xaabbffdd
+
+		state {
+			bus.request = 0b0
+		}
+	}
+
+	/**
+	 * With a default slot everything outside window A stores and loads from
+	 * slot B; a far catch-all store faults in slot B's own range check while
+	 * both slots' contents stay untouched.
+	 */
+	@Test
+	fn TestDefaultCatchAll()
+	{
+		state {
+			bus.request = 0b0
+			defBus.request = 0b0
+		}
+		Simulation.Wait(4)
+
+		var elapsed: uint = 0
+
+		// Initialize slot A's cell through the default bus.
+		state {
+			defBus.request = 0b1
+			defBus.write = 0b1
+			defBus.byteEnable = 0b1111
+			defBus.address = 0 as logic[32]
+			defBus.writeData = 66 as logic[32]
+		}
+
+		while (defBus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert defBus.ready == 0b1 && defBus.error == 0b0
+
+		state {
+			defBus.request = 0b0
+			defBus.write = 0b0
+			defBus.byteEnable = 0b0000
+			defBus.writeData = 0 as logic[32]
+		}
+
+		Simulation.Wait(2)
+
+		// Address outside window A routes to the catch-all slot B.
+		state {
+			defBus.request = 0b1
+			defBus.write = 0b1
+			defBus.byteEnable = 0b1111
+			defBus.address = 16 as logic[32]
+			defBus.writeData = 77 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (defBus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert defBus.ready == 0b1 && defBus.error == 0b0
+
+		state {
+			defBus.request = 0b0
+			defBus.write = 0b0
+			defBus.byteEnable = 0b0000
+			defBus.address = 0 as logic[32]
+			defBus.writeData = 0 as logic[32]
+		}
+
+		Simulation.Wait(2)
+
+		state {
+			defBus.request = 0b1
+			defBus.address = 0 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (defBus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert defBus.ready == 0b1 && defBus.error == 0b0
+		assert defBus.readData as uint == 66
+
+		state {
+			defBus.request = 0b0
+		}
+
+		Simulation.Wait(2)
+
+		state {
+			defBus.request = 0b1
+			defBus.address = 16 as logic[32]
+		}
+
+		elapsed = 0
+		while (defBus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert defBus.ready == 0b1 && defBus.error == 0b0
+		assert defBus.readData as uint == 77
+
+		state {
+			defBus.request = 0b0
+			defBus.address = 0 as logic[32]
+		}
+
+		Simulation.Wait(2)
+
+		// The far catch-all address still routes to slot B, which range-checks
+		// and faults before applying the store.
+		state {
+			defBus.request = 0b1
+			defBus.write = 0b1
+			defBus.byteEnable = 0b1111
+			defBus.address = 0x40000000 as logic[32]
+			defBus.writeData = 88 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (defBus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert defBus.ready == 0b1 && defBus.error == 0b1
+
+		state {
+			defBus.request = 0b0
+			defBus.write = 0b0
+			defBus.byteEnable = 0b0000
+			defBus.address = 0 as logic[32]
+			defBus.writeData = 0 as logic[32]
+		}
+
+		Simulation.Wait(2)
+
+		// The faulted catch-all store left slot A's word untouched.
+		state {
+			defBus.request = 0b1
+		}
+
+		elapsed = 0
+
+		while (defBus.ready == 0b0 && elapsed < 8) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert defBus.ready == 0b1 && defBus.error == 0b0
+		assert defBus.readData as uint == 66
+
+		state {
+			defBus.request = 0b0
+		}
+	}
+}

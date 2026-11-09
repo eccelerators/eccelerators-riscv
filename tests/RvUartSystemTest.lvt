@@ -1,0 +1,80 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.System
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Platform
+using Eccelerators.RiscV.Presets
+using Livt.IO
+
+/** Executes a UART store through the pipeline, router and independent adapter. */
+@Test
+@Context(ClockFrequency = 10MHz)
+component RvUartSystemTest
+{
+	// Explicit application composition with synchronous memories and loopback pins.
+	fetch: RvFetchRom<8, 3>
+	ram: RvLoadStoreRam<16, 4>
+	uart: LoopbackUart<4, 4, UartDataBits.Eight, UartParity.None, UartStopBits.One, 1MHz>
+	device: RvUartDevice
+	bus: Rv32LoadStoreBus<0, 64, 0x40000000, 12, false>
+	system: RvSystem<Rv32iPipelineCore>
+
+	/** Owns all devices and borrows them through the typed system constructor. */
+	new()
+	{
+		fetch = new RvFetchRom<8, 3>()
+		ram = new RvLoadStoreRam<16, 4>()
+		uart = new LoopbackUart<4, 4, UartDataBits.Eight, UartParity.None, UartStopBits.One, 1MHz>()
+		device = new RvUartDevice(uart)
+		bus = new Rv32LoadStoreBus<0, 64, 0x40000000, 12, false>(ram, device)
+		system = new RvSystem<Rv32iPipelineCore>(fetch, bus)
+	}
+
+	/** Provisions one instruction while execution is paused. */
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[3]
+			fetch.programData = word as logic[32]
+		}
+		state {
+			fetch.programWrite = 0b0
+		}
+	}
+
+	/** A firmware SB reaches the serial pin once and the next EBREAK stops. */
+	@Test
+	fn TestFirmwareTransmit()
+	{
+		state {
+			system.run = 0b0
+		}
+		Simulation.Wait(150)
+		assert system.idle == 0b1
+		Load(0, 0x400000b7) // LUI x1,0x40000
+		Load(1, 0x04100113) // ADDI x2,x0,65
+		Load(2, 0x00208023) // SB x2,0(x1)
+		Load(3, 0x00100073) // EBREAK
+		state {
+			system.run = 0b1
+		}
+		var elapsed: uint = 0
+		while (system.halted == 0b0 && elapsed < 1000) {
+			state {
+				elapsed++
+			}
+		}
+		assert system.halted == 0b1 && system.faultCause == 3
+		assert system.pc == 12
+		state {
+			system.run = 0b0
+		}
+		Simulation.Wait(400)
+		assert uart.GetReceiveCount() == 1
+		var value: byte = 0
+		assert uart.TryReceive(value)
+		assert value == 0x41
+		assert uart.GetReceiveCount() == 0
+	}
+}

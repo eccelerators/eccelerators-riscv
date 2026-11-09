@@ -2,9 +2,11 @@
 
 ## Memory ports
 
-Both engines borrow instruction and data providers through
-[`IRv32MemoryPort`](../src/Sequential/IRv32MemoryPort.lvt). The interface represents
-one outstanding aligned 32-bit word transaction in one clock domain.
+Both engines borrow separate instruction and data providers through
+[`IRv32FetchPort`](../src/Sequential/IRv32FetchPort.lvt) and
+[`IRv32LoadStorePort`](../src/Sequential/IRv32LoadStorePort.lvt). Each port carries
+one outstanding aligned 32-bit word transaction in one clock domain. Fetch has
+no write signals; write direction, byte enables and write data apply only to load/store.
 
 1. Hold request, address, write direction, byte enable and write data stable until
    an edge with `ready = 1`.
@@ -24,7 +26,8 @@ data path. Clock-domain crossing also needs an explicit adapter.
 
 ## Memory and register storage
 
-`Rv32WordMemory<WORDS, ADDRESS_BITS, STYLE, BASE>` provides bounded word storage
+`RvFetchRom<WORDS, ADDRESS_BITS, STYLE, BASE>` provides instruction storage.
+`RvLoadStoreRam<WORDS, ADDRESS_BITS, STYLE, BASE>` provides bounded data storage
 and a separate provisioning channel. Full-word writes use one RAM operation;
 partial writes use read/modify/write. Payload RAM survives reset and has no
 promised initial contents. Initialize every location read, including untouched

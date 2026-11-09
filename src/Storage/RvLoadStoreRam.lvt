@@ -18,6 +18,8 @@ component RvLoadStoreRam<WORDS: int = 1024, ADDRESS_BITS: int = 10,
 	static assert ADDRESS_BITS > 0 && ADDRESS_BITS <= 28, "Memory address width must be 1..28"
 	static assert WORDS > 0 && WORDS <= (1 << ADDRESS_BITS), "Memory capacity exceeds address width"
 
+	static assert BASE <= 0xffffffff - ((WORDS as uint) * 4 - 1), "Memory range must not wrap"
+
 	// Host provisioning signals, sampled on an enabled edge with an idle bus.
 	public programWrite: in logic
 	public programIndex: in logic[ADDRESS_BITS]

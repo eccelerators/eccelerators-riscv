@@ -23,7 +23,7 @@ come from the pipeline machine preset:
 baseDecoder = new Rv32iZmmulDecoder()
 zicsr = new Rv32ZicsrComposition<0, true, true>(baseDecoder)
 decoder = new Rv32MachineDecoder(zicsr)
-engine = new Rv32PipelineEngine<RESET_PC, true, true, true, true>(
+engine = new Rv32PipelineEngine<RESET_PC, true>(
 	registers, instructions, data, decoder, integer, multiplier, zicsr)
 ```
 
@@ -103,8 +103,9 @@ compatible timing, or the resource results of a qualified preset.
 
 Both engines take providers in this order: register bank, instruction memory,
 data memory, decoder, integer unit, multiplier and CSR provider. Select
-`<RESET_PC, MULTIPLY, CSR, MACHINE_TRAPS, INTERRUPTS>` consistently with those
-providers. Traps require CSR support; interrupts require traps. Disabled paths
+`<RESET_PC, MACHINE_TRAPS>` for reset address and exception policy. Decoder and
+provider types determine instruction support. Machine traps require a compatible
+CSR provider; interrupts require machine traps. Absent units
 use `Rv32NoMultiplier` and `Rv32NoCsrs` terminations.
 
 For a base pipeline, these constructor statements illustrate the assembly:

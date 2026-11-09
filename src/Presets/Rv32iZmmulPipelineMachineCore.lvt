@@ -14,13 +14,9 @@ using Livt.IO
  * providers and target, not to arbitrary buses supplied through these interfaces.
  */
 component Rv32iZmmulPipelineMachineCore<RESET_PC: uint = 0, REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block,
-	DSP_MULTIPLY: bool = false> : IRv32ControlPort
+	DSP_MULTIPLY: bool = false> : IRv32MachineControlPort
 {
 	static assert Rv32DspMultiplier.CAPABILITIES == Rv32IterativeMultiplier.CAPABILITIES, "Multiplier choices must implement the same operations"
-
-	// Platform-owned pending level, synchronous to this core.
-	public timerPending: in logic
-	public externalPending: in logic
 
 	// Owned execution components and elaboration-only compatibility checks.
 	registers: Rv32DualReadRegisterBank<REGISTER_FILE_STYLE>

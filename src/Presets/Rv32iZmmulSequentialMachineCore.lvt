@@ -12,12 +12,8 @@ using Livt.IO
  * in the same clock/reset domain. Qualification applies to the documented memory
  * providers and target, not to arbitrary buses supplied through these interfaces.
  */
-component Rv32iZmmulSequentialMachineCore<RESET_PC: uint = 0, REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block> : IRv32ControlPort
+component Rv32iZmmulSequentialMachineCore<RESET_PC: uint = 0, REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block> : IRv32MachineControlPort
 {
-	// Platform-owned pending level, synchronous to this core.
-	public timerPending: in logic
-	public externalPending: in logic
-
 	// Owned execution components and elaboration-only compatibility checks.
 	registers: Rv32RegisterBank<REGISTER_FILE_STYLE>
 	baseDecoder: Rv32iZmmulDecoder

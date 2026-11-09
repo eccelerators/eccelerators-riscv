@@ -1,0 +1,52 @@
+namespace Eccelerators.RiscV.System
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Machine
+
+/**
+ * Owns a selected core and borrows the caller's fetch and load/store providers.
+ * Devices, routing, provisioning and peripheral pins belong to the caller.
+ * All components share a clock/reset domain. This wrapper adds no registers
+ * or arbitration. Machine interrupt inputs are forwarded without synchronization.
+ */
+component RvMachineSystem<TCORE : IRv32MachineControlPort & new(flip IRv32FetchPort, flip IRv32LoadStorePort)> : IRv32MachineControlPort
+{
+	// Owned core; execution controls have one writer in Connect.
+	core: TCORE
+
+	/**
+	 * Creates the core with exclusive access to the two supplied providers.
+	 */
+	new(fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort)
+	{
+		core = new TCORE(fetch, loadStore)
+	}
+
+	/**
+	 * Pure wiring preserves the core's edge-level control and retirement contract.
+	 */
+	process Connect[]()
+	{
+		core.timerPending = timerPending
+		core.externalPending = externalPending
+		core.run = run
+		core.stepRequest = stepRequest
+		core.restartRequest = restartRequest
+		stepAck = core.stepAck
+		restartAck = core.restartAck
+		idle = core.idle
+		halted = core.halted
+		pc = core.pc
+		faultCause = core.faultCause
+		faultValue = core.faultValue
+		trapped = core.trapped
+		trapPc = core.trapPc
+		trapCause = core.trapCause
+		trapValue = core.trapValue
+		retired = core.retired
+		retiredPc = core.retiredPc
+		retiredInstruction = core.retiredInstruction
+		retiredRd = core.retiredRd
+		retiredValue = core.retiredValue
+	}
+}

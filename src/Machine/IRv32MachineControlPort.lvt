@@ -1,0 +1,14 @@
+namespace Eccelerators.RiscV.Machine
+
+using Eccelerators.RiscV.Sequential
+
+/**
+ * Execution control plus synchronous persistent machine interrupt levels.
+ * The platform owns source acknowledgement; core restart does not clear sources.
+ */
+interface IRv32MachineControlPort : IRv32ControlPort
+{
+	// Already synchronized pending levels, held until the source is serviced.
+	timerPending: in logic
+	externalPending: in logic
+}

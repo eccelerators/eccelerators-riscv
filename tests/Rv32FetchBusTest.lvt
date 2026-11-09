@@ -1,0 +1,293 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.System
+
+/**
+ * Direct unit tests for the two-slot instruction fetch router: window routing,
+ * slot gating via request, default catch-all and immediate effect-free
+ * unmapped faults. Slot ROMs are provisioned directly with distinct payloads;
+ * responses are checked against the selected slot's initialized payload.
+ */
+@Test
+component Rv32FetchBusTest
+{
+	// Slot devices and routers under test in the test clock domain.
+	slotA: RvFetchRom<4, 10, MemoryStyle.Block, 0>
+	slotB: RvFetchRom<4, 10, MemoryStyle.Block, 16>
+	bus: Rv32FetchBus<0, 16, 16, 16, false>
+	defA: RvFetchRom<4, 10, MemoryStyle.Block, 0>
+	defB: RvFetchRom<4, 10, MemoryStyle.Block, 16>
+	defBus: Rv32FetchBus<0, 16, 16, 16, true>
+
+	/**
+	 * Instantiates both routers with concrete slot devices.
+	 */
+	new()
+	{
+		slotA = new RvFetchRom<4, 10, MemoryStyle.Block, 0>()
+		slotB = new RvFetchRom<4, 10, MemoryStyle.Block, 16>()
+		bus = new Rv32FetchBus<0, 16, 16, 16, false>(slotA, slotB)
+		defA = new RvFetchRom<4, 10, MemoryStyle.Block, 0>()
+		defB = new RvFetchRom<4, 10, MemoryStyle.Block, 16>()
+		defBus = new Rv32FetchBus<0, 16, 16, 16, true>(defA, defB)
+	}
+
+	/**
+	 * Provisions one word directly into each plain-router slot device.
+	 */
+	fn ProgramSlots()
+	{
+		state {
+			slotA.programWrite = 0b1
+			slotA.programIndex = 0 as logic[10]
+			slotA.programData = 11 as logic[32]
+			slotB.programWrite = 0b1
+			slotB.programIndex = 0 as logic[10]
+			slotB.programData = 22 as logic[32]
+		}
+
+		state {
+			slotA.programWrite = 0b0
+			slotB.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Provisions one word directly into each default-router slot device.
+	 */
+	fn ProgramDefaultSlots()
+	{
+		state {
+			defA.programWrite = 0b1
+			defA.programIndex = 0 as logic[10]
+			defA.programData = 33 as logic[32]
+			defB.programWrite = 0b1
+			defB.programIndex = 0 as logic[10]
+			defB.programData = 44 as logic[32]
+		}
+
+		state {
+			defA.programWrite = 0b0
+			defB.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Each window routes to its own slot; the inactive slot stays idle, so a
+	 * each fetch returns the selected slot's independently initialized payload.
+	 */
+	@Test
+	fn TestWindowRouting()
+	{
+		state {
+			bus.request = 0b0
+			defBus.request = 0b0
+		}
+		Simulation.Wait(4)
+
+		ProgramSlots()
+		var elapsed: uint = 0
+
+		state {
+			bus.request = 0b1
+			bus.address = 0 as logic[32]
+		}
+
+		while (bus.ready == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+		assert bus.instruction as uint == 11
+
+		state {
+			bus.request = 0b0
+		}
+
+		Simulation.Wait(2)
+
+		state {
+			bus.request = 0b1
+			bus.address = 16 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (bus.ready == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+		assert bus.instruction as uint == 22
+
+		state {
+			bus.request = 0b0
+		}
+
+		Simulation.Wait(2)
+
+		state {
+			bus.request = 0b1
+			bus.address = 16 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (bus.ready == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b0
+		assert bus.instruction as uint == 22
+
+		state {
+			bus.request = 0b0
+		}
+	}
+
+	/**
+	 * Outside both windows the fault is immediate, effect-free and clears
+	 * combinationally when the request falls.
+	 */
+	@Test
+	fn TestUnmappedFault()
+	{
+		state {
+			bus.request = 0b0
+			defBus.request = 0b0
+		}
+		Simulation.Wait(4)
+
+		ProgramSlots()
+		var elapsed: uint = 0
+
+		state {
+			bus.request = 0b1
+			bus.address = 0x10000 as logic[32]
+		}
+
+		while (bus.ready == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert bus.ready == 0b1 && bus.error == 0b1 && bus.instruction == 0
+
+		state {
+			bus.request = 0b0
+		}
+
+		Simulation.Wait(2)
+		assert bus.ready == 0b0 && bus.error == 0b0 && bus.instruction == 0
+	}
+
+	/**
+	 * With a default slot every address outside window A is routed to slot B:
+	 * inside slot B's range it serves the payload, at a far address slot B's
+	 * own range check faults, and slot A retains its initialized contents.
+	 */
+	@Test
+	fn TestDefaultCatchAll()
+	{
+		state {
+			bus.request = 0b0
+			defBus.request = 0b0
+		}
+		Simulation.Wait(4)
+
+		ProgramDefaultSlots()
+		var elapsed: uint = 0
+
+		state {
+			defBus.request = 0b1
+			defBus.address = 0 as logic[32]
+		}
+
+		while (defBus.ready == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert defBus.ready == 0b1 && defBus.error == 0b0
+		assert defBus.instruction as uint == 33
+
+		state {
+			defBus.request = 0b0
+		}
+
+		Simulation.Wait(2)
+
+		state {
+			defBus.request = 0b1
+			defBus.address = 16 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (defBus.ready == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert defBus.ready == 0b1 && defBus.error == 0b0
+		assert defBus.instruction as uint == 44
+
+		state {
+			defBus.request = 0b0
+		}
+
+		Simulation.Wait(2)
+
+		state {
+			defBus.request = 0b1
+			defBus.address = 0x40000000 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (defBus.ready == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert defBus.ready == 0b1 && defBus.error == 0b1
+
+		state {
+			defBus.request = 0b0
+		}
+
+		Simulation.Wait(2)
+
+		state {
+			defBus.request = 0b1
+			defBus.address = 0 as logic[32]
+		}
+
+		elapsed = 0
+
+		while (defBus.ready == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert defBus.ready == 0b1 && defBus.error == 0b0
+		assert defBus.instruction as uint == 33
+
+		state {
+			defBus.request = 0b0
+		}
+	}
+}

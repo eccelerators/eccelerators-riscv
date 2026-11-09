@@ -6,7 +6,7 @@ using Eccelerators.RiscV.Presets
 using Eccelerators.RiscV.System
 
 /**
- * Parity checks: the same machine built two ways (RvSystem defaults vs. hand-wired
+ * Parity checks: the same machine built two ways (RvMemorySystem defaults vs. hand-wired
  * preset core with identical devices) must retire identical events, carry identical
  * stop state and hold the ordered retirement sequence. Every wait is bounded so a
  * stalled device or controller fails the test.
@@ -15,7 +15,7 @@ using Eccelerators.RiscV.System
 component RvSystemTest
 {
 	// System-layer machine and hand-wired equivalent on identical device parameters.
-	viaSystem: RvSystem<Rv32iSequentialCore>
+	viaSystem: RvMemorySystem<Rv32iSequentialCore>
 	fetch: RvFetchRom<1024, 10>
 	loadStore: RvLoadStoreRam<1024, 10>
 	handWired: Rv32iSequentialCore<0, MemoryStyle.Block>
@@ -23,13 +23,17 @@ component RvSystemTest
 	handCount: uint
 	clearObservation: bool
 	cycles: uint
+	lastPc: logic[32]
+	lastInstruction: logic[32]
+	lastRd: logic[5]
+	lastValue: logic[32]
 
 	/**
 	 * Creates the system machine and the hand-wired equivalent in the test clock context.
 	 */
 	new()
 	{
-		viaSystem = new RvSystem<Rv32iSequentialCore>()
+		viaSystem = new RvMemorySystem<Rv32iSequentialCore>()
 		fetch = new RvFetchRom<1024, 10>()
 		loadStore = new RvLoadStoreRam<1024, 10>()
 		handWired = new Rv32iSequentialCore<0, MemoryStyle.Block>(fetch, loadStore)
@@ -47,11 +51,17 @@ component RvSystemTest
 				systemCount = 0
 				handCount = 0
 			} else {
+				assert viaSystem.retired == handWired.retired
+
 				if (viaSystem.retired == 0b1) {
 					assert viaSystem.retiredPc == handWired.retiredPc
 					assert viaSystem.retiredInstruction == handWired.retiredInstruction
 					assert viaSystem.retiredRd == handWired.retiredRd
 					assert viaSystem.retiredValue == handWired.retiredValue
+					lastPc = viaSystem.retiredPc
+					lastInstruction = viaSystem.retiredInstruction
+					lastRd = viaSystem.retiredRd
+					lastValue = viaSystem.retiredValue
 					systemCount++
 				}
 
@@ -165,9 +175,9 @@ component RvSystemTest
 		assert viaSystem.faultValue as uint == 12
 		assert viaSystem.pc as uint == 12
 		assert systemCount == 3
-		assert viaSystem.retiredRd as uint == 3
-		assert viaSystem.retiredValue as uint == 13
-		assert viaSystem.retiredPc as uint == 8
+		assert lastRd as uint == 3
+		assert lastValue as uint == 13
+		assert lastPc as uint == 8
 	}
 
 	/**
@@ -184,10 +194,10 @@ component RvSystemTest
 		assert viaSystem.faultCause as uint == 3
 		assert viaSystem.faultValue as uint == 8
 		assert systemCount == 1
-		assert viaSystem.retiredRd as uint == 6
-		assert viaSystem.retiredValue as uint == 4
-		assert viaSystem.retiredPc as uint == 0
-		assert viaSystem.retiredInstruction as uint == 0x00100073
+		assert lastRd as uint == 6
+		assert lastValue as uint == 4
+		assert lastPc as uint == 0
+		assert lastInstruction as uint == 0x0080036f
 	}
 
 	/**
@@ -221,8 +231,8 @@ component RvSystemTest
 		assert viaSystem.faultCause as uint == 3
 		assert viaSystem.faultValue as uint == 16
 		assert systemCount == 4
-		assert viaSystem.retiredRd as uint == 2
-		assert viaSystem.retiredValue as uint == 0x89abc7ef
+		assert lastRd as uint == 2
+		assert lastValue as uint == 0x89abc7ef
 	}
 
 	/**
@@ -238,8 +248,8 @@ component RvSystemTest
 		assert viaSystem.faultCause as uint == 5
 		assert viaSystem.faultValue as uint == 16384
 		assert systemCount == 1
-		assert viaSystem.retiredRd as uint == 5
-		assert viaSystem.retiredValue as uint == 16384
-		assert viaSystem.retiredPc as uint == 0
+		assert lastRd as uint == 5
+		assert lastValue as uint == 16384
+		assert lastPc as uint == 0
 	}
 }

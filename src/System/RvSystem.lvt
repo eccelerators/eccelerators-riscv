@@ -1,42 +1,24 @@
 namespace Eccelerators.RiscV.System
 
 using Eccelerators.RiscV.Sequential
-using Eccelerators.RiscV.Storage
 
 /**
- * Generic turnkey system: one core plus the default signal-level devices.
- * The ISA comes from TCORE; the system itself is ISA-neutral. Defaults are one
- * read-only instruction provider and one byte-enabled data RAM at address zero;
- * richer address maps come from inheritance overriding a device, not from more
- * parameters here. The system only ever sees the two port interfaces.
- * Program the devices only while the core is idle (request low); provisioning
- * and execution must never overlap. Every control and observation signal passes
- * through unchanged, so a system and a hand-wired core with equivalent devices
- * retire identical events.
+ * Owns a selected core and borrows the caller's fetch and load/store providers.
+ * Devices, routing, provisioning and peripheral pins belong to the caller.
+ * All components share a clock/reset domain. This wrapper adds no registers
+ * or arbitration. Use RvMachineSystem to expose machine interrupt inputs.
  */
 component RvSystem<TCORE : IRv32ControlPort & new(flip IRv32FetchPort, flip IRv32LoadStorePort)> : IRv32ControlPort
 {
-	// Host provisioning of the owned default devices.
-	public fetchProgramWrite: in logic
-	public fetchProgramIndex: in logic[10]
-	public fetchProgramData: in logic[32]
-	public dataProgramWrite: in logic
-	public dataProgramIndex: in logic[10]
-	public dataProgramData: in logic[32]
-
-	// System-owned default devices.
-	fetchDevice: RvFetchRom
-	dataDevice: RvLoadStoreRam
+	// Owned core; execution controls have one writer in Connect.
 	core: TCORE
 
 	/**
-	 * Creates both default devices, then the core borrowing them exclusively.
+	 * Creates the core with exclusive access to the two supplied providers.
 	 */
-	new()
+	new(fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort)
 	{
-		fetchDevice = new RvFetchRom()
-		dataDevice = new RvLoadStoreRam()
-		core = new TCORE(fetchDevice, dataDevice)
+		core = new TCORE(fetch, loadStore)
 	}
 
 	/**
@@ -63,11 +45,5 @@ component RvSystem<TCORE : IRv32ControlPort & new(flip IRv32FetchPort, flip IRv3
 		retiredInstruction = core.retiredInstruction
 		retiredRd = core.retiredRd
 		retiredValue = core.retiredValue
-		fetchDevice.programWrite = fetchProgramWrite
-		fetchDevice.programIndex = fetchProgramIndex
-		fetchDevice.programData = fetchProgramData
-		dataDevice.programWrite = dataProgramWrite
-		dataDevice.programIndex = dataProgramIndex
-		dataDevice.programData = dataProgramData
 	}
 }

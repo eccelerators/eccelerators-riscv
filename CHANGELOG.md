@@ -4,6 +4,12 @@ All notable changes to `Eccelerators.RiscV` are recorded here.
 
 ## [0.3.0] - 2026-11-08
 
+### Added
+
+- Explicit-provider `RvSystem<TCORE>` and default-memory `RvMemorySystem<TCORE>`.
+- Combinational fetch and load/store window routers, and an independent buffered
+  UART load/store adapter.
+
 ### Removed
 
 - Remove the scheduled reference API from the package: the `Isa`, `Core` and
@@ -18,10 +24,13 @@ All notable changes to `Eccelerators.RiscV` are recorded here.
 
 ### Migration
 
-- Signal-level presets, engines and contracts are unaffected. Consumers of the
-  removed wrappers must migrate to a named preset or explicit engine
-  composition with `RvFetchRom`/`RvLoadStoreRam` and `RvSystem<TCORE>`. There
-  is no drop-in replacement for the `Step()`/`Run()` protocol.
+- Use `RvMemorySystem<TCORE>()` for the former default-memory `RvSystem()`
+  construction, or `RvSystem<TCORE>(fetch, loadStore)` for caller-owned devices.
+- Engine parameters are now `<RESET_PC, MACHINE_TRAPS>`; typed decoders and
+  execution/CSR providers determine supported features. Presets still select
+  qualified compositions.
+- Consumers of scheduled wrappers must migrate to signal-level run/step/restart
+  handshakes. There is no drop-in replacement for `Step()`/`Run()`.
 
 ## [0.2.1] - 2026-11-08
 

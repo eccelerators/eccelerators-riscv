@@ -1,0 +1,100 @@
+namespace Eccelerators.RiscV.System
+
+using Eccelerators.RiscV.Sequential
+
+/**
+ * Combinational two-slot load/store router. Windows are half-open byte ranges
+ * [BASE, BASE + SIZE) and must not wrap past the address space maximum; with
+ * HAS_DEFAULT the second slot is the catch-all instead of a checked window.
+ * The router is pure wiring: it never checks alignment (the engine faults on
+ * unaligned addresses before the load/store port is requested) and it never
+ * stores, delays or reorders requests. A slot sees request=1 only while its
+ * window is hit, so the unselected device stays idle and its host
+ * provisioning signals keep working while the other slot serves traffic. An
+ * unmapped access (only possible without HAS_DEFAULT) faults immediately and
+ * effect-free, with a combinational response. Provisioning of the slot
+ * devices stays direct on the devices; the router does not forward it.
+ */
+component Rv32LoadStoreBus<A_BASE: uint = 0, A_SIZE: uint = 16, B_BASE: uint = 0,
+	B_SIZE: uint = 16, HAS_DEFAULT: bool = true> : IRv32LoadStorePort
+{
+	static assert (A_BASE & 3) == 0, "Load/store window A base must be word aligned"
+	static assert (B_BASE & 3) == 0, "Load/store window B base must be word aligned"
+	static assert A_SIZE > 0 && B_SIZE > 0, "Load/store window sizes must be positive"
+	static if (!HAS_DEFAULT) {
+		static if (A_BASE <= B_BASE) {
+			static assert A_SIZE <= B_BASE - A_BASE, "Windows must not overlap"
+		} else {
+			static assert B_SIZE <= A_BASE - B_BASE, "Windows must not overlap"
+		}
+	}
+
+	static assert A_BASE <= 0xffffffff - (A_SIZE - 1), "Window A must not wrap"
+	static assert HAS_DEFAULT || B_BASE <= 0xffffffff - (B_SIZE - 1), "Window B must not wrap"
+
+	// Borrowed slot devices; the owner wires the device-side provisioning.
+	slotA: IRv32LoadStorePort
+	slotB: IRv32LoadStorePort
+
+	// Combinational window decode.
+	hitA: bool
+	hitB: bool
+
+	/**
+	 * Borrows exactly the two routed load/store providers.
+	 */
+	new(a: flip IRv32LoadStorePort, b: flip IRv32LoadStorePort)
+	{
+		slotA = a
+		slotB = b
+	}
+
+	/**
+	 * Pure combinational routing; the selected slot completes the transaction.
+	 */
+	process Drive[]()
+	{
+		hitA = (address as uint) >= A_BASE && ((address as uint) - A_BASE) < A_SIZE
+
+		if (HAS_DEFAULT) {
+			hitB = !hitA
+		} else {
+			hitB = (address as uint) >= B_BASE && ((address as uint) - B_BASE) < B_SIZE
+		}
+
+		slotA.address = address
+		slotB.address = address
+		slotA.write = write
+		slotB.write = write
+		slotA.byteEnable = byteEnable
+		slotB.byteEnable = byteEnable
+		slotA.writeData = writeData
+		slotB.writeData = writeData
+
+		if (hitA) {
+			slotA.request = request
+		} else {
+			slotA.request = 0b0
+		}
+
+		if (hitB) {
+			slotB.request = request
+		} else {
+			slotB.request = 0b0
+		}
+
+		if (hitA) {
+			ready = slotA.ready
+			error = slotA.error
+			readData = slotA.readData
+		} elif (hitB) {
+			ready = slotB.ready
+			error = slotB.error
+			readData = slotB.readData
+		} else {
+			ready = request
+			error = request
+			readData = 0
+		}
+	}
+}

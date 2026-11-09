@@ -1,0 +1,75 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.System
+
+/** Checks delayed, exactly-once routing at the top of the 32-bit address space. */
+@Test
+component Rv32BusProtocolTest
+{
+	// Independently controlled providers make inactive-slot effects observable.
+	a: DelayedWordDevice<0xfffffffc>
+	b: DelayedWordDevice<16>
+	bus: Rv32LoadStoreBus<0xfffffffc, 4, 16, 4, false>
+
+	/** Creates two disjoint windows without overflowing their end addresses. */
+	new()
+	{
+		a = new DelayedWordDevice<0xfffffffc>()
+		b = new DelayedWordDevice<16>()
+		bus = new Rv32LoadStoreBus<0xfffffffc, 4, 16, 4, false>(a, b)
+	}
+
+	/** Preserves backpressure, absolute addresses and exactly-once effects. */
+	@Test
+	fn TestDelayedTopWindowAndExclusiveEnd()
+	{
+		state {
+			bus.request = 0b0
+			a.clear = 0b1
+			b.clear = 0b1
+			a.releaseResponse = 0b0
+			b.releaseResponse = 0b0
+		}
+		Simulation.Wait(4)
+		state {
+			a.clear = 0b0
+			b.clear = 0b0
+			bus.address = 0xfffffffc
+			bus.write = 0b1
+			bus.byteEnable = 0b1111
+			bus.writeData = 0x12345678
+			bus.request = 0b1
+		}
+		Simulation.Wait(12)
+		assert bus.ready == 0b0
+		assert a.accepted == 0b1 && b.accepted == 0b0
+		assert a.writes == 0 && b.writes == 0
+		state {
+			a.releaseResponse = 0b1
+		}
+		Simulation.Wait(12)
+		assert bus.ready == 0b1 && bus.error == 0b0
+		assert a.writes == 1 && b.writes == 0
+		assert a.payload == 0x12345678
+		Simulation.Wait(12)
+		assert a.writes == 1
+		state {
+			bus.request = 0b0
+		}
+		Simulation.Wait(6)
+
+		// Address 20 is the exclusive end of B, so no provider may see it.
+		state {
+			bus.address = 20
+			bus.request = 0b1
+		}
+		Simulation.Wait(6)
+		assert bus.ready == 0b1 && bus.error == 0b1
+		assert a.writes == 1 && b.writes == 0
+		assert b.accepted == 0b0
+		state {
+			bus.request = 0b0
+		}
+		Simulation.Wait(6)
+	}
+}

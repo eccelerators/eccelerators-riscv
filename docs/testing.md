@@ -8,9 +8,12 @@ livt test
 ```
 
 The manifest lists the functional test components. Tests include instruction
-semantics and decode, reference APIs, register-file behavior, memory protocols,
+semantics and decode, system construction, register-file behavior, memory protocols,
 sequential/pipeline execution, control draining, multiplication, CSR access,
-precise traps and timer/external interrupts. Checked-in Livt vectors make these
+precise traps, timer/external interrupts, routing and UART FIFO effects. System
+parity fixtures capture retirement payloads only while the retirement pulse is
+asserted; payloads outside that event are not architectural observations.
+Checked-in Livt vectors make these
 tests independent of a firmware compiler, a physical board and benchmark tools.
 JSON fixtures retain the independent expected traces used to generate the tables.
 

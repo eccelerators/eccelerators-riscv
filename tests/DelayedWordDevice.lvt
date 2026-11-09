@@ -4,9 +4,9 @@ using Eccelerators.RiscV.Sequential
 
 /**
  * Test-only one-word MMIO device. Completion is externally delayed, accesses at
- * nonzero addresses fault before effects, and held requests must remain stable.
+ * addresses other than BASE fault before effects, and held requests must remain stable.
  */
-component DelayedWordDevice : IRv32LoadStorePort
+component DelayedWordDevice<BASE: uint = 0> : IRv32LoadStorePort
 {
 	// Test-controlled backpressure and independently visible side-effect counters.
 	public clear: in logic
@@ -57,7 +57,7 @@ component DelayedWordDevice : IRv32LoadStorePort
 					ready = 0b1
 					error = 0b0
 
-					if (savedAddress != 0) {
+					if (savedAddress as uint != BASE) {
 						error = 0b1
 					} elif (savedWrite == 0b1) {
 						assert savedMask == 15

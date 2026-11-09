@@ -20,7 +20,15 @@ files = ["README.md", "CHANGELOG.md", "LICENSE"]
 [tests]
 path = "tests"
 components = [
+    "Rv32FetchBusTest",
+    "Rv32LoadStoreBusTest",
+    "Rv32BusCoreTest",
+    "Rv32BusProtocolTest",
     "RvSystemTest",
+    "RvPipelineSystemTest",
+    "RvMachineSystemTest",
+    "RvUartDeviceTest",
+    "RvUartSystemTest",
     "Rv32ZicsrAccessTest",
     "Rv32PipelineZmmulEngineTest",
     "Rv32PipelineDspEngineTest",

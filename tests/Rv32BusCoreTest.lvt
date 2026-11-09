@@ -1,0 +1,175 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+using Eccelerators.RiscV.System
+using Livt.IO
+
+/**
+ * Preset-core integration over a two-slot load/store bus: stores and loads
+ * route to the RAM whose window contains the address, a gap address faults
+ * with the full address, and restart re-provisions through the ungated slots.
+ */
+@Test
+component Rv32BusCoreTest
+{
+	// Owned instruction ROM and windowed data providers in one reset context.
+	rom: RvFetchRom<8, 8, MemoryStyle.Block, 0>
+	ramA: RvLoadStoreRam<4, 10, MemoryStyle.Block, 0>
+	ramB: RvLoadStoreRam<4, 10, MemoryStyle.Block, 16>
+	dataBus: Rv32LoadStoreBus<0, 16, 16, 16, false>
+	core: RvSystem<Rv32iSequentialCore>
+
+	/**
+	 * Creates the bus-routed data path and the preset core above it.
+	 */
+	new()
+	{
+		rom = new RvFetchRom<8, 8, MemoryStyle.Block, 0>()
+		ramA = new RvLoadStoreRam<4, 10, MemoryStyle.Block, 0>()
+		ramB = new RvLoadStoreRam<4, 10, MemoryStyle.Block, 16>()
+		dataBus = new Rv32LoadStoreBus<0, 16, 16, 16, false>(ramA, ramB)
+		core = new RvSystem<Rv32iSequentialCore>(rom, dataBus)
+	}
+
+	/**
+	 * Halts, drains, restarts and returns the core to a fresh idle state.
+	 */
+	fn Prepare()
+	{
+		core.run = 0b0
+
+		var elapsed: uint = 0
+
+		while (core.idle == 0b0 && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.idle == 0b1
+		var ticket = ~core.restartAck
+
+		state {
+			core.restartRequest = ticket
+		}
+
+		elapsed = 0
+
+		while (core.restartAck != ticket && elapsed < 200) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.restartAck == ticket
+		assert core.halted == 0b0
+	}
+
+	/**
+	 * Provisions one instruction word in the program ROM while paused.
+	 */
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			rom.programWrite = 0b1
+			rom.programIndex = index as logic[8]
+			rom.programData = word as logic[32]
+		}
+
+		state {
+			rom.programWrite = 0b0
+		}
+	}
+
+	/**
+	 * Runs until halt and asserts the last retirement through the bus path A.
+	 */
+	@Test
+	fn TestSlotAExecution()
+	{
+		Prepare()
+		Load(0, 0x00400093)
+		Load(1, 0x0aa00113)
+		Load(2, 0x0020a023)
+		Load(3, 0x0000a183)
+		Load(4, 0x00100073)
+		var elapsed: uint = 0
+
+		state {
+			core.run = 0b1
+		}
+
+		while (core.halted == 0b0 && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.halted == 0b1 && core.faultCause as uint == 3
+		assert core.retiredRd as uint == 3
+		assert core.retiredValue as uint == 170
+		assert core.retiredPc as uint == 12
+		assert core.pc as uint == 16
+	}
+
+	/**
+	 * The same program shape with a window B address retires through slot B.
+	 */
+	@Test
+	fn TestSlotBExecution()
+	{
+		Prepare()
+		Load(0, 0x01000093)
+		Load(1, 0x06300113)
+		Load(2, 0x0020a023)
+		Load(3, 0x0000a183)
+		Load(4, 0x00100073)
+		var elapsed: uint = 0
+
+		state {
+			core.run = 0b1
+		}
+
+		while (core.halted == 0b0 && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.halted == 0b1 && core.faultCause as uint == 3
+		assert core.retiredRd as uint == 3
+		assert core.retiredValue as uint == 99
+		assert core.retiredPc as uint == 12
+	}
+
+	/**
+	 * A store to a gap address outside both windows faults with the address.
+	 */
+	@Test
+	fn TestGapAddressFault()
+	{
+		Prepare()
+		Load(0, 0x02800093)
+		Load(1, 0x0020a023)
+		var elapsed: uint = 0
+
+		state {
+			core.run = 0b1
+		}
+
+		while (core.halted == 0b0 && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.halted == 0b1 && core.faultCause as uint == 7
+		assert core.faultValue as uint == 40
+		assert core.retiredRd as uint == 1
+		assert core.retiredValue as uint == 40
+		assert core.retiredPc as uint == 0
+		assert core.pc as uint == 4
+	}
+}
