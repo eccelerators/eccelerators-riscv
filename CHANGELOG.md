@@ -2,6 +2,27 @@
 
 All notable changes to `Eccelerators.RiscV` are recorded here.
 
+## [0.3.0] - 2026-11-08
+
+### Removed
+
+- Remove the scheduled reference API from the package: the `Isa`, `Core` and
+  `Bus` namespaces — `Rv32iWord`, `Rv32iConstants` (relocated to `Sequential`),
+  `Rv32iInstructionFields`, `Rv32iImmediateDecoder`, the scheduled register
+  files and storage, `Rv32iAlu`, `Rv32iBranchUnit`, `Rv32iLoadStoreUnit`,
+  `Rv32iControlDecoder`, `Rv32iTrapController`, the `Step()`/`Run()` reference
+  cores and their `IRv32InstructionBus`/`IRv32DataBus` fixtures, and the
+  `Rv32iMinimalSystem` and `Rv32iUartMmioSystem` platform wrappers. The
+  corresponding scheduled-layer tests are replaced by unit tests for the
+  register bank, the signal-level decoder and RV32I semantics.
+
+### Migration
+
+- Signal-level presets, engines and contracts are unaffected. Consumers of the
+  removed wrappers must migrate to a named preset or explicit engine
+  composition with `RvFetchRom`/`RvLoadStoreRam` and `RvSystem<TCORE>`. There
+  is no drop-in replacement for the `Step()`/`Run()` protocol.
+
 ## [0.2.1] - 2026-11-08
 
 ### Changed

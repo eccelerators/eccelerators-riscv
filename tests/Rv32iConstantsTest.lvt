@@ -1,10 +1,9 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Sequential
 
 /**
- * Checks the published architectural widths, opcodes and diagnostic causes.
- * Stateful scenarios initialize their inputs independently before execution.
+ * Checks the published architectural opcode and function-selector constants.
  */
 @Test
 component Rv32iConstantsTest
@@ -16,19 +15,33 @@ component Rv32iConstantsTest
 	fn TestOpcodeConstants()
 	{
 		assert Rv32iConstants.OPCODE_LUI == 0x37
+		assert Rv32iConstants.OPCODE_AUIPC == 0x17
+		assert Rv32iConstants.OPCODE_JAL == 0x6f
+		assert Rv32iConstants.OPCODE_JALR == 0x67
+		assert Rv32iConstants.OPCODE_BRANCH == 0x63
+		assert Rv32iConstants.OPCODE_LOAD == 0x03
+		assert Rv32iConstants.OPCODE_STORE == 0x23
 		assert Rv32iConstants.OPCODE_OP_IMM == 0x13
 		assert Rv32iConstants.OPCODE_OP == 0x33
+		assert Rv32iConstants.OPCODE_MISC_MEM == 0x0f
 		assert Rv32iConstants.OPCODE_SYSTEM == 0x73
 	}
 
 	/**
-	 * Checks the diagnostic trap vocabulary used by the scheduled reference cores.
+	 * Checks the function selectors the decoder matrix relies on.
 	 */
 	@Test
-	fn TestTrapConstants()
+	fn TestFunctionSelectors()
 	{
-		assert Rv32iConstants.TRAP_NONE == 0
-		assert Rv32iConstants.TRAP_ECALL == 2
-		assert Rv32iConstants.TRAP_EBREAK == 3
+		assert Rv32iConstants.FUNCT3_ADD_SUB == 0x0
+		assert Rv32iConstants.FUNCT3_SLL == 0x1
+		assert Rv32iConstants.FUNCT3_SLT == 0x2
+		assert Rv32iConstants.FUNCT3_SLTU == 0x3
+		assert Rv32iConstants.FUNCT3_XOR == 0x4
+		assert Rv32iConstants.FUNCT3_SRL_SRA == 0x5
+		assert Rv32iConstants.FUNCT3_OR == 0x6
+		assert Rv32iConstants.FUNCT3_AND == 0x7
+		assert Rv32iConstants.FUNCT7_BASE == 0x00
+		assert Rv32iConstants.FUNCT7_SUB_SRA == 0x20
 	}
 }

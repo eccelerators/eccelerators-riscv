@@ -1,0 +1,124 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Contracts
+
+/**
+ * Pure-function base decode: field unpacking, family matrices, reserved-encoding
+ * rejection and every immediate format. Expectations are hand-checked and
+ * independent of the decoder implementation.
+ */
+@Test
+component Rv32iDecodeTest
+{
+	/**
+	 * Unpacked field placement and the packed operation byte per family.
+	 */
+	@Test
+	fn TestFieldPlacement()
+	{
+		var register = Rv32iDecode.Control(0x002081b3)
+		assert RvDecoded.IsLegal(register)
+		assert RvDecoded.Rd(register) == 3
+		assert RvDecoded.Rs1(register) == 1
+		assert RvDecoded.Rs2(register) == 2
+		assert RvDecoded.HasSource1(register) && RvDecoded.HasSource2(register)
+		assert RvDecoded.HasDestinationWrite(register)
+		assert RvDecoded.Operation(register) == ((Rv32iOperations.REGISTER << Rv32iOperations.KIND_SHIFT) | Rv32iOperations.ADD)
+
+		var immediate = Rv32iDecode.Control(0x00500093)
+		assert RvDecoded.IsLegal(immediate)
+		assert RvDecoded.Rd(immediate) == 1
+		assert RvDecoded.Rs1(immediate) == 0
+		assert RvDecoded.HasSource1(immediate) && !RvDecoded.HasSource2(immediate)
+		assert RvDecoded.HasDestinationWrite(immediate)
+		assert RvDecoded.Operation(immediate) == ((Rv32iOperations.IMMEDIATE << Rv32iOperations.KIND_SHIFT) | Rv32iOperations.ADD)
+	}
+
+	/**
+	 * Uppercase families decode to their kinds and source/destination flags.
+	 */
+	@Test
+	fn TestControlFamilies()
+	{
+		var lui = Rv32iDecode.Control(0x123450b7)
+		assert RvDecoded.IsLegal(lui) && RvDecoded.Operation(lui) == (Rv32iOperations.LUI << Rv32iOperations.KIND_SHIFT)
+		assert !RvDecoded.HasSource1(lui) && !RvDecoded.HasSource2(lui) && RvDecoded.HasDestinationWrite(lui)
+
+		var auipc = Rv32iDecode.Control(0x00001117)
+		assert RvDecoded.IsLegal(auipc) && RvDecoded.Operation(auipc) == (Rv32iOperations.AUIPC << Rv32iOperations.KIND_SHIFT)
+		assert !RvDecoded.HasSource1(auipc) && RvDecoded.HasDestinationWrite(auipc)
+
+		var jal = Rv32iDecode.Control(0x008000ef)
+		assert RvDecoded.IsLegal(jal) && RvDecoded.Operation(jal) == (Rv32iOperations.JAL << Rv32iOperations.KIND_SHIFT)
+		assert !RvDecoded.HasSource1(jal) && RvDecoded.HasDestinationWrite(jal)
+
+		var jalr = Rv32iDecode.Control(0x001082e7)
+		assert RvDecoded.IsLegal(jalr) && RvDecoded.Operation(jalr) == (Rv32iOperations.JALR << Rv32iOperations.KIND_SHIFT)
+		assert RvDecoded.HasSource1(jalr) && !RvDecoded.HasSource2(jalr) && RvDecoded.HasDestinationWrite(jalr)
+
+		for (var funct3: uint = 0; funct3 < 8; funct3++) {
+			var control = Rv32iDecode.Control(0x00208063 | (funct3 << 12))
+			var legal = funct3 != 2 && funct3 != 3
+			assert RvDecoded.IsLegal(control) == legal
+
+			if (legal) {
+				assert RvDecoded.Operation(control) == (Rv32iOperations.BRANCH << Rv32iOperations.KIND_SHIFT)
+				assert RvDecoded.HasSource1(control) && RvDecoded.HasSource2(control)
+				assert !RvDecoded.HasDestinationWrite(control)
+			}
+		}
+
+		for (var funct3: uint = 0; funct3 < 8; funct3++) {
+			var control = Rv32iDecode.Control(0x00000103 | (funct3 << 12))
+			var legal = funct3 <= 2 || funct3 == 4 || funct3 == 5
+			assert RvDecoded.IsLegal(control) == legal
+
+			if (legal) {
+				assert RvDecoded.Operation(control) == (Rv32iOperations.LOAD << Rv32iOperations.KIND_SHIFT)
+				assert RvDecoded.HasSource1(control) && !RvDecoded.HasSource2(control)
+				assert RvDecoded.HasDestinationWrite(control)
+			}
+		}
+
+		var store = Rv32iDecode.Control(0x00208023)
+		assert RvDecoded.IsLegal(store) && RvDecoded.Operation(store) == (Rv32iOperations.STORE << Rv32iOperations.KIND_SHIFT)
+		assert RvDecoded.HasSource1(store) && RvDecoded.HasSource2(store) && !RvDecoded.HasDestinationWrite(store)
+
+		var fence = Rv32iDecode.Control(0x0000000f)
+		assert RvDecoded.IsLegal(fence) && RvDecoded.Operation(fence) == (Rv32iOperations.FENCE << Rv32iOperations.KIND_SHIFT)
+	}
+
+	/**
+	 * Exact system encodings and reserved selectors; illegal forms return zero.
+	 */
+	@Test
+	fn TestRejectsIllegal()
+	{
+		assert Rv32iDecode.Control(0xffffffff) == 0
+		assert Rv32iDecode.Control(0x02209393) == 0
+		assert Rv32iDecode.Control(0x0210d413) == 0
+		assert Rv32iDecode.Control(0x022081b3) == 0
+		assert RvDecoded.Operation(Rv32iDecode.Control(0x00000073)) == (Rv32iOperations.ECALL << Rv32iOperations.KIND_SHIFT)
+		assert RvDecoded.Operation(Rv32iDecode.Control(0x00100073)) == (Rv32iOperations.EBREAK << Rv32iOperations.KIND_SHIFT)
+		assert Rv32iDecode.Control(0x00100473) == 0
+	}
+
+	/**
+	 * Each family extracts its immediate with correct placement and sign extension.
+	 */
+	@Test
+	fn TestImmediates()
+	{
+		assert Rv32iDecode.Immediate(0x00500093) == 5
+		assert Rv32iDecode.Immediate(0xfff00093) == 0xffffffff
+		assert Rv32iDecode.Immediate(0x00102023) == 0
+		assert Rv32iDecode.Immediate(0xfe102e23) == 0xfffffffc
+		assert Rv32iDecode.Immediate(0x00208463) == 8
+		assert Rv32iDecode.Immediate(0xfe208463) == 0xfffff7e8
+		assert Rv32iDecode.Immediate(0x123450b7) == 0x12345000
+		assert Rv32iDecode.Immediate(0x00001117) == 0x00001000
+		assert Rv32iDecode.Immediate(0x008000ef) == 8
+		assert Rv32iDecode.Immediate(0x001082e7) == 1
+	}
+}

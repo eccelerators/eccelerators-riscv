@@ -1,15 +1,10 @@
-namespace Eccelerators.RiscV.Isa
+namespace Eccelerators.RiscV.Sequential
 
 /**
- * RV32I constants shared by the decoder and reference core.
+ * Instruction encodings shared by the decoder and architectural cause vocabulary.
  */
-component Rv32iConstants
+public class Rv32iConstants
 {
-	// Architectural instruction width, integer-register count and reference reset byte address.
-	public const INSTRUCTION_BYTES: int = 4
-	public const REGISTER_COUNT: int = 32
-	public const RESET_VECTOR: uint = 0x00000000
-
 	// Base instruction opcodes from bits 6..0.
 	public const OPCODE_LUI: int = 0x37
 	public const OPCODE_AUIPC: int = 0x17
@@ -34,13 +29,4 @@ component Rv32iConstants
 	public const FUNCT3_AND: int = 0x7
 	public const FUNCT7_BASE: int = 0x00
 	public const FUNCT7_SUB_SRA: int = 0x20
-
-	// Reference-core diagnostic causes, separate from architectural machine mcause values.
-	public const TRAP_NONE: int = 0
-	public const TRAP_ILLEGAL_INSTRUCTION: int = 1
-	public const TRAP_ECALL: int = 2
-	public const TRAP_EBREAK: int = 3
-	public const TRAP_INSTRUCTION_MISALIGNED: int = 4
-	public const TRAP_LOAD_STORE_MISALIGNED: int = 5
-	public const TRAP_BUS_ERROR: int = 6
 }

@@ -1,78 +1,123 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Bus
-using Eccelerators.RiscV.Core
-using Eccelerators.RiscV.Platform
-using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.System
+using Eccelerators.RiscV.Presets
 
 /**
- * Checks the public reference-core API through its exported namespace.
- * Stateful scenarios initialize their inputs independently before execution.
+ * Checks the public turnkey system API through its exported namespace: default
+ * device provisioning, run-to-halt execution and software restart. Scenarios
+ * initialize their own program image while the core is idle.
  */
 @Test
 component Rv32iPackageApiTest
 {
-	// Owned subjects and fixtures; scenarios initialize mutable state before use.
-	system: Rv32iMinimalSystem
-	busCore: Rv32iBusCore
-	uartSystem: Rv32iUartMmioSystem
-	rom: Rv32SimpleInstructionRom
-	ram: Rv32SimpleDataRam
+	// Owned system-level machine using the default ROM/RAM devices.
+	system: RvSystem<Rv32iSequentialCore>
 
 	/**
-	 * Constructs the owned subjects and fixtures; each stateful scenario supplies its own initialization.
+	 * Constructs the owned subject; scenarios supply their own program.
 	 */
 	new()
 	{
-		system = new Rv32iMinimalSystem()
-		busCore = new Rv32iBusCore()
-		uartSystem = new Rv32iUartMmioSystem()
-		rom = new Rv32SimpleInstructionRom()
-		ram = new Rv32SimpleDataRam()
+		system = new RvSystem<Rv32iSequentialCore>()
 	}
 
 	/**
-	 * Constructs the public reference APIs and verifies independent register, memory and UART outcomes.
+	 * Idles the system, then loads a two-word program while not running.
+	 */
+	fn Load(word: uint)
+	{
+		system.run = 0b0
+		var elapsed: uint = 0
+
+		while (system.idle == 0b0 && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert system.idle == 0b1
+		var ticket = ~system.restartAck
+
+		state {
+			system.restartRequest = ticket
+		}
+
+		elapsed = 0
+
+		while (system.restartAck != ticket && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert system.restartAck == ticket
+		assert system.halted == 0b0
+
+		state {
+			system.fetchProgramWrite = 0b1
+			system.fetchProgramIndex = 0 as logic[10]
+			system.fetchProgramData = word as logic[32]
+		}
+
+		state {
+			system.fetchProgramIndex = 1 as logic[10]
+			system.fetchProgramData = 0x00100073 as logic[32]
+		}
+
+		state {
+			system.fetchProgramWrite = 0b0
+		}
+	}
+
+	/**
+	 * A documented entry point executes addi, reports retirement and restarts.
 	 */
 	@Test
-	fn TestDocumentedEntryPointsAreUsable()
+	fn TestDocumentedEntryPoint()
 	{
-		system.ClearProgram()
-		system.ClearData()
-		system.Reset()
-		assert Rv32iMinimalSystem.PROGRAM_WORDS == 64
-		assert Rv32iMinimalSystem.DATA_BYTES == 256
-		system.LoadInstruction(0, 0x04400093)
-		system.LoadInstruction(1, 0x00100073)
-		system.Run(4)
-		assert system.ReadRegister(1) == 0x44
-		assert system.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
-		rom.Clear()
-		rom.LoadInstruction(0, 0x00100073)
-		rom.Request(0)
-		assert rom.GetInstruction() == (0x00100073 as uint)
-		ram.Clear()
-		ram.Store(0, 4, 0x00000044)
-		ram.Load(0, 4, false)
-		assert ram.GetReadData() == 0x44
-		busCore.ClearProgram()
-		busCore.ClearData()
-		busCore.Reset()
-		busCore.LoadInstruction(0, 0x05500093)
-		busCore.LoadInstruction(1, 0x00100073)
-		busCore.Run(4)
-		assert busCore.ReadRegister(1) == 0x55
-		assert busCore.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
-		uartSystem.ClearProgram()
-		uartSystem.ClearData()
-		uartSystem.Reset()
-		uartSystem.LoadInstruction(0, 0x400000b7)
-		uartSystem.LoadInstruction(1, 0x05a00113)
-		uartSystem.LoadInstruction(2, 0x00208023)
-		uartSystem.LoadInstruction(3, 0x00100073)
-		uartSystem.Run(8)
-		assert uartSystem.GetCapturedUartCount() == 1
-		assert uartSystem.GetCapturedUartByte(0) == 0x5a
-		assert uartSystem.GetTrapCause() == Rv32iConstants.TRAP_EBREAK
+		Load(0x04400093)
+		var elapsed: uint = 0
+
+		state {
+			system.run = 0b1
+		}
+
+		while (system.halted == 0b0 && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert system.halted == 0b1
+		assert system.faultCause as uint == 3
+		assert system.faultValue as uint == 4
+		assert system.pc as uint == 4
+		assert system.retired == 0b0
+		assert system.retiredRd as uint == 1
+		assert system.retiredValue as uint == 0x44
+		assert system.retiredPc as uint == 0
+		assert system.retiredInstruction as uint == 0x00100073
+
+		state {
+			system.run = 0b0
+		}
+
+		var ticket = ~system.restartRequest
+
+		state {
+			system.restartRequest = ticket
+		}
+
+		elapsed = 0
+
+		while (system.restartAck != ticket && elapsed < 100) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert system.restartAck == ticket
+		assert system.halted == 0b0 && system.pc as uint == 0
 	}
 }

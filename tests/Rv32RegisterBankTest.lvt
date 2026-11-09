@@ -1,0 +1,92 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Storage
+using Livt.IO
+
+/**
+ * Independent architectural checks for the single-port register bank. Read
+ * responses arrive one enabled edge after the request; disabled cycles hold.
+ */
+@Test
+component Rv32RegisterBankTest
+{
+	// Owned bank under test in the test clock domain.
+	subject: Rv32RegisterBank<MemoryStyle.Block>
+
+	/**
+	 * Instantiates the concrete block-style bank.
+	 */
+	new()
+	{
+		subject = new Rv32RegisterBank<MemoryStyle.Block>()
+	}
+
+	/**
+	 * Writes the sentinel index * 17 into x1..x31 through the public port.
+	 */
+	fn Initialize()
+	{
+		subject.enable = 0b1
+		subject.write = 0b0
+
+		for (var index: uint = 1; index < 32; index++) {
+			subject.index = index as logic[5]
+			subject.writeData = (index * 17) as logic[32]
+			subject.write = 0b1
+			Simulation.Wait(2)
+		}
+
+		subject.write = 0b0
+		Simulation.Wait(2)
+	}
+
+	/**
+	 * Every register, including x31 and x0, reads exactly its initialized payload.
+	 */
+	@Test
+	fn ReadsAllRegisters()
+	{
+		Initialize()
+
+		for (var index: uint = 0; index < 32; index++) {
+			subject.index = index as logic[5]
+			Simulation.Wait(2)
+			assert subject.readData as uint == index * 17
+		}
+	}
+
+	/**
+	 * x0 always reads zero and never stores payload.
+	 */
+	@Test
+	fn ZeroRegisterStaysZero()
+	{
+		Initialize()
+		subject.index = 0
+		subject.writeData = 99
+		subject.write = 0b1
+		Simulation.Wait(4)
+		subject.write = 0b0
+		Simulation.Wait(2)
+		assert subject.readData == 0
+	}
+
+	/**
+	 * A disabled access leaves the previous read response unchanged.
+	 */
+	@Test
+	fn DisabledAccessHolds()
+	{
+		Initialize()
+		subject.enable = 0b1
+		subject.index = 2
+		Simulation.Wait(2)
+		subject.enable = 0b0
+		subject.index = 1
+		Simulation.Wait(6)
+		assert subject.readData as uint == 34
+		subject.enable = 0b1
+		Simulation.Wait(2)
+		assert subject.readData as uint == 17
+	}
+}

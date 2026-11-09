@@ -1,0 +1,116 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Sequential
+
+/**
+ * Context-free semantics: integer operations with shift-count masking, branch
+ * predicates with signed and unsigned comparisons, width extraction, alignment
+ * checks and write-lane masks. All expectations are hand-computed constants.
+ */
+@Test
+component Rv32iSemanticsTest
+{
+	/**
+	 * Every integer operation, including five-bit shift-count masking.
+	 */
+	@Test
+	fn TestInteger()
+	{
+		assert Rv32iSemantics.Integer(Rv32iOperations.ADD, 7, 5) == 12
+		assert Rv32iSemantics.Integer(Rv32iOperations.SUB, 7, 5) == 2
+		assert Rv32iSemantics.Integer(Rv32iOperations.AND, 0x0f, 0x33) == 0x03
+		assert Rv32iSemantics.Integer(Rv32iOperations.OR, 0x0f, 0x30) == 0x3f
+		assert Rv32iSemantics.Integer(Rv32iOperations.XOR, 0x0f, 0x33) == 0x3c
+		assert Rv32iSemantics.Integer(Rv32iOperations.SLL, 1, 3) == 8
+		assert Rv32iSemantics.Integer(Rv32iOperations.SRL, 8, 1) == 4
+		assert Rv32iSemantics.Integer(Rv32iOperations.SRA, 0x80000000, 1) == 0xc0000000
+		assert Rv32iSemantics.Integer(Rv32iOperations.SLT, 0xffffffff, 1) == 1
+		assert Rv32iSemantics.Integer(Rv32iOperations.SLT, 1, 0xffffffff) == 0
+		assert Rv32iSemantics.Integer(Rv32iOperations.SLTU, 0xffffffff, 1) == 0
+		assert Rv32iSemantics.Integer(Rv32iOperations.SLTU, 1, 0xffffffff) == 1
+		assert Rv32iSemantics.Integer(Rv32iOperations.SLL, 1, 32) == 1
+		assert Rv32iSemantics.Integer(Rv32iOperations.SRL, 8, 33) == 4
+		assert Rv32iSemantics.Integer(255, 7, 5) == 0
+	}
+
+	/**
+	 * Legal branch predicates; reserved kinds never branch.
+	 */
+	@Test
+	fn TestBranch()
+	{
+		assert Rv32iSemantics.Branch(Rv32iOperations.BEQ, 5, 5)
+		assert !Rv32iSemantics.Branch(Rv32iOperations.BEQ, 5, 6)
+		assert Rv32iSemantics.Branch(Rv32iOperations.BNE, 5, 6)
+		assert !Rv32iSemantics.Branch(Rv32iOperations.BNE, 5, 5)
+		assert Rv32iSemantics.Branch(Rv32iOperations.BLT, 0xffffffff, 1)
+		assert !Rv32iSemantics.Branch(Rv32iOperations.BLT, 1, 0xffffffff)
+		assert Rv32iSemantics.Branch(Rv32iOperations.BGE, 1, 0xffffffff)
+		assert !Rv32iSemantics.Branch(Rv32iOperations.BGE, 0xffffffff, 1)
+		assert !Rv32iSemantics.Branch(Rv32iOperations.BLTU, 0xffffffff, 1)
+		assert Rv32iSemantics.Branch(Rv32iOperations.BLTU, 1, 0xffffffff)
+		assert Rv32iSemantics.Branch(Rv32iOperations.BGEU, 0xffffffff, 1)
+		assert !Rv32iSemantics.Branch(Rv32iOperations.BGEU, 1, 0xffffffff)
+		assert !Rv32iSemantics.Branch(2, 5, 5)
+		assert !Rv32iSemantics.Branch(3, 5, 5)
+	}
+
+	/**
+	 * Sign extension of narrow payloads.
+	 */
+	@Test
+	fn TestSignExtend()
+	{
+		assert Rv32iSemantics.SignExtend(0x80, 8) == 0xffffff80
+		assert Rv32iSemantics.SignExtend(0x7f, 8) == 0x7f
+		assert Rv32iSemantics.SignExtend(0x8000, 16) == 0xffff8000
+		assert Rv32iSemantics.SignExtend(1, 1) == 0xffffffff
+		assert Rv32iSemantics.SignExtend(0, 1) == 0
+	}
+
+	/**
+	 * Lane-selected extraction with and without sign extension.
+	 */
+	@Test
+	fn TestLoad()
+	{
+		var word: uint = 0x807f3412
+		assert Rv32iSemantics.Load(word, 0, Rv32iOperations.BYTE) == 0x12
+		assert Rv32iSemantics.Load(word, 1, Rv32iOperations.BYTE) == 0x34
+		assert Rv32iSemantics.Load(word, 3, Rv32iOperations.BYTE) == 0xffffff80
+		assert Rv32iSemantics.Load(word, 0, Rv32iOperations.BYTE_UNSIGNED) == 0x12
+		assert Rv32iSemantics.Load(word, 3, Rv32iOperations.BYTE_UNSIGNED) == 0x80
+		assert Rv32iSemantics.Load(word, 0, Rv32iOperations.HALF) == 0x3412
+		assert Rv32iSemantics.Load(word, 2, Rv32iOperations.HALF) == 0xffff807f
+		assert Rv32iSemantics.Load(word, 0, Rv32iOperations.HALF_UNSIGNED) == 0x3412
+		assert Rv32iSemantics.Load(word, 2, Rv32iOperations.HALF_UNSIGNED) == 0x807f
+		assert Rv32iSemantics.Load(word, 0, Rv32iOperations.WORD) == word
+	}
+
+	/**
+	 * Natural alignment per access width; bytes are always aligned.
+	 */
+	@Test
+	fn TestMisaligned()
+	{
+		assert !Rv32iSemantics.Misaligned(1, Rv32iOperations.BYTE)
+		assert Rv32iSemantics.Misaligned(1, Rv32iOperations.HALF)
+		assert !Rv32iSemantics.Misaligned(2, Rv32iOperations.HALF)
+		assert Rv32iSemantics.Misaligned(2, Rv32iOperations.WORD)
+		assert !Rv32iSemantics.Misaligned(4, Rv32iOperations.WORD)
+	}
+
+	/**
+	 * Lane byte-enables for byte, halfword and word stores.
+	 */
+	@Test
+	fn TestStoreMask()
+	{
+		assert Rv32iSemantics.StoreMask(0, Rv32iOperations.BYTE) == 0x1
+		assert Rv32iSemantics.StoreMask(1, Rv32iOperations.BYTE) == 0x2
+		assert Rv32iSemantics.StoreMask(3, Rv32iOperations.BYTE) == 0x8
+		assert Rv32iSemantics.StoreMask(0, Rv32iOperations.HALF) == 0x3
+		assert Rv32iSemantics.StoreMask(2, Rv32iOperations.HALF) == 0xc
+		assert Rv32iSemantics.StoreMask(0, Rv32iOperations.WORD) == 0xf
+	}
+}

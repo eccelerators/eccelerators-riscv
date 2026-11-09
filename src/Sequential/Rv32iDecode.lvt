@@ -1,7 +1,6 @@
 namespace Eccelerators.RiscV.Sequential
 
 using Eccelerators.RiscV.Contracts
-using Eccelerators.RiscV.Isa
 
 /**
  * Pure RV32I decode. The packed control format carries register indices, operand-use

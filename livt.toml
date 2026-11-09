@@ -1,6 +1,6 @@
 [project]
 name = "Eccelerators.RiscV"
-version = "0.2.1"
+version = "0.3.0"
 description = "Composable RV32I and Zmmul processors, machine-mode support, and reusable FPGA system components written in Livt."
 authors = ["Denis Vasilík"]
 repository = "https://github.com/eccelerators/eccelerators-riscv"
@@ -53,26 +53,11 @@ components = [
     "Rv32ZmmulControlTest",
     "Rv32SequentialEngineTest",
     "Rv32SequentialControlTest",
+    "Rv32RegisterBankTest",
     "Rv32iConstantsTest",
-    "Rv32iInstructionFieldsTest",
-    "Rv32iImmediateDecoderTest",
-    "Rv32iRegisterFileTest",
-    "Rv32iRegisterStorageTest",
-    "Rv32iRamCoreTest",
-    "Rv32iAluTest",
-    "Rv32iBranchUnitTest",
-    "Rv32iLoadStoreUnitTest",
-    "Rv32iControlDecoderTest",
-    "Rv32iCoreInstructionTest",
-    "Rv32SimpleMemoryTest",
-    "Rv32iMinimalSystemTest",
-    "Rv32iFullDecodeMatrixTest",
-    "Rv32iFullCoreInstructionMatrixTest",
-    "Rv32iBusCoreTest",
-    "Rv32iInjectedBusApiTest",
-    "Rv32iInjectedBusParityTest",
-    "Rv32iPackageApiTest",
-    "Rv32iUartHelloWorldTest"
+    "Rv32iDecodeTest",
+    "Rv32iSemanticsTest",
+    "Rv32iPackageApiTest"
 ]
 
 [dependencies]

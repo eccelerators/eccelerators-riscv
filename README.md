@@ -4,9 +4,10 @@ Composable RISC-V processors for FPGA applications written in Livt. Start with a
 named core, or construct an engine and its providers explicitly. Both approaches
 use the same reusable components; resource choices are compile-time parameters.
 
-Version **0.2.1** adds separate instruction-fetch and load/store ports and a
-system-level composition while retaining the sequential and pipeline core
-presets. See the [release notes](CHANGELOG.md#021) for migration guidance.
+Version **0.3.0** removes the scheduled reference layer and uses separate
+instruction-fetch and load/store ports with a system-level composition,
+retaining the sequential and pipeline core presets. See the
+[release notes](CHANGELOG.md#030) for migration guidance.
 
 ## Choose a core
 
@@ -48,7 +49,7 @@ Add the release under `[dependencies]` in your application's `livt.toml`:
 
 ```toml
 [dependencies]
-"Eccelerators.RiscV" = "0.2.1"
+"Eccelerators.RiscV" = "0.3.0"
 ```
 
 For development against a local checkout, use this dependency instead:
@@ -59,7 +60,7 @@ For development against a local checkout, use this dependency instead:
 ```
 
 Run `livt sync` to resolve dependencies. The package uses `Livt.IO` 1.8.1 for
-memory storage and its reference UART platform.
+memory storage.
 
 Software targets are `rv32i`, `rv32i_zmmul`, or `rv32i_zmmul_zicsr`, with the
 `ilp32` ABI, according to the selected core. Zmmul includes multiplication but

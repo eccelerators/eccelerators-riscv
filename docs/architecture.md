@@ -13,9 +13,8 @@ borrowed providers must outlive the core and share its clock/reset domain.
 | `Storage` | Synchronous one-port and dual-read register banks |
 | `Machine` | Zicsr composition, machine CSR state, trap vocabulary and machine instruction decoding |
 | `Platform` | Timer, external interrupt helpers and reference platform wrappers |
-| `Contracts` | Static capability/timing checks and earlier blocking composition contracts |
-| `Isa` | Instruction fields, immediates, constants and RV32I semantics |
-| `Core`, `Bus` | Scheduled reference cores, primitive datapaths and reference bus fixtures |
+| `Contracts` | Static capability/timing checks and composition contracts |
+| `System` | Constructor-bound core-plus-device system composition |
 
 The engine owns instruction identity, PC, scheduling, dependency handling and the
 ordered architectural decision. The register bank owns integer storage. The CSR
@@ -64,6 +63,6 @@ operation coverage and timing requirements during elaboration. They add no runti
 registry. A passing assertion cannot prove provider behavior or arbitrary wiring;
 functional tests and implementation reports are still required.
 
-The earlier blocking contracts and scheduled reference cores remain available.
-Their scheduled call completion has different timing from the signal-level
-engines. See [reference cores](reference-cores.md) rather than mixing these APIs.
+The earlier blocking contracts remain available. Their blocking call completion
+has different timing from the clocked signal-level engines; do not mix these
+APIs in one composition.
