@@ -1,0 +1,28 @@
+namespace Eccelerators.RiscV.Sequential
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Machine
+
+/**
+ * Sequential specialization of the general owned-provider core. It binds the
+ * single-read register-file contract and sequential scheduling engine while
+ * retaining explicit provider selection at elaboration.
+ */
+component Rv32SequentialCore<
+	REGISTERS: IRv32RegisterPort & new(),
+	DECODER: IRv32DecodePort & new(),
+	INTEGER: IRv32IntegerPort & new(),
+	MULTIPLIER: IRv32MultiplyPort & new(),
+	CSRS: IRv32CsrPort & new(),
+	CUSTOM: IRv32CustomInstructionPort & new(),
+	RESET_PC: uint = 0
+> : Rv32Core<
+	IRv32RegisterPort,
+	Rv32SequentialEngine<RESET_PC>,
+	REGISTERS,
+	DECODER,
+	INTEGER,
+	MULTIPLIER,
+	CSRS,
+	CUSTOM
+> {}

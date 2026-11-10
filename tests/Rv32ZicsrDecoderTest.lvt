@@ -1,6 +1,7 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Machine
 using Eccelerators.RiscV.Contracts
 
@@ -44,7 +45,8 @@ component Rv32ZicsrDecoderTest
 						assert RvDecoded.HasSource1(control) == (operation < 4)
 						assert !RvDecoded.HasSource2(control)
 						assert RvDecoded.HasDestinationWrite(control)
-						var expected: uint = 224 | operation
+						var expected: uint =
+							(Rv32CsrOperations.KIND << Rv32iOperations.KIND_SHIFT) | operation
 						assert RvDecoded.Operation(control) == expected
 						assert subject.immediate as uint == source
 					}

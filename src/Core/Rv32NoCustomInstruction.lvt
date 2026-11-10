@@ -1,0 +1,19 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * Zero-state termination for cores without result-only custom instructions.
+ */
+component Rv32NoCustomInstruction : IRv32CustomInstructionPort
+{
+	process Drive[]()
+	{
+		decodeMatch = 0b0
+		decodeConflict = 0b0
+		executeMatch = 0b0
+		executeConflict = 0b0
+		ready = 0b0
+		result = 0
+		fault = 0b0
+		faultCause = 0
+	}
+}

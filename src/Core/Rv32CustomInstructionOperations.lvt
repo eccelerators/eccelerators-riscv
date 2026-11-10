@@ -1,0 +1,11 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * Engine operation family and capability for result-only custom instructions.
+ */
+public class Rv32CustomInstructionOperations
+{
+	public const CAPABILITY: uint = 256
+	public const KIND: uint = 16
+	public const ILLEGAL_INSTRUCTION_CAUSE: uint = 2
+}

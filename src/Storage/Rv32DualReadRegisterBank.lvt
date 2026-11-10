@@ -38,9 +38,7 @@ component Rv32DualReadRegisterBank<STYLE: MemoryStyle = MemoryStyle.Block> : IRv
 	/**
 	 * Owns storage; no constructor-time payload initialization is promised.
 	 */
-	new()
-	{
-	}
+	new() {}
 
 	/**
 	 * Owns the left RAM copy with independent synchronous read and write commands.

@@ -1,0 +1,89 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+
+/**
+ * Example custom-0 XQDIV instruction: unsigned quotient of rs1 by rs2 into rd.
+ * Exact encoding uses opcode 0001011, funct3 000 and funct7 0000000. Division by
+ * zero reports an illegal-instruction fault. The radix-two implementation completes
+ * after 32 iteration edges and holds its response until request release.
+ */
+component Rv32XqdivInstruction : IRv32CustomInstructionPort
+{
+	public const ENCODING_MASK: uint = 0xfe00707f
+	public const ENCODING: uint = 0x0000000b
+
+	const IDLE: uint = 0
+	const DIVIDE: uint = 1
+	const COMPLETE: uint = 2
+	const LAST_BIT: uint = 31
+
+	phase: logic[2]
+	bitIndex: logic[5]
+	divisor: uint
+	quotient: uint
+	remainder: uint
+	failed: bool
+
+	process Recognize[]()
+	{
+		decodeMatch = (((decodeInstruction as uint) & ENCODING_MASK) == ENCODING) as logic
+		decodeConflict = 0b0
+		executeMatch = (((executeInstruction as uint) & ENCODING_MASK) == ENCODING) as logic
+		executeConflict = 0b0
+		ready = (phase as uint == COMPLETE) as logic
+		result = quotient as logic[32]
+		fault = failed as logic
+		faultCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
+	}
+
+	process Advance()
+	{
+		state {
+			match (phase as uint)
+			{
+				IDLE =>
+				{
+					if (request == 0b1) {
+						divisor = right as uint
+						quotient = left as uint
+						remainder = 0
+						bitIndex = 0
+						failed = right == 0
+
+						if (right == 0) {
+							phase = COMPLETE as logic[2]
+						} else {
+							phase = DIVIDE as logic[2]
+						}
+					}
+				}
+				DIVIDE =>
+				{
+					var high = remainder >> 31
+					var shiftedRemainder = (remainder << 1) | (quotient >> 31)
+					var shiftedQuotient = quotient << 1
+					remainder = shiftedRemainder
+					quotient = shiftedQuotient
+
+					if (high != 0 || shiftedRemainder >= divisor) {
+						remainder = shiftedRemainder - divisor
+						quotient = shiftedQuotient | 1
+					}
+
+					if (bitIndex as uint == LAST_BIT) {
+						phase = COMPLETE as logic[2]
+					} else {
+						bitIndex = (bitIndex as uint + 1) as logic[5]
+					}
+				}
+				_ =>
+				{
+					if (request == 0b0) {
+						phase = IDLE as logic[2]
+					}
+				}
+			}
+		}
+	}
+}

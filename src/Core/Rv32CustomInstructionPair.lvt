@@ -1,0 +1,72 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * Binary custom-instruction composition. Pairs compose recursively. Overlapping
+ * decode patterns become illegal and are never dispatched to either provider.
+ */
+component Rv32CustomInstructionPair<
+	FIRST: IRv32CustomInstructionPort & new(),
+	SECOND: IRv32CustomInstructionPort & new()
+> : IRv32CustomInstructionPort
+{
+	first: FIRST
+	second: SECOND
+
+	new()
+	{
+		first = new FIRST()
+		second = new SECOND()
+	}
+
+	process Connect[]()
+	{
+		first.decodeInstruction = decodeInstruction
+		second.decodeInstruction = decodeInstruction
+		first.executeInstruction = executeInstruction
+		second.executeInstruction = executeInstruction
+		first.left = left
+		second.left = left
+		first.right = right
+		second.right = right
+
+		var decodeCollision = first.decodeMatch == 0b1 && second.decodeMatch == 0b1
+		decodeConflict = (first.decodeConflict == 0b1 || second.decodeConflict == 0b1 || decodeCollision) as logic
+		decodeMatch = ((first.decodeMatch == 0b1 || second.decodeMatch == 0b1) && decodeConflict == 0b0) as logic
+
+		var executeCollision = first.executeMatch == 0b1 && second.executeMatch == 0b1
+		executeConflict = (first.executeConflict == 0b1 || second.executeConflict == 0b1 || executeCollision) as logic
+		executeMatch = ((first.executeMatch == 0b1 || second.executeMatch == 0b1) && executeConflict == 0b0) as logic
+
+		first.request = 0b0
+		second.request = 0b0
+
+		if (request == 0b1 && executeConflict == 0b0) {
+			if (first.executeMatch == 0b1) {
+				first.request = 0b1
+			} elif (second.executeMatch == 0b1) {
+				second.request = 0b1
+			}
+		}
+
+		ready = 0b0
+		result = 0
+		fault = 0b0
+		faultCause = 0
+
+		if (executeConflict == 0b1 || (request == 0b1 && executeMatch == 0b0)) {
+			ready = request
+			fault = request
+			faultCause = Rv32CustomInstructionOperations.ILLEGAL_INSTRUCTION_CAUSE as logic[32]
+		} elif (first.executeMatch == 0b1) {
+			ready = first.ready
+			result = first.result
+			fault = first.fault
+			faultCause = first.faultCause
+		} elif (second.executeMatch == 0b1) {
+			ready = second.ready
+			result = second.result
+			fault = second.fault
+			faultCause = second.faultCause
+		}
+	}
+}

@@ -1,0 +1,45 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * Typed custom-control wrapper around any standard RV32 core. The selected core
+ * remains the sole architectural owner; this wrapper adds no retained state.
+ */
+component Rv32RetirementTraceCore<
+	CORE: IRv32ControlPort & new(flip IRv32FetchPort, flip IRv32LoadStorePort)
+> : IRv32RetirementTracePort
+{
+	core: CORE
+
+	new(fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort)
+	{
+		core = new CORE(fetch, loadStore)
+	}
+
+	process Connect[]()
+	{
+		core.run = run
+		core.stepRequest = stepRequest
+		core.restartRequest = restartRequest
+		stepAck = core.stepAck
+		restartAck = core.restartAck
+		idle = core.idle
+		halted = core.halted
+		pc = core.pc
+		faultCause = core.faultCause
+		faultValue = core.faultValue
+		trapped = core.trapped
+		trapPc = core.trapPc
+		trapCause = core.trapCause
+		trapValue = core.trapValue
+		retired = core.retired
+		retiredPc = core.retiredPc
+		retiredInstruction = core.retiredInstruction
+		retiredRd = core.retiredRd
+		retiredValue = core.retiredValue
+		traceValid = (traceEnable == 0b1 && core.retired == 0b1) as logic
+		tracePc = core.retiredPc
+		traceInstruction = core.retiredInstruction
+		traceRd = core.retiredRd
+		traceValue = core.retiredValue
+	}
+}

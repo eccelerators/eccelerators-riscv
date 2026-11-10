@@ -19,7 +19,5 @@ component RvOperationCoverage<REQUESTED: uint, DECODED: uint,
 	/**
 	 * Checks the supplied constants; owns no runtime state or hardware service.
 	 */
-	new()
-	{
-	}
+	new() {}
 }

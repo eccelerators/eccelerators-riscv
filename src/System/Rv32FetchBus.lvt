@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.System
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 
 /**
  * Combinational two-slot instruction fetch router. Windows are half-open byte
@@ -28,7 +28,6 @@ component Rv32FetchBus<A_BASE: uint = 0, A_SIZE: uint = 16, B_BASE: uint = 0,
 			static assert B_SIZE <= A_BASE - B_BASE, "Windows must not overlap"
 		}
 	}
-
 	static assert A_BASE <= 0xffffffff - (A_SIZE - 1), "Window A must not wrap"
 	static assert HAS_DEFAULT || B_BASE <= 0xffffffff - (B_SIZE - 1), "Window B must not wrap"
 

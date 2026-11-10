@@ -1,6 +1,7 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Contracts
 
 /**

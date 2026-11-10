@@ -1,6 +1,7 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Contracts
 
 /**
@@ -47,7 +48,7 @@ component Rv32ZmmulDecodeTest
 					assert RvDecoded.Rs1(control) == 17 && RvDecoded.Rs2(control) == 19
 					assert RvDecoded.HasSource1(control) && RvDecoded.HasSource2(control)
 					assert RvDecoded.HasDestinationWrite(control)
-					assert RvDecoded.Operation(control) == (((13 as uint) << 4) | funct3)
+					assert RvDecoded.Operation(control) == ((Rv32MultiplyOperations.KIND << Rv32iOperations.KIND_SHIFT) | funct3)
 				} else {
 					assert extended.control == base.control
 					assert extended.immediate == base.immediate

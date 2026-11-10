@@ -1,7 +1,8 @@
 namespace Eccelerators.RiscV.Tests
 
+using Eccelerators.RiscV.Isa
 using Eccelerators.RiscV.Pipeline
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.Presets
 using Eccelerators.RiscV.Machine
@@ -16,6 +17,7 @@ component Rv32PipelineTimerInterruptTest
 	// Owned platform, explicit execution composition and architectural scoreboard.
 	fetch: RvFetchRom<512, 9>
 	loadStore: PipelineWordDevice
+	custom: Rv32XqdivInstruction
 	core: Rv32PipelineEngine<0, true>
 	registers: Rv32DualReadRegisterBank
 	baseDecoder: Rv32iZmmulDecoder
@@ -51,7 +53,8 @@ component Rv32PipelineTimerInterruptTest
 		integer = new Rv32iIntegerUnit()
 		multiplier = new Rv32DspMultiplier()
 		csrs = new Rv32MachineCsrs<0, true>()
-		core = new Rv32PipelineEngine<0, true>(registers, fetch, loadStore, decoder, integer, multiplier, csrs)
+		custom = new Rv32XqdivInstruction()
+		core = new Rv32PipelineEngine<0, true>(registers, fetch, loadStore, decoder, integer, multiplier, csrs, custom)
 	}
 
 	/**
@@ -342,5 +345,44 @@ component Rv32PipelineTimerInterruptTest
 		assert trapCount == 0 && core.pc == 24
 		Step()
 		assert trapCount == 0 && observed[5] == 1
+	}
+
+	/**
+	 * A pending interrupt waits for an admitted custom instruction to commit.
+	 */
+	@Test
+	fn InterruptWaitsForCustomCompletion()
+	{
+		Prepare()
+		Program()
+		Load(5, 0x06400093) // addi x1, x0, 100
+		Load(6, 0x00700113) // addi x2, x0, 7
+		Load(7, 0x0020818b) // xqdiv x3, x1, x2
+		Load(8, 0x0000006f)
+		Enable()
+		core.run = 0b1
+		var elapsed: uint = 0
+
+		while (core.pc as uint != 28 && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.pc as uint == 28
+		Simulation.Wait(20)
+		csrs.timerPending = 0b1
+
+		while (trapCount == 0 && elapsed < 500) {
+			state {
+				elapsed++
+			}
+		}
+
+		core.run = 0b0
+		csrs.timerPending = 0b0
+		assert trapCount == 1
+		assert lastTrapPc == 32 && lastTrapCause == Rv32TrapOperations.TIMER_CAUSE
+		assert observed[3] == 14 && retireCount >= 8
 	}
 }

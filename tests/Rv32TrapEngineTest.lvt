@@ -1,5 +1,7 @@
 namespace Eccelerators.RiscV.Tests
 
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Sequential
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.Presets
@@ -15,6 +17,7 @@ component Rv32TrapEngineTest
 	// Owned platform, explicit execution composition and architectural scoreboard.
 	fetch: RvFetchRom<512, 9>
 	loadStore: DelayedWordDevice
+	custom: Rv32NoCustomInstruction
 	core: Rv32SequentialEngine<0, true>
 	registers: Rv32RegisterBank
 	baseDecoder: Rv32iZmmulDecoder
@@ -50,7 +53,8 @@ component Rv32TrapEngineTest
 		integer = new Rv32iIntegerUnit()
 		multiplier = new Rv32DspMultiplier()
 		csrs = new Rv32MachineCsrs()
-		core = new Rv32SequentialEngine<0, true>(registers, fetch, loadStore, decoder, integer, multiplier, csrs)
+		custom = new Rv32NoCustomInstruction()
+		core = new Rv32SequentialEngine<0, true>(registers, fetch, loadStore, decoder, integer, multiplier, csrs, custom)
 	}
 
 	/**

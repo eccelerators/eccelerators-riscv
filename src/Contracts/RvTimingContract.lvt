@@ -24,7 +24,5 @@ component RvTimingContract<READ_PORTS: int = 1, REQUIRED_READS: int = 2,
 	/**
 	 * Checks compatibility without runtime negotiation, state or clock cycles.
 	 */
-	new()
-	{
-	}
+	new() {}
 }

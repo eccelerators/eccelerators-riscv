@@ -1,0 +1,32 @@
+namespace Eccelerators.RiscV.Isa
+
+/**
+ * Instruction encodings shared by the decoder and architectural cause vocabulary.
+ */
+public class Rv32iConstants
+{
+	// Base instruction opcodes from bits 6..0.
+	public const OPCODE_LUI: int = 0x37
+	public const OPCODE_AUIPC: int = 0x17
+	public const OPCODE_JAL: int = 0x6f
+	public const OPCODE_JALR: int = 0x67
+	public const OPCODE_BRANCH: int = 0x63
+	public const OPCODE_LOAD: int = 0x03
+	public const OPCODE_STORE: int = 0x23
+	public const OPCODE_OP_IMM: int = 0x13
+	public const OPCODE_OP: int = 0x33
+	public const OPCODE_MISC_MEM: int = 0x0f
+	public const OPCODE_SYSTEM: int = 0x73
+
+	// Integer arithmetic function selectors from bits 14..12 and 31..25.
+	public const FUNCT3_ADD_SUB: int = 0x0
+	public const FUNCT3_SLL: int = 0x1
+	public const FUNCT3_SLT: int = 0x2
+	public const FUNCT3_SLTU: int = 0x3
+	public const FUNCT3_XOR: int = 0x4
+	public const FUNCT3_SRL_SRA: int = 0x5
+	public const FUNCT3_OR: int = 0x6
+	public const FUNCT3_AND: int = 0x7
+	public const FUNCT7_BASE: int = 0x00
+	public const FUNCT7_SUB_SRA: int = 0x20
+}

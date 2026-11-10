@@ -3,14 +3,15 @@ namespace Eccelerators.RiscV.Contracts
 /**
  * Value-only decode control word. PC, instruction and immediate travel separately.
  * Bits 0..4 rd, 5..9 rs1, 10..14 rs2, 15 usesRs1, 16 usesRs2,
- * 17 writesRd, 18 legal, 19..26 operation. Bits 27..31 reserved zero.
+ * 17 writesRd, 18 legal, 19..31 operation. The operation contains an eight-bit
+ * provider-local value below a five-bit family identifier.
  * No component instance, scheduled getters or architectural state.
  */
 public class RvDecoded
 {
 	// Masks for packed register indices and operation IDs.
 	public const REGISTER_MASK: uint = 31
-	public const OPERATION_MASK: uint = 255
+	public const OPERATION_MASK: uint = 0x1fff
 
 	// Bit offsets of the remaining packed fields; rd starts at bit zero.
 	public const RS1_SHIFT: int = 5
@@ -22,7 +23,7 @@ public class RvDecoded
 	public const OPERATION_SHIFT: int = 19
 
 	/**
-	 * Packs operation (0..255), register indices (0..31) and decode flags.
+	 * Packs operation (0..8191), register indices (0..31) and decode flags.
 	 * Values outside those ranges are masked; callers retain PC and immediate separately.
 	 */
 	public static fn Pack[](operation: uint, rd: uint, rs1: uint, rs2: uint,

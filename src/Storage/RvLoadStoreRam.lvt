@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.Storage
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 using Livt.IO
 
 /**

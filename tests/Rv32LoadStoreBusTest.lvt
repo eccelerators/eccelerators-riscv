@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.System
 
@@ -45,6 +45,7 @@ component Rv32LoadStoreBusTest
 			bus.request = 0b0
 			defBus.request = 0b0
 		}
+
 		Simulation.Wait(4)
 
 		var elapsed: uint = 0
@@ -162,6 +163,7 @@ component Rv32LoadStoreBusTest
 			bus.request = 0b0
 			defBus.request = 0b0
 		}
+
 		Simulation.Wait(4)
 
 		var elapsed: uint = 0
@@ -262,6 +264,7 @@ component Rv32LoadStoreBusTest
 			bus.request = 0b0
 			defBus.request = 0b0
 		}
+
 		Simulation.Wait(4)
 
 		var elapsed: uint = 0
@@ -351,6 +354,7 @@ component Rv32LoadStoreBusTest
 			bus.request = 0b0
 			defBus.request = 0b0
 		}
+
 		Simulation.Wait(4)
 
 		var elapsed: uint = 0
@@ -438,6 +442,7 @@ component Rv32LoadStoreBusTest
 		}
 
 		elapsed = 0
+
 		while (defBus.ready == 0b0 && elapsed < 8) {
 			state {
 				elapsed++

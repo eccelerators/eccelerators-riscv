@@ -1,6 +1,7 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
 
 /**
  * Checks the published architectural opcode and function-selector constants.

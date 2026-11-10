@@ -1,5 +1,7 @@
 namespace Eccelerators.RiscV.Sequential
 
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Contracts
 using Eccelerators.RiscV.Machine
 
@@ -34,15 +36,17 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 	const MULTIPLY_WAIT: uint = 11
 	const STOPPED: uint = 10
 	const EXCEPTION: uint = 12
+	const CUSTOM_WAIT: uint = 13
 
 	// Exclusive borrowed implementation instances, with substitutable decode/multiply ports.
 	registers: IRv32RegisterPort
 	fetch: IRv32FetchPort
 	loadStore: IRv32LoadStorePort
 	decoder: IRv32DecodePort
-	integer: Rv32iIntegerUnit
+	integer: IRv32IntegerPort
 	multiplier: IRv32MultiplyPort
 	csrs: IRv32CsrPort
+	custom: IRv32CustomInstructionPort
 
 	// Owned sequencing, instruction identity, operands and pending completion.
 	phase: uint
@@ -75,8 +79,14 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 	 * Binds caller-owned resources. Hardware reset starts bank initialization;
 	 * wait for idle before requesting a single step or provisioning shared resources.
 	 */
-	new(registers: flip IRv32RegisterPort, fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort,
-		decoder: flip IRv32DecodePort, integer: Rv32iIntegerUnit, multiplier: flip IRv32MultiplyPort, csrs: flip IRv32CsrPort)
+	new(registers: flip IRv32RegisterPort,
+		fetch: flip IRv32FetchPort,
+		loadStore: flip IRv32LoadStorePort,
+		decoder: flip IRv32DecodePort,
+		integer: flip IRv32IntegerPort,
+		multiplier: flip IRv32MultiplyPort,
+		csrs: flip IRv32CsrPort,
+		custom: flip IRv32CustomInstructionPort)
 	{
 		this.registers = registers
 		this.fetch = fetch
@@ -85,6 +95,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 		this.integer = integer
 		this.multiplier = multiplier
 		this.csrs = csrs
+		this.custom = custom
 	}
 
 	/**
@@ -113,6 +124,25 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 		retiredValue = commitValue
 		decoder.instruction = instruction as logic[32]
 		control = decoder.control as uint
+		custom.decodeInstruction = instruction as logic[32]
+		custom.executeInstruction = instruction as logic[32]
+
+		if (custom.decodeConflict == 0b1
+			|| (custom.decodeMatch == 0b1 && RvDecoded.IsLegal(control))) {
+			control = 0
+		} elif (custom.decodeMatch == 0b1) {
+			control = RvDecoded.Pack(
+				Rv32CustomInstructionOperations.KIND << Rv32iOperations.KIND_SHIFT,
+				(instruction >> 7) & 31,
+				(instruction >> 15) & 31,
+				(instruction >> 20) & 31,
+				true,
+				true,
+				true,
+				true
+			)
+		}
+
 		kind = RvDecoded.Operation(control) >> Rv32iOperations.KIND_SHIFT
 		funct3 = (instruction >> 12) & 7
 		pc = programCounter as logic[32]
@@ -189,6 +219,15 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 
 		if (kind == Rv32MultiplyOperations.KIND && (phase == EXECUTE || phase == MULTIPLY_WAIT)) {
 			multiplier.request = 0b1
+		}
+
+		custom.request = 0b0
+		custom.left = leftValue as logic[32]
+		custom.right = rightValue as logic[32]
+
+		if (kind == Rv32CustomInstructionOperations.KIND
+			&& (phase == EXECUTE || phase == CUSTOM_WAIT)) {
+			custom.request = 0b1
 		}
 
 		csrs.enterTrap = 0b0
@@ -371,6 +410,10 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 						{
 							phase = MULTIPLY_WAIT
 						}
+						Rv32CustomInstructionOperations.KIND =>
+						{
+							phase = CUSTOM_WAIT
+						}
 						Rv32iOperations.JAL, Rv32iOperations.JALR =>
 						{
 							var target = arithmetic
@@ -431,7 +474,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 							phase = EXCEPTION
 						}
 						_ => {
-							// Other legal instructions complete through the common commit edge.
+						// Other legal instructions complete through the common commit edge.
 						}
 					}
 				}
@@ -440,6 +483,19 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 					if (multiplier.ready == 0b1) {
 						resultValue = multiplier.result as uint
 						phase = COMMIT
+					}
+				}
+				CUSTOM_WAIT =>
+				{
+					if (custom.ready == 0b1) {
+						if (custom.fault == 0b1) {
+							stopCause = custom.faultCause
+							stopValue = instruction as logic[32]
+							phase = EXCEPTION
+						} else {
+							resultValue = custom.result as uint
+							phase = COMMIT
+						}
 					}
 				}
 				MEMORY =>

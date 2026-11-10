@@ -4,6 +4,12 @@ Composable RISC-V processors for FPGA applications written in Livt. Start with a
 named core, or construct an engine and its providers explicitly. Both approaches
 use the same reusable components; resource choices are compile-time parameters.
 
+Reusable signal contracts are in `Eccelerators.RiscV.Core`; standard instruction
+encodings, semantics, decoders and execution providers are in
+`Eccelerators.RiscV.Isa`. `Rv32SequentialEngine` and `Rv32PipelineEngine` consume
+the same narrow provider interfaces, so explicit compositions can substitute
+cohesive providers while the engines retain architectural commit.
+
 Version **0.3.0** removes the scheduled reference layer and uses separate
 instruction-fetch and load/store ports with a system-level composition,
 retaining the sequential and pipeline core presets. See the
@@ -23,10 +29,10 @@ and data providers implementing `flip IRv32FetchPort` and
 
 The sequential engine favors a compact implementation. The pipeline overlaps
 fetch, decode/read, execution and commit. Both use synchronous register files;
-`REGISTER_FILE_STYLE` defaults to `MemoryStyle.Block`. The non-machine Zmmul
-presets and the pipeline machine preset also accept `DSP_MULTIPLY`, defaulting
-to iterative multiplication. The sequential machine preset uses the iterative
-multiplier; use explicit composition for a sequential DSP machine.
+`REGISTER_FILE_STYLE` defaults to `MemoryStyle.Block`. Every Zmmul preset takes an
+explicit multiplier provider type, either `Rv32IterativeMultiplier` or
+`Rv32DspMultiplier`. The type is selected during elaboration and adds no runtime
+dispatch or unused multiplier.
 
 For example, these constructor fragments select a base sequential core or a
 machine pipeline with DSP multiplication:
@@ -36,8 +42,21 @@ core = new Rv32iSequentialCore(instructions, data)
 ```
 
 ```livt
-core = new Rv32iZmmulPipelineMachineCore<0, MemoryStyle.Block, true>(instructions, data)
+core = new Rv32iZmmulPipelineMachineCore<
+	Rv32DspMultiplier,
+	0,
+	MemoryStyle.Block
+>(instructions, data)
 ```
+
+For a custom ISA composition, use `Rv32SequentialCore` or `Rv32PipelineCore` with
+constrained provider types. These thin specializations inherit `Rv32Core` and bind
+the appropriate engine and register-port contract without adding hardware or
+duplicating its implementation. Use `Rv32Core` directly when defining another
+engine architecture. `IRv32CustomInstructionPort` supports bounded, result-only
+custom instructions with variable latency and synchronous faults;
+`Rv32XqdivInstruction` is the qualified example. See
+[custom components](docs/custom-components.md).
 
 The application owns memories, firmware provisioning, peripherals and clock/reset.
 See [core selection](docs/cores.md) and [integration](docs/integration.md) before
@@ -49,8 +68,9 @@ wiring providers or controls.
 4 KiB data RAM. For a custom address map, construct `RvSystem<TCORE>(fetch,
 loadStore)` with your own providers. `Rv32FetchBus` and `Rv32LoadStoreBus`
 route independent address windows; `RvUartDevice` adapts a buffered UART to
-load/store registers. See [system composition](docs/system.md) for ownership,
-provisioning and interrupt wiring.
+load/store registers. `RvPlatformInfo` exposes the selected composition and
+implementation choices to software. See [system composition](docs/system.md)
+for ownership, provisioning and interrupt wiring.
 
 ## Use the package
 

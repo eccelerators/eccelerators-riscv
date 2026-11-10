@@ -33,6 +33,7 @@ component RvUartDeviceTest
 		state {
 			device.request = 0b0
 		}
+
 		Simulation.Wait(4)
 		uart.ClearReceiveBuffer()
 		uart.ClearErrors()
@@ -44,19 +45,24 @@ component RvUartDeviceTest
 			device.writeData = 0xa5
 			device.request = 0b1
 		}
+
 		var elapsed: uint = 0
+
 		while (device.ready == 0b0 && elapsed < 200) {
 			state {
 				elapsed++
 			}
 		}
+
 		assert device.ready == 0b1 && device.error == 0b0
 		Simulation.Wait(400)
 		assert device.ready == 0b1 && device.error == 0b0
 		assert uart.GetReceiveCount() == 1
+
 		state {
 			device.request = 0b0
 		}
+
 		Simulation.Wait(8)
 
 		state {
@@ -64,20 +70,25 @@ component RvUartDeviceTest
 			device.write = 0b0
 			device.request = 0b1
 		}
+
 		elapsed = 0
+
 		while (device.ready == 0b0 && elapsed < 200) {
 			state {
 				elapsed++
 			}
 		}
+
 		assert device.ready == 0b1 && device.error == 0b0
 		assert device.readData == 0xa5
 		Simulation.Wait(20)
 		assert device.readData == 0xa5
 		assert uart.GetReceiveCount() == 0
+
 		state {
 			device.request = 0b0
 		}
+
 		Simulation.Wait(8)
 	}
 
@@ -90,8 +101,10 @@ component RvUartDeviceTest
 		state {
 			device.request = 0b0
 		}
+
 		Simulation.Wait(8)
 		uart.ClearReceiveBuffer()
+
 		state {
 			device.address = 0x40000000
 			device.write = 0b1
@@ -99,18 +112,23 @@ component RvUartDeviceTest
 			device.writeData = 0x5500
 			device.request = 0b1
 		}
+
 		var elapsed: uint = 0
+
 		while (device.ready == 0b0 && elapsed < 200) {
 			state {
 				elapsed++
 			}
 		}
+
 		assert device.ready == 0b1 && device.error == 0b1
 		Simulation.Wait(400)
 		assert uart.GetReceiveCount() == 0
+
 		state {
 			device.request = 0b0
 		}
+
 		Simulation.Wait(8)
 	}
 }

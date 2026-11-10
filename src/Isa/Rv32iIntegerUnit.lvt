@@ -1,0 +1,25 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+
+/**
+ * Shared combinational RV32I integer datapath. The owning engine selects operands,
+ * samples the result at an execution edge and alone controls architectural commit.
+ */
+component Rv32iIntegerUnit : IRv32IntegerPort
+{
+	// Concrete integer-family coverage; other families belong to the engine/memory path.
+	public const CAPABILITIES: uint = Rv32iOperations.INTEGER_CAPABILITY
+
+	/**
+	 * Evaluates the shared pure arithmetic semantics with no scheduled call.
+	 */
+	process Calculate[]()
+	{
+		result = Rv32iSemantics.Integer(
+			operation as uint,
+			left as uint,
+			right as uint
+		) as logic[32]
+	}
+}

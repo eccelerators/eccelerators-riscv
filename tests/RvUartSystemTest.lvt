@@ -38,6 +38,7 @@ component RvUartSystemTest
 			fetch.programIndex = index as logic[3]
 			fetch.programData = word as logic[32]
 		}
+
 		state {
 			fetch.programWrite = 0b0
 		}
@@ -50,6 +51,7 @@ component RvUartSystemTest
 		state {
 			system.run = 0b0
 		}
+
 		Simulation.Wait(150)
 		assert system.idle == 0b1
 		Load(0, 0x400000b7) // LUI x1,0x40000
@@ -59,17 +61,22 @@ component RvUartSystemTest
 		state {
 			system.run = 0b1
 		}
+
 		var elapsed: uint = 0
+
 		while (system.halted == 0b0 && elapsed < 1000) {
 			state {
 				elapsed++
 			}
 		}
+
 		assert system.halted == 0b1 && system.faultCause == 3
 		assert system.pc == 12
+
 		state {
 			system.run = 0b0
 		}
+
 		Simulation.Wait(400)
 		assert uart.GetReceiveCount() == 1
 		var value: byte = 0

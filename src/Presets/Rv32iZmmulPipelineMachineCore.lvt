@@ -1,39 +1,34 @@
 namespace Eccelerators.RiscV.Presets
 
+using Eccelerators.RiscV.Isa
 using Eccelerators.RiscV.Pipeline
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Machine
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.Contracts
 using Livt.IO
 
 /**
- * Named machine-only pipeline: RV32I + Zmmul + Zicsr, selectable multiplier and a
+ * Named machine-only pipeline: RV32I + Zmmul + Zicsr, selectable multiplier provider and a
  * dual-read register bank (BRAM by default). Borrows instruction/data providers exclusively
  * in the same clock/reset domain. Qualification applies to the documented memory
  * providers and target, not to arbitrary buses supplied through these interfaces.
  */
-component Rv32iZmmulPipelineMachineCore<RESET_PC: uint = 0, REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block,
-	DSP_MULTIPLY: bool = false> : IRv32MachineControlPort
+component Rv32iZmmulPipelineMachineCore<MULTIPLIER: IRv32ZmmulPort & new(),
+	RESET_PC: uint = 0,
+	REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block> : IRv32MachineControlPort
 {
-	static assert Rv32DspMultiplier.CAPABILITIES == Rv32IterativeMultiplier.CAPABILITIES, "Multiplier choices must implement the same operations"
-
 	// Owned execution components and elaboration-only compatibility checks.
 	registers: Rv32DualReadRegisterBank<REGISTER_FILE_STYLE>
 	baseDecoder: Rv32iZmmulDecoder
 	zicsr: Rv32ZicsrComposition<0, true, true>
 	decoder: Rv32MachineDecoder
 
-	static if (DSP_MULTIPLY) {
-		// DSP implementation is absent in the default iterative composition.
-		dspMultiplier: Rv32DspMultiplier
-	} else {
-		// Iterative implementation keeps this preset usable without DSP blocks.
-		multiplier: Rv32IterativeMultiplier
-	}
+	multiplier: MULTIPLIER
 
 	// Shared integer unit and sole architectural ordering owner; zicsr owns machine state.
 	integer: Rv32iIntegerUnit
+	custom: Rv32NoCustomInstruction
 	engine: Rv32PipelineEngine<RESET_PC, true>
 
 	// Elaboration-only checks for operation coverage and provider timing.
@@ -58,13 +53,9 @@ component Rv32iZmmulPipelineMachineCore<RESET_PC: uint = 0, REGISTER_FILE_STYLE:
 		decoder = new Rv32MachineDecoder(zicsr)
 		integer = new Rv32iIntegerUnit()
 
-		static if (DSP_MULTIPLY) {
-			dspMultiplier = new Rv32DspMultiplier()
-			engine = new Rv32PipelineEngine<RESET_PC, true>(registers, fetch, loadStore, decoder, integer, dspMultiplier, zicsr)
-		} else {
-			multiplier = new Rv32IterativeMultiplier()
-			engine = new Rv32PipelineEngine<RESET_PC, true>(registers, fetch, loadStore, decoder, integer, multiplier, zicsr)
-		}
+		multiplier = new MULTIPLIER()
+		custom = new Rv32NoCustomInstruction()
+		engine = new Rv32PipelineEngine<RESET_PC, true>(registers, fetch, loadStore, decoder, integer, multiplier, zicsr, custom)
 
 		coverage = new RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iZmmulDecoder.CAPABILITIES,
 			Rv32iIntegerUnit.CAPABILITIES, Rv32PipelineEngine.CAPABILITIES,

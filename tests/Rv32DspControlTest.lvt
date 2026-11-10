@@ -1,6 +1,7 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.Presets
 using Livt.IO
@@ -14,7 +15,7 @@ component Rv32DspControlTest
 	// Owned instruction storage, delayable device, core and retirement observations.
 	fetch: RvFetchRom<64, 6>
 	loadStore: DelayedWordDevice
-	core: Rv32iZmmulSequentialCore<0, MemoryStyle.Block, true>
+	core: Rv32iZmmulSequentialCore<Rv32DspMultiplier>
 	clearObservation: bool
 	count: uint
 	lastValue: uint
@@ -26,7 +27,7 @@ component Rv32DspControlTest
 	{
 		fetch = new RvFetchRom<64, 6>()
 		loadStore = new DelayedWordDevice()
-		core = new Rv32iZmmulSequentialCore<0, MemoryStyle.Block, true>(fetch, loadStore)
+		core = new Rv32iZmmulSequentialCore<Rv32DspMultiplier>(fetch, loadStore)
 	}
 
 	/**

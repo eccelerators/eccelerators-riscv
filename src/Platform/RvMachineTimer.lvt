@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.Platform
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 
 /**
  * Platform-owned 64-bit time and deadline in the inherited clock/reset domain.
@@ -102,7 +102,7 @@ component RvMachineTimer<BASE: uint = 0x40000100, TICK_DIVISOR: uint = 50,
 				selected = ~compareHighInverted
 			}
 			_ => {
-				// Unmapped requests complete as errors without effects.
+			// Unmapped requests complete as errors without effects.
 			}
 		}
 
@@ -155,7 +155,7 @@ component RvMachineTimer<BASE: uint = 0x40000100, TICK_DIVISOR: uint = 50,
 							compareHighInverted = ~merged
 						}
 						_ => {
-							// validAddress excludes this branch.
+						// validAddress excludes this branch.
 						}
 					}
 				}

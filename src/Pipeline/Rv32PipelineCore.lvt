@@ -1,0 +1,29 @@
+namespace Eccelerators.RiscV.Pipeline
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Storage
+
+/**
+ * Pipeline specialization of the general owned-provider core. It binds the
+ * dual-read register-file contract and pipeline scheduling engine while retaining
+ * explicit provider selection at elaboration.
+ */
+component Rv32PipelineCore<
+	REGISTERS: IRv32DualReadRegisterPort & new(),
+	DECODER: IRv32DecodePort & new(),
+	INTEGER: IRv32IntegerPort & new(),
+	MULTIPLIER: IRv32MultiplyPort & new(),
+	CSRS: IRv32CsrPort & new(),
+	CUSTOM: IRv32CustomInstructionPort & new(),
+	RESET_PC: uint = 0
+> : Rv32Core<
+	IRv32DualReadRegisterPort,
+	Rv32PipelineEngine<RESET_PC>,
+	REGISTERS,
+	DECODER,
+	INTEGER,
+	MULTIPLIER,
+	CSRS,
+	CUSTOM
+> {}

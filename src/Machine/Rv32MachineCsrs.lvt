@@ -1,5 +1,7 @@
 namespace Eccelerators.RiscV.Machine
 
+using Eccelerators.RiscV.Isa
+
 /**
  * Machine-only CSR and synchronous trap state, exclusively owned in the engine's clock/reset domain.
  * Trap entry/return share the single writer; optional interrupt delivery samples
@@ -287,7 +289,7 @@ component Rv32MachineCsrs<HART_ID: uint = 0, TIMER_INTERRUPTS: bool = false, EXT
 							retireHigh = newValue
 						}
 						_ => {
-							// Legal fixed fields retain their documented values.
+						// Legal fixed fields retain their documented values.
 						}
 					}
 				}

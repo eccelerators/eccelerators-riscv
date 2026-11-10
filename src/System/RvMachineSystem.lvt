@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.System
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Machine
 
 /**
@@ -9,7 +9,7 @@ using Eccelerators.RiscV.Machine
  * All components share a clock/reset domain. This wrapper adds no registers
  * or arbitration. Machine interrupt inputs are forwarded without synchronization.
  */
-component RvMachineSystem<TCORE : IRv32MachineControlPort & new(flip IRv32FetchPort, flip IRv32LoadStorePort)> : IRv32MachineControlPort
+component RvMachineSystem<TCORE: IRv32MachineControlPort & new(flip IRv32FetchPort, flip IRv32LoadStorePort)> : IRv32MachineControlPort
 {
 	// Owned core; execution controls have one writer in Connect.
 	core: TCORE

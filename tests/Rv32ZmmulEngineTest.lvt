@@ -1,6 +1,7 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.Presets
 
@@ -14,7 +15,7 @@ component Rv32ZmmulEngineTest
 	// Owned platform, preset and architectural observation scoreboard.
 	fetch: RvFetchRom<256, 8>
 	loadStore: RvLoadStoreRam<256, 8>
-	core: Rv32iZmmulSequentialCore
+	core: Rv32iZmmulSequentialCore<Rv32IterativeMultiplier>
 	observed: uint[32]
 	retireCount: uint
 	clearObservation: bool
@@ -31,7 +32,7 @@ component Rv32ZmmulEngineTest
 	{
 		fetch = new RvFetchRom<256, 8>()
 		loadStore = new RvLoadStoreRam<256, 8>()
-		core = new Rv32iZmmulSequentialCore(fetch, loadStore)
+		core = new Rv32iZmmulSequentialCore<Rv32IterativeMultiplier>(fetch, loadStore)
 	}
 
 	/**
@@ -84,8 +85,7 @@ component Rv32ZmmulEngineTest
 		core.run = 0b1
 
 		while (core.halted == 0b0 && cycles - start < 20000) {
-			state {
-			}
+			state {}
 		}
 
 		core.run = 0b0

@@ -1,0 +1,39 @@
+namespace Eccelerators.RiscV.Platform
+
+/**
+ * Stable register offsets and values reported by RvPlatformInfo. Capability
+ * bits describe software-visible behavior; implementation values describe the
+ * selected hardware. Unknown future values must be displayed numerically.
+ */
+class RvPlatformInfoValues
+{
+	// Register offsets from the component's configured base address.
+	public const COMPOSITION_ID_OFFSET: uint = 0
+	public const ISA_CAPABILITIES_OFFSET: uint = 4
+	public const ENGINE_OFFSET: uint = 8
+	public const MULTIPLIER_OFFSET: uint = 12
+	public const REGISTER_FILE_OFFSET: uint = 16
+	public const CLOCK_HZ_OFFSET: uint = 20
+
+	// Software-visible ISA and machine capability bits.
+	public const RV32I: uint = 1
+	public const ZMMUL: uint = 2
+	public const ZICSR: uint = 4
+	public const MACHINE_TRAPS: uint = 8
+	public const TIMER_INTERRUPTS: uint = 16
+	public const EXTERNAL_INTERRUPTS: uint = 32
+
+	// Execution engine identifiers.
+	public const ENGINE_SEQUENTIAL: uint = 1
+	public const ENGINE_PIPELINE: uint = 2
+
+	// Multiplier implementation identifiers.
+	public const MULTIPLIER_NONE: uint = 0
+	public const MULTIPLIER_ITERATIVE: uint = 1
+	public const MULTIPLIER_DSP: uint = 2
+
+	// Integer register-file implementation identifiers.
+	public const REGISTER_FILE_ARRAY: uint = 0
+	public const REGISTER_FILE_DISTRIBUTED: uint = 1
+	public const REGISTER_FILE_BLOCK: uint = 2
+}

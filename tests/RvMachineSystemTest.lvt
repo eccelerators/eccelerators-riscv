@@ -1,5 +1,6 @@
 namespace Eccelerators.RiscV.Tests
 
+using Eccelerators.RiscV.Isa
 using Eccelerators.RiscV.System
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.Presets
@@ -11,7 +12,7 @@ component RvMachineSystemTest
 	// Explicit providers and a machine pipeline with forwarded pending inputs.
 	fetch: RvFetchRom<16, 4>
 	data: RvLoadStoreRam<16, 4>
-	system: RvMachineSystem<Rv32iZmmulPipelineMachineCore>
+	system: RvMachineSystem<Rv32iZmmulPipelineMachineCore<Rv32IterativeMultiplier>>
 	trapCount: uint
 	lastCause: logic[32]
 
@@ -20,7 +21,7 @@ component RvMachineSystemTest
 	{
 		fetch = new RvFetchRom<16, 4>()
 		data = new RvLoadStoreRam<16, 4>()
-		system = new RvMachineSystem<Rv32iZmmulPipelineMachineCore>(fetch, data)
+		system = new RvMachineSystem<Rv32iZmmulPipelineMachineCore<Rv32IterativeMultiplier>>(fetch, data)
 	}
 
 	/** Captures trap pulses independently of scheduled test execution. */
@@ -42,6 +43,7 @@ component RvMachineSystemTest
 			fetch.programIndex = index as logic[4]
 			fetch.programData = word as logic[32]
 		}
+
 		state {
 			fetch.programWrite = 0b0
 		}
@@ -51,15 +53,19 @@ component RvMachineSystemTest
 	fn Step()
 	{
 		var ticket = ~system.stepAck
+
 		state {
 			system.stepRequest = ticket
 		}
+
 		var elapsed: uint = 0
+
 		while (system.stepAck != ticket && elapsed < 300) {
 			state {
 				elapsed++
 			}
 		}
+
 		assert system.stepAck == ticket && system.idle == 0b1
 	}
 
@@ -72,6 +78,7 @@ component RvMachineSystemTest
 			system.timerPending = 0b0
 			system.externalPending = 0b0
 		}
+
 		Simulation.Wait(150)
 		assert system.idle == 0b1
 		Load(0, 0x03000093) // ADDI x1,x0,48
@@ -87,30 +94,39 @@ component RvMachineSystemTest
 		for (var index = 0; index < 7; index++) {
 			Step()
 		}
+
 		assert system.pc == 28
+
 		state {
 			system.timerPending = 0b1
 		}
+
 		Simulation.Wait(4)
 		Step()
 		assert system.pc == 48 && system.halted == 0b0
 		assert trapCount == 1 && lastCause == 0x80000007
+
 		state {
 			system.timerPending = 0b0
 		}
+
 		Step()
 		Step()
 		assert system.pc == 28
+
 		state {
 			system.externalPending = 0b1
 		}
+
 		Simulation.Wait(4)
 		Step()
 		assert system.pc == 48 && system.halted == 0b0
 		assert trapCount == 2 && lastCause == 0x8000000b
+
 		state {
 			system.externalPending = 0b0
 		}
+
 		Step()
 		Step()
 		assert system.pc == 28

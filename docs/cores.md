@@ -1,20 +1,20 @@
 # Core selection
 
-The six [preset declarations](../src/Presets) share their first two parameters.
-Presets with selectable multiplication add a third:
+The six [preset declarations](../src/Presets) expose these structural parameters:
 
 | Parameter | Default | Meaning |
 |---|---|---|
+| `MULTIPLIER` | required on Zmmul presets | `Rv32IterativeMultiplier` or `Rv32DspMultiplier` |
 | `RESET_PC` | `0` | Four-byte-aligned reset and restart address |
 | `REGISTER_FILE_STYLE` | `MemoryStyle.Block` | Register-file storage mapping request |
-| `DSP_MULTIPLY` | `false` | Non-machine Zmmul and pipeline machine presets: select DSP-oriented multiplication |
 
 The base presets implement RV32I. Zmmul presets add MUL, MULH, MULHSU and MULHU.
 Machine presets additionally select Zicsr, machine exceptions, MRET and both
 same-clock `timerPending` and `externalPending` inputs. Named machine presets use
 hart ID zero; use explicit composition for another hart ID or CSR provider.
-The sequential machine preset fixes iterative multiplication; use explicit
-composition when it needs a DSP multiplier.
+The multiplier is required explicitly because Livt 1.2.0 cannot currently use a
+component type as a default generic value. The choice is still structural and
+does not produce runtime selection logic.
 
 ## Sequential execution
 

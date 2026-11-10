@@ -30,7 +30,9 @@ component Rv32BusProtocolTest
 			a.releaseResponse = 0b0
 			b.releaseResponse = 0b0
 		}
+
 		Simulation.Wait(4)
+
 		state {
 			a.clear = 0b0
 			b.clear = 0b0
@@ -40,22 +42,27 @@ component Rv32BusProtocolTest
 			bus.writeData = 0x12345678
 			bus.request = 0b1
 		}
+
 		Simulation.Wait(12)
 		assert bus.ready == 0b0
 		assert a.accepted == 0b1 && b.accepted == 0b0
 		assert a.writes == 0 && b.writes == 0
+
 		state {
 			a.releaseResponse = 0b1
 		}
+
 		Simulation.Wait(12)
 		assert bus.ready == 0b1 && bus.error == 0b0
 		assert a.writes == 1 && b.writes == 0
 		assert a.payload == 0x12345678
 		Simulation.Wait(12)
 		assert a.writes == 1
+
 		state {
 			bus.request = 0b0
 		}
+
 		Simulation.Wait(6)
 
 		// Address 20 is the exclusive end of B, so no provider may see it.
@@ -63,13 +70,16 @@ component Rv32BusProtocolTest
 			bus.address = 20
 			bus.request = 0b1
 		}
+
 		Simulation.Wait(6)
 		assert bus.ready == 0b1 && bus.error == 0b1
 		assert a.writes == 1 && b.writes == 0
 		assert b.accepted == 0b0
+
 		state {
 			bus.request = 0b0
 		}
+
 		Simulation.Wait(6)
 	}
 }

@@ -1,0 +1,87 @@
+namespace Eccelerators.RiscV.Core
+
+using Eccelerators.RiscV.Machine
+
+/**
+ * General owned-provider RV32 composition. REGISTER_PORT selects the engine's
+ * register-file wiring contract, while ENGINE selects its scheduling strategy.
+ * All component choices are resolved at elaboration. The caller retains ownership
+ * of instruction and data services in the same clock/reset context.
+ */
+component Rv32Core<
+	REGISTER_PORT: interface,
+	ENGINE: IRv32ControlPort & new(
+		flip REGISTER_PORT,
+		flip IRv32FetchPort,
+		flip IRv32LoadStorePort,
+		flip IRv32DecodePort,
+		flip IRv32IntegerPort,
+		flip IRv32MultiplyPort,
+		flip IRv32CsrPort,
+		flip IRv32CustomInstructionPort
+	),
+	REGISTERS: REGISTER_PORT & new(),
+	DECODER: IRv32DecodePort & new(),
+	INTEGER: IRv32IntegerPort & new(),
+	MULTIPLIER: IRv32MultiplyPort & new(),
+	CSRS: IRv32CsrPort & new(),
+	CUSTOM: IRv32CustomInstructionPort & new()
+> : IRv32ControlPort
+{
+	registers: REGISTERS
+	decoder: DECODER
+	integer: INTEGER
+	multiplier: MULTIPLIER
+	csrs: CSRS
+	custom: CUSTOM
+	engine: ENGINE
+
+	/**
+	 * Constructs every selected provider once and binds it to the selected engine.
+	 */
+	new(fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort)
+	{
+		registers = new REGISTERS()
+		decoder = new DECODER()
+		integer = new INTEGER()
+		multiplier = new MULTIPLIER()
+		csrs = new CSRS()
+		custom = new CUSTOM()
+		engine = new ENGINE(
+			registers,
+			fetch,
+			loadStore,
+			decoder,
+			integer,
+			multiplier,
+			csrs,
+			custom
+		)
+	}
+
+	/**
+	 * Forwards the standard control and observation contract without added state.
+	 */
+	process Connect[]()
+	{
+		engine.run = run
+		engine.stepRequest = stepRequest
+		engine.restartRequest = restartRequest
+		stepAck = engine.stepAck
+		restartAck = engine.restartAck
+		idle = engine.idle
+		halted = engine.halted
+		pc = engine.pc
+		faultCause = engine.faultCause
+		faultValue = engine.faultValue
+		trapped = engine.trapped
+		trapPc = engine.trapPc
+		trapCause = engine.trapCause
+		trapValue = engine.trapValue
+		retired = engine.retired
+		retiredPc = engine.retiredPc
+		retiredInstruction = engine.retiredInstruction
+		retiredRd = engine.retiredRd
+		retiredValue = engine.retiredValue
+	}
+}

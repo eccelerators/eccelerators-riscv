@@ -1,0 +1,74 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Contracts
+
+/**
+ * Owns a Zicsr decoder overlay and the machine CSR state used by either engine.
+ * Borrows the supplied base decoder exclusively in the same clock/reset context.
+ * Exposes separate decode and CSR interfaces backed by private owned children.
+ * One engine owns each command group; combinational forwarding adds no cycles.
+ * Machine instruction decoding and engine trap policy remain explicit choices.
+ * For a custom CSR provider, compose Rv32ZicsrDecoder and IRv32CsrPort directly.
+ */
+component Rv32ZicsrComposition<HART_ID: uint = 0, TIMER_INTERRUPTS: bool = false, EXTERNAL_INTERRUPTS: bool = false> : IRv32DecodePort, IRv32CsrPort
+{
+	// Added operation coverage; the caller checks its borrowed base decoder separately.
+	public const CAPABILITIES: uint = Rv32CsrOperations.CAPABILITY
+	public const TRAP_CAPABILITIES: uint = Rv32TrapOperations.CAPABILITY
+
+	// Platform pending levels, synchronous to this component.
+	public timerPending: in logic
+	public externalPending: in logic
+
+	// Private implementation; consumers borrow this component through its two ports.
+	decoder: Rv32ZicsrDecoder
+	csrs: Rv32MachineCsrs<HART_ID, TIMER_INTERRUPTS, EXTERNAL_INTERRUPTS>
+
+	// Elaboration-only validation of the actual decoder/provider operation coverage.
+	coverage: RvOperationCoverage<CAPABILITIES, Rv32ZicsrDecoder.CAPABILITIES,
+		Rv32MachineCsrs.CAPABILITIES, 0, CAPABILITIES, 0>
+
+	/**
+	 * Constructs the decoder overlay and sole CSR state owner; no scheduling adapter.
+	 */
+	new(base: flip IRv32DecodePort)
+	{
+		decoder = new Rv32ZicsrDecoder(base)
+		csrs = new Rv32MachineCsrs<HART_ID, TIMER_INTERRUPTS, EXTERNAL_INTERRUPTS>()
+		coverage = new RvOperationCoverage<CAPABILITIES, Rv32ZicsrDecoder.CAPABILITIES,
+			Rv32MachineCsrs.CAPABILITIES, 0, CAPABILITIES, 0>()
+	}
+
+	/**
+	 * Connects both interface views without storage or scheduled calls.
+	 */
+	process Connect[]()
+	{
+		decoder.instruction = instruction
+		control = decoder.control
+		immediate = decoder.immediate
+		csrs.address = address
+		csrs.operation = operation
+		csrs.operand = operand
+		csrs.readEnable = readEnable
+		csrs.writeEnable = writeEnable
+		csrs.commit = commit
+		csrs.retire = retire
+		csrs.clear = clear
+		csrs.enterTrap = enterTrap
+		csrs.returnTrap = returnTrap
+		csrs.entryPc = entryPc
+		csrs.entryCause = entryCause
+		csrs.entryValue = entryValue
+		trapVector = csrs.trapVector
+		returnPc = csrs.returnPc
+		interruptEligible = csrs.interruptEligible
+		interruptCause = csrs.interruptCause
+		readData = csrs.readData
+		illegal = csrs.illegal
+		csrs.timerPending = timerPending
+		csrs.externalPending = externalPending
+	}
+}

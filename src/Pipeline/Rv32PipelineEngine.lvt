@@ -1,6 +1,7 @@
 namespace Eccelerators.RiscV.Pipeline
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.Contracts
 using Eccelerators.RiscV.Machine
@@ -34,16 +35,17 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 	fetch: IRv32FetchPort
 	loadStore: IRv32LoadStorePort
 	decoder: IRv32DecodePort
-	integer: Rv32iIntegerUnit
+	integer: IRv32IntegerPort
 	multiplier: IRv32MultiplyPort
 	csrs: IRv32CsrPort
+	custom: IRv32CustomInstructionPort
 
 	// Architectural state, initialization and single-pending control toggles.
 	initialized: bool
 	clearIndex: logic[5]
 	programCounter: uint
 	stopped: bool
-	stopCause: logic[4]
+	stopCause: logic[32]
 	stopValue: uint
 	stepActive: bool
 	activeStep: logic
@@ -88,7 +90,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 	cStoreValue: uint
 	cRd: logic[5]
 	cWrites: bool
-	cKind: logic[4]
+	cKind: logic[5]
 	cWidth: logic[3]
 	cFault: bool
 	cCause: logic[4]
@@ -96,6 +98,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 	dataGap: bool
 	cOperand: uint
 	multiplyGap: bool
+	customGap: bool
 
 	// Trap event state survives fetch draining; CSR enable changes get a boundary edge.
 	boundaryCheck: bool
@@ -123,6 +126,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 	xRedirect: bool
 	cMemory: bool
 	cMultiply: bool
+	cCustom: bool
 	cCsr: bool
 	cReturn: bool
 	cSerialize: bool
@@ -145,8 +149,10 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 	 * Binds providers without scheduled wrappers. Startup clears x1..x31 before idle.
 	 */
 	new(registers: flip IRv32DualReadRegisterPort, fetch: flip IRv32FetchPort,
-		loadStore: flip IRv32LoadStorePort, decoder: flip IRv32DecodePort, integer: Rv32iIntegerUnit,
-		multiplier: flip IRv32MultiplyPort, csrs: flip IRv32CsrPort)
+		loadStore: flip IRv32LoadStorePort, decoder: flip IRv32DecodePort,
+		integer: flip IRv32IntegerPort,
+		multiplier: flip IRv32MultiplyPort, csrs: flip IRv32CsrPort,
+		custom: flip IRv32CustomInstructionPort)
 	{
 		this.registers = registers
 		this.fetch = fetch
@@ -155,6 +161,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 		this.integer = integer
 		this.multiplier = multiplier
 		this.csrs = csrs
+		this.custom = custom
 	}
 
 	/**
@@ -245,7 +252,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 					xResult = xPc
 				}
 				_ => {
-					// Legal integer operations and FENCE use common ordered commit.
+				// Legal integer operations and FENCE use common ordered commit.
 				}
 			}
 		}
@@ -259,6 +266,25 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 	{
 		decoder.instruction = dWord as logic[32]
 		dControl = decoder.control as uint
+		custom.decodeInstruction = dWord as logic[32]
+		custom.executeInstruction = cWord as logic[32]
+
+		if (custom.decodeConflict == 0b1
+			|| (custom.decodeMatch == 0b1 && RvDecoded.IsLegal(dControl))) {
+			dControl = 0
+		} elif (custom.decodeMatch == 0b1) {
+			dControl = RvDecoded.Pack(
+				Rv32CustomInstructionOperations.KIND << Rv32iOperations.KIND_SHIFT,
+				(dWord >> 7) & 31,
+				(dWord >> 15) & 31,
+				(dWord >> 20) & 31,
+				true,
+				true,
+				true,
+				true
+			)
+		}
+
 		var control = dControl
 		var executeControl = xControl
 		var addressValue = cValue
@@ -268,11 +294,15 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 		var csrDestination = cRd as uint
 		cMemory = cKind as uint == Rv32iOperations.LOAD || cKind as uint == Rv32iOperations.STORE
 		cMultiply = cKind as uint == Rv32MultiplyOperations.KIND
+		cCustom = cKind as uint == Rv32CustomInstructionOperations.KIND
 		cCsr = cKind as uint == Rv32CsrOperations.KIND
 		cReturn = MACHINE_TRAPS && cKind as uint == Rv32TrapOperations.RETURN_KIND
 		cComplete = cValid && (cFault || (cMemory && !dataGap && loadStore.ready == 0b1)
-			|| (cMultiply && !multiplyGap && multiplier.ready == 0b1) || (!cMemory && !cMultiply))
+			|| (cMultiply && !multiplyGap && multiplier.ready == 0b1)
+			|| (cCustom && !customGap && custom.ready == 0b1)
+			|| (!cMemory && !cMultiply && !cCustom))
 		cFailed = cFault || (cMemory && loadStore.error == 0b1) || (cCsr && csrs.illegal == 0b1)
+			|| (cCustom && custom.fault == 0b1)
 		cWrite = cComplete && !cFailed && cWrites && cRd != 0
 		cResult = cValue
 
@@ -280,6 +310,8 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 			cResult = Rv32iSemantics.Load(loadStore.readData as uint, addressValue, width)
 		} elif (cMultiply) {
 			cResult = multiplier.result as uint
+		} elif (cCustom) {
+			cResult = custom.result as uint
 		} elif (cCsr) {
 			cResult = csrs.readData as uint
 		}
@@ -292,12 +324,12 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 
 		cSerialize = cComplete && !cFailed && (cCsr || cReturn)
 		quiescent = !fBusy && !fValid && !fGap && !dValid && !xValid && !cValid
-			&& !dataGap && !multiplyGap && !trapPending && !boundaryCheck
+			&& !dataGap && !multiplyGap && !customGap && !trapPending && !boundaryCheck
 		takeInterrupt = initialized && !stopped && !trapPending && !stepActive
 			&& restartRequest == restartCompleted && csrs.interruptEligible == 0b1
 			&& (!cValid || (cComplete && !cFailed)) && !cSerialize
 			&& (run == 0b1 || (quiescent && stepRequest != stepCompleted))
-		enterTrap = MACHINE_TRAPS && trapPending && !fBusy && !fGap && !dataGap && !multiplyGap
+		enterTrap = MACHINE_TRAPS && trapPending && !fBusy && !fGap && !dataGap && !multiplyGap && !customGap
 		flush = (cComplete && (cFailed || cRedirect || cReturn)) || takeInterrupt
 		xTransfer = xValid && (!cValid || cComplete) && !flush && !cSerialize && !boundaryCheck && !trapPending
 		dTransfer = dValid && dPhase != READ_WAIT && (!xValid || xTransfer) && !flush
@@ -365,6 +397,14 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 			multiplier.request = 0b1
 		}
 
+		custom.request = 0b0
+		custom.left = cOperand as logic[32]
+		custom.right = cStoreValue as logic[32]
+
+		if (cValid && cCustom && !cFault && !customGap) {
+			custom.request = 0b1
+		}
+
 		csrs.address = (cWord >> 20) as logic[12]
 		csrs.operation = (width & 3) as logic[2]
 		csrs.operand = cOperand as logic[32]
@@ -417,7 +457,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 		}
 
 		pc = programCounter as logic[32]
-		faultCause = stopCause as logic[32]
+		faultCause = stopCause
 		faultValue = stopValue as logic[32]
 		stepAck = stepCompleted
 		restartAck = restartCompleted
@@ -485,6 +525,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 				fGap = false
 				dataGap = false
 				multiplyGap = false
+				customGap = false
 				boundaryCheck = cSerialize
 
 				if (cComplete) {
@@ -498,19 +539,26 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 						multiplyGap = true
 					}
 
+					if (cCustom && !cFault) {
+						customGap = true
+					}
+
 					if (cFailed) {
 						programCounter = cPc
-						stopCause = cCause
+						stopCause = cCause as logic[32]
 						stopValue = cValue
 
 						if (!cFault) {
-							stopCause = Rv32iOperations.LOAD_ACCESS as logic[4]
+							stopCause = Rv32iOperations.LOAD_ACCESS as logic[32]
 
-							if (cCsr) {
-								stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[4]
+							if (cCustom) {
+								stopCause = custom.faultCause
+								stopValue = cWord
+							} elif (cCsr) {
+								stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
 								stopValue = cWord
 							} elif (cKind as uint == Rv32iOperations.STORE) {
-								stopCause = Rv32iOperations.STORE_ACCESS as logic[4]
+								stopCause = Rv32iOperations.STORE_ACCESS as logic[32]
 							}
 						}
 
@@ -575,7 +623,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 					cOperand = xLeft
 					cRd = RvDecoded.Rd(executeControl) as logic[5]
 					cWrites = RvDecoded.HasDestinationWrite(executeControl)
-					cKind = xKind as logic[4]
+					cKind = xKind as logic[5]
 					cWidth = xWidth as logic[3]
 					cFault = xFault
 					cCause = xCause

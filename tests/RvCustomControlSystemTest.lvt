@@ -1,0 +1,80 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Presets
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.System
+
+/**
+ * Verifies that a typed system preserves a custom core interface without latency.
+ */
+@Test
+component RvCustomControlSystemTest
+{
+	fetch: RvFetchRom<64, 6>
+	data: RvLoadStoreRam<64, 6>
+	system: RvRetirementTraceSystem<Rv32RetirementTraceCore<Rv32iSequentialCore>>
+	retirementCycle: uint
+	traceCycle: uint
+	cycles: uint
+
+	new()
+	{
+		fetch = new RvFetchRom<64, 6>()
+		data = new RvLoadStoreRam<64, 6>()
+		system = new RvRetirementTraceSystem<
+			Rv32RetirementTraceCore<Rv32iSequentialCore>
+		>(fetch, data)
+	}
+
+	process Observe()
+	{
+		state {
+			cycles++
+
+			if (system.retired == 0b1) {
+				retirementCycle = cycles
+			}
+
+			if (system.traceValid == 0b1) {
+				traceCycle = cycles
+				assert system.tracePc == system.retiredPc
+				assert system.traceInstruction == system.retiredInstruction
+				assert system.traceRd == system.retiredRd
+				assert system.traceValue == system.retiredValue
+			}
+		}
+	}
+
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[6]
+			fetch.programData = word as logic[32]
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+	}
+
+	@Test
+	fn PreservesTypedTraceWithoutARegisterStage()
+	{
+		system.run = 0b0
+		system.traceEnable = 0b1
+		Simulation.Wait(40)
+		Load(0, 0x00100093)
+		Load(1, 0x00100073)
+		system.run = 0b1
+
+		while (system.halted == 0b0 && cycles < 300) {
+			state {}
+		}
+
+		system.run = 0b0
+		assert system.halted == 0b1
+		assert retirementCycle != 0 && traceCycle == retirementCycle
+	}
+}

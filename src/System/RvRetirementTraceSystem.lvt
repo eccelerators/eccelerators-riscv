@@ -1,0 +1,48 @@
+namespace Eccelerators.RiscV.System
+
+using Eccelerators.RiscV.Core
+
+/**
+ * Typed system wrapper that preserves the complete retirement-trace interface.
+ * Use direct composition when no reusable system boundary is required.
+ */
+component RvRetirementTraceSystem<
+	CORE: IRv32RetirementTracePort & new(flip IRv32FetchPort, flip IRv32LoadStorePort)
+> : IRv32RetirementTracePort
+{
+	core: CORE
+
+	new(fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort)
+	{
+		core = new CORE(fetch, loadStore)
+	}
+
+	process Connect[]()
+	{
+		core.run = run
+		core.stepRequest = stepRequest
+		core.restartRequest = restartRequest
+		core.traceEnable = traceEnable
+		stepAck = core.stepAck
+		restartAck = core.restartAck
+		idle = core.idle
+		halted = core.halted
+		pc = core.pc
+		faultCause = core.faultCause
+		faultValue = core.faultValue
+		trapped = core.trapped
+		trapPc = core.trapPc
+		trapCause = core.trapCause
+		trapValue = core.trapValue
+		retired = core.retired
+		retiredPc = core.retiredPc
+		retiredInstruction = core.retiredInstruction
+		retiredRd = core.retiredRd
+		retiredValue = core.retiredValue
+		traceValid = core.traceValid
+		tracePc = core.tracePc
+		traceInstruction = core.traceInstruction
+		traceRd = core.traceRd
+		traceValue = core.traceValue
+	}
+}

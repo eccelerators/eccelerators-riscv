@@ -1,0 +1,32 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * Result-only custom RV32 instruction boundary. Decode and execute recognition are
+ * separate combinational views so a pipeline may decode a younger instruction while
+ * an older instruction completes. A recognized instruction uses rs1 and rs2 and
+ * writes rd. The engine owns dependencies, architectural commit, PC and retirement.
+ *
+ * One execution may be outstanding. A high request accepts the stable instruction
+ * and operands on an idle edge. Keep request high through completion; ready, result
+ * and fault outputs then remain stable until a low-request release edge. Hardware
+ * reset cancels work. Fault causes must describe synchronous exceptions; the
+ * engine supplies the retained instruction as the architectural fault value.
+ */
+interface IRv32CustomInstructionPort
+{
+	decodeInstruction: in logic[32]
+	decodeMatch: out logic
+	decodeConflict: out logic
+
+	executeInstruction: in logic[32]
+	executeMatch: out logic
+	executeConflict: out logic
+	request: in logic
+	left: in logic[32]
+	right: in logic[32]
+
+	ready: out logic
+	result: out logic[32]
+	fault: out logic
+	faultCause: out logic[32]
+}

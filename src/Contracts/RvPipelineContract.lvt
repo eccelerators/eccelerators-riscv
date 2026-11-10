@@ -21,7 +21,5 @@ component RvPipelineContract<READ_PORTS: int = 2, READ_LATENCY: int = 1,
 	/**
 	 * Checks the fixed pipeline protocol without adding runtime state.
 	 */
-	new()
-	{
-	}
+	new() {}
 }

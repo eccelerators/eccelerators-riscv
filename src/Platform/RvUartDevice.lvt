@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.Platform
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 using Livt.IO
 
 /**
@@ -34,14 +34,14 @@ component RvUartDevice<BASE: uint = 0x40000000> : IRv32LoadStorePort
 	process Serve()
 	{
 		while (request == 0b0) {
-			state {
-			}
+			state {}
 		}
 
 		var location: uint = 0
 		var store: bool = false
 		var lanes: logic[4] = 0
 		var payload: byte = 0
+
 		state {
 			location = address as uint
 			store = write == 0b1
@@ -58,21 +58,24 @@ component RvUartDevice<BASE: uint = 0x40000000> : IRv32LoadStorePort
 				error = 0b1
 			} elif (lanes == 0b0001) {
 				while (!uart.TryTransmit(payload)) {
-					state {
-					}
+					state {}
 				}
 			}
 		} elif (location == BASE + 4) {
 			var status: uint = 0
+
 			if (uart.GetTransmitSpace() > 0) {
 				status = status | 1
 			}
+
 			if (uart.GetReceiveCount() > 0) {
 				status = status | 2
 			}
+
 			if (uart.GetFrameErrorCount() > 0 || uart.GetReceiveOverflowCount() > 0) {
 				status = status | 4
 			}
+
 			readData = status as logic[32]
 		} elif (location == BASE + 8) {
 			var received: byte = 0
@@ -85,10 +88,11 @@ component RvUartDevice<BASE: uint = 0x40000000> : IRv32LoadStorePort
 		state {
 			ready = 0b1
 		}
+
 		while (request == 0b1) {
-			state {
-			}
+			state {}
 		}
+
 		state {
 			ready = 0b0
 			error = 0b0

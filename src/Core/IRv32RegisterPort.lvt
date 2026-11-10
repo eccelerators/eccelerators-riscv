@@ -1,0 +1,19 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * Exclusive, same-clock 32-register port. Enabled writes commit at the next edge;
+ * enabled reads update readData after that edge, for capture on the following edge.
+ * Disabled and write cycles hold readData. x0 reads zero and ignores writes.
+ * Payload is uninitialized until the engine writes x1..x31 during restart.
+ */
+interface IRv32RegisterPort
+{
+	// Single consumer owns all commands; no simultaneous read and write.
+	enable: in logic
+	write: in logic
+	index: in logic[5]
+	writeData: in logic[32]
+
+	// One-edge read response, no scheduled function dispatch.
+	readData: out logic[32]
+}

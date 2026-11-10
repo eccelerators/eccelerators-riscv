@@ -1,0 +1,20 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * One-clock-domain, one-outstanding aligned word instruction fetch, consumer to provider.
+ * Hold request/address stable until an edge with ready=1. That edge completes exactly
+ * once; sample instruction/error there, then deassert request for at least one edge.
+ * Provider must not accept again until request falls. No cancellation; software
+ * restart drains outstanding work. Fetch has no data, mask or write path.
+ */
+interface IRv32FetchPort
+{
+	// Consumer-owned request, stable throughout the transaction.
+	request: in logic
+	address: in logic[32]
+
+	// Provider-owned completion, held until request deasserts.
+	ready: out logic
+	error: out logic
+	instruction: out logic[32]
+}

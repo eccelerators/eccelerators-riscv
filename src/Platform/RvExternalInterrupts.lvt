@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.Platform
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 
 /**
  * Platform-owned level aggregator in the inherited clock/reset domain. Inputs
@@ -84,9 +84,7 @@ component RvExternalInterrupts<SOURCES: int = 2, BASE: uint = 0x40000200> : IRv3
 			{
 				selected = (sources as uint) & enabled
 			}
-			_ =>
-			{
-			}
+			_ => {}
 		}
 	}
 

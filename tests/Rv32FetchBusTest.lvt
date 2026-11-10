@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.System
 
@@ -85,6 +85,7 @@ component Rv32FetchBusTest
 			bus.request = 0b0
 			defBus.request = 0b0
 		}
+
 		Simulation.Wait(4)
 
 		ProgramSlots()
@@ -164,6 +165,7 @@ component Rv32FetchBusTest
 			bus.request = 0b0
 			defBus.request = 0b0
 		}
+
 		Simulation.Wait(4)
 
 		ProgramSlots()
@@ -202,6 +204,7 @@ component Rv32FetchBusTest
 			bus.request = 0b0
 			defBus.request = 0b0
 		}
+
 		Simulation.Wait(4)
 
 		ProgramDefaultSlots()

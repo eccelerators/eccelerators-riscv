@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.Presets
 
@@ -323,8 +323,7 @@ component Rv32PipelineControlTest
 			core.run = 0b1
 
 			for (var tick: uint = 0; tick < offset; tick++) {
-				state {
-				}
+				state {}
 			}
 
 			core.run = 0b0

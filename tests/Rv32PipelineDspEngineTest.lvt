@@ -1,7 +1,8 @@
 namespace Eccelerators.RiscV.Tests
 
+using Eccelerators.RiscV.Isa
 using Eccelerators.RiscV.Pipeline
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.Presets
 using Livt.IO
@@ -16,7 +17,7 @@ component Rv32PipelineDspEngineTest
 	// Owned platform, preset and architectural observation scoreboard.
 	fetch: RvFetchRom<256, 8>
 	loadStore: RvLoadStoreRam<256, 8>
-	core: Rv32iZmmulPipelineCore<0, MemoryStyle.Block, true>
+	core: Rv32iZmmulPipelineCore<Rv32DspMultiplier>
 	observed: uint[32]
 	retireCount: uint
 	clearObservation: bool
@@ -29,7 +30,7 @@ component Rv32PipelineDspEngineTest
 	{
 		fetch = new RvFetchRom<256, 8>()
 		loadStore = new RvLoadStoreRam<256, 8>()
-		core = new Rv32iZmmulPipelineCore<0, MemoryStyle.Block, true>(fetch, loadStore)
+		core = new Rv32iZmmulPipelineCore<Rv32DspMultiplier>(fetch, loadStore)
 	}
 
 	/**
@@ -84,8 +85,7 @@ component Rv32PipelineDspEngineTest
 		core.run = 0b1
 
 		while (core.halted == 0b0 && cycles - start < 20000) {
-			state {
-			}
+			state {}
 		}
 
 		core.run = 0b0

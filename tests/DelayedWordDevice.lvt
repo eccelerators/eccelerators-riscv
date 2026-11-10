@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 
 /**
  * Test-only one-word MMIO device. Completion is externally delayed, accesses at

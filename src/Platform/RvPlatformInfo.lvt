@@ -1,0 +1,96 @@
+namespace Eccelerators.RiscV.Platform
+
+using Eccelerators.RiscV.Core
+
+/**
+ * Read-only description of one concrete processor and platform composition.
+ * Software reads aligned 32-bit words at BASE+0 through BASE+24. Values are
+ * compile-time facts supplied by the composition root; this device neither
+ * discovers hardware nor configures the core. Writes and unsupported offsets
+ * complete as errors without effects. One response is held until request falls.
+ */
+component RvPlatformInfo<BASE: uint = 0x40000400, COMPOSITION_ID: uint = 0,
+	ISA_CAPABILITIES: uint = RvPlatformInfoValues.RV32I,
+	ENGINE: uint = RvPlatformInfoValues.ENGINE_SEQUENTIAL,
+	MULTIPLIER: uint = RvPlatformInfoValues.MULTIPLIER_NONE,
+	REGISTER_FILE: uint = RvPlatformInfoValues.REGISTER_FILE_BLOCK,
+	CLOCK_HZ: uint = 50000000> : IRv32LoadStorePort
+{
+	static assert (BASE & 31) == 0 && BASE <= 0xffffffe0, "Platform information base must fit an aligned 32-byte window"
+	static assert (ISA_CAPABILITIES & RvPlatformInfoValues.RV32I) != 0, "Platform information must describe an RV32I composition"
+	static assert ENGINE == RvPlatformInfoValues.ENGINE_SEQUENTIAL
+		|| ENGINE == RvPlatformInfoValues.ENGINE_PIPELINE, "Unknown execution engine"
+	static assert MULTIPLIER <= RvPlatformInfoValues.MULTIPLIER_DSP, "Unknown multiplier implementation"
+	static assert REGISTER_FILE <= RvPlatformInfoValues.REGISTER_FILE_BLOCK, "Unknown register-file implementation"
+	static assert CLOCK_HZ > 0, "Platform clock frequency must be positive"
+
+	// Held response state; this read-only device owns no architectural state.
+	completed: bool
+	responseError: logic
+	responseData: logic[32]
+
+	// Combinational request decode sampled by Advance.
+	offset: uint
+	validRead: bool
+	selected: uint
+
+	/**
+	 * Decodes the immutable register map and publishes the held response.
+	 */
+	process Decode[]()
+	{
+		offset = (address as uint) - BASE
+		validRead = write == 0b0 && (address as uint) >= BASE
+			&& offset <= RvPlatformInfoValues.CLOCK_HZ_OFFSET && (offset & 3) == 0
+		selected = 0
+
+		match (offset)
+		{
+			RvPlatformInfoValues.COMPOSITION_ID_OFFSET =>
+			{
+				selected = COMPOSITION_ID
+			}
+			RvPlatformInfoValues.ISA_CAPABILITIES_OFFSET =>
+			{
+				selected = ISA_CAPABILITIES
+			}
+			RvPlatformInfoValues.ENGINE_OFFSET =>
+			{
+				selected = ENGINE
+			}
+			RvPlatformInfoValues.MULTIPLIER_OFFSET =>
+			{
+				selected = MULTIPLIER
+			}
+			RvPlatformInfoValues.REGISTER_FILE_OFFSET =>
+			{
+				selected = REGISTER_FILE
+			}
+			RvPlatformInfoValues.CLOCK_HZ_OFFSET =>
+			{
+				selected = CLOCK_HZ
+			}
+			_ => {}
+		}
+
+		ready = completed as logic
+		error = responseError
+		readData = responseData
+	}
+
+	/**
+	 * Accepts one request and snapshots its immutable value exactly once.
+	 */
+	process Advance()
+	{
+		state {
+			if (!completed && request == 0b1) {
+				completed = true
+				responseError = (!validRead) as logic
+				responseData = selected as logic[32]
+			} elif (completed && request == 0b0) {
+				completed = false
+			}
+		}
+	}
+}

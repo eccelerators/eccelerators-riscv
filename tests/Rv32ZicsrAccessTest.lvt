@@ -1,5 +1,6 @@
 namespace Eccelerators.RiscV.Tests
 
+using Eccelerators.RiscV.Isa
 using Eccelerators.RiscV.Machine
 
 /**

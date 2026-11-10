@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.System
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Storage
 
 /**
@@ -8,7 +8,7 @@ using Eccelerators.RiscV.Storage
  * Provision only while idle with execution paused. Execution controls are driven exclusively through this wrapper.
  * Use RvSystem with explicit devices for a custom address map.
  */
-component RvMemorySystem<TCORE : IRv32ControlPort & new(flip IRv32FetchPort, flip IRv32LoadStorePort)> : IRv32ControlPort
+component RvMemorySystem<TCORE: IRv32ControlPort & new(flip IRv32FetchPort, flip IRv32LoadStorePort)> : IRv32ControlPort
 {
 	// Host provisioning of the owned default devices.
 	public fetchProgramWrite: in logic

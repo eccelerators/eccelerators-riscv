@@ -1,0 +1,367 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Pipeline
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Storage
+
+/**
+ * Sequential qualification for result-only custom instruction composition.
+ */
+@Test
+component Rv32SequentialCustomInstructionTest
+{
+	fetch: RvFetchRom<256, 8>
+	loadStore: RvLoadStoreRam<256, 8>
+	core: Rv32SequentialCore<
+		Rv32RegisterBank,
+		Rv32iDecoder,
+		Rv32iIntegerUnit,
+		Rv32NoMultiplier,
+		Rv32NoCsrs,
+		Rv32XqdivInstruction
+	>
+	observed: uint[32]
+	retireCount: uint
+	clearObservation: bool
+	cycles: uint
+
+	new()
+	{
+		fetch = new RvFetchRom<256, 8>()
+		loadStore = new RvLoadStoreRam<256, 8>()
+		core = new Rv32SequentialCore<
+			Rv32RegisterBank,
+			Rv32iDecoder,
+			Rv32iIntegerUnit,
+			Rv32NoMultiplier,
+			Rv32NoCsrs,
+			Rv32XqdivInstruction
+		>(fetch, loadStore)
+	}
+
+	process Observe()
+	{
+		state {
+			cycles++
+
+			if (clearObservation) {
+				retireCount = 0
+			} elif (core.retired == 0b1) {
+				retireCount++
+
+				if (core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[8]
+			fetch.programData = word as logic[32]
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+	}
+
+	fn Prepare()
+	{
+		core.run = 0b0
+		Simulation.Wait(40)
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		var elapsed: uint = 0
+
+		while (core.restartAck != ticket && elapsed < 150) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.restartAck == ticket && core.idle == 0b1
+		clearObservation = true
+		Simulation.Wait(3)
+		clearObservation = false
+	}
+
+	fn Step()
+	{
+		var ticket = ~core.stepAck
+		core.stepRequest = ticket
+		var elapsed: uint = 0
+
+		while (core.stepAck != ticket && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.stepAck == ticket && core.idle == 0b1
+	}
+
+	@Test
+	fn ExecutesDependenciesAndFaults()
+	{
+		Prepare()
+		Load(0, 0x06400093) // addi x1, x0, 100
+		Load(1, 0x00700113) // addi x2, x0, 7
+		Load(2, 0x0020818b) // xqdiv x3, x1, x2
+		Load(3, 0x00118213) // addi x4, x3, 1
+		Load(4, 0x0020800b) // xqdiv x0, x1, x2
+		Load(5, 0x00000293) // addi x5, x0, 0
+		Load(6, 0x0050830b) // xqdiv x6, x1, x5: fault
+		core.run = 0b1
+		var start = cycles
+
+		while (core.halted == 0b0 && cycles - start < 1000) {
+			state {}
+		}
+
+		core.run = 0b0
+		assert core.halted == 0b1
+		assert core.faultCause as uint == Rv32iOperations.ILLEGAL_INSTRUCTION
+		assert core.faultValue as uint == 0x0050830b
+		assert observed[3] == 14 && observed[4] == 15
+		assert retireCount == 6
+	}
+
+	@Test
+	fn StepsAndDrainsBeforeRestart()
+	{
+		Prepare()
+		Load(0, 0x06400093)
+		Load(1, 0x00700113)
+		Load(2, 0x0020818b)
+		Load(3, 0x00100073)
+		Step()
+		Step()
+		var stepTicket = ~core.stepAck
+		core.stepRequest = stepTicket
+		Simulation.Wait(8)
+		var restartTicket = ~core.restartAck
+		core.restartRequest = restartTicket
+		var elapsed: uint = 0
+
+		while (core.restartAck != restartTicket && elapsed < 400) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.restartAck == restartTicket
+		assert core.idle == 0b1 && core.halted == 0b0 && core.pc == 0
+	}
+}
+
+/**
+ * Pipeline qualification for result-only custom instruction composition.
+ */
+@Test
+component Rv32PipelineCustomInstructionTest
+{
+	fetch: RvFetchRom<256, 8>
+	loadStore: RvLoadStoreRam<256, 8>
+	core: Rv32PipelineCore<
+		Rv32DualReadRegisterBank,
+		Rv32iDecoder,
+		Rv32iIntegerUnit,
+		Rv32NoMultiplier,
+		Rv32NoCsrs,
+		Rv32XqdivInstruction
+	>
+	observed: uint[32]
+	retireCount: uint
+	clearObservation: bool
+	cycles: uint
+
+	new()
+	{
+		fetch = new RvFetchRom<256, 8>()
+		loadStore = new RvLoadStoreRam<256, 8>()
+		core = new Rv32PipelineCore<
+			Rv32DualReadRegisterBank,
+			Rv32iDecoder,
+			Rv32iIntegerUnit,
+			Rv32NoMultiplier,
+			Rv32NoCsrs,
+			Rv32XqdivInstruction
+		>(fetch, loadStore)
+	}
+
+	process Observe()
+	{
+		state {
+			cycles++
+
+			if (clearObservation) {
+				retireCount = 0
+			} elif (core.retired == 0b1) {
+				retireCount++
+
+				if (core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[8]
+			fetch.programData = word as logic[32]
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+	}
+
+	fn Prepare()
+	{
+		core.run = 0b0
+		Simulation.Wait(40)
+		var ticket = ~core.restartAck
+		core.restartRequest = ticket
+		var elapsed: uint = 0
+
+		while (core.restartAck != ticket && elapsed < 150) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.restartAck == ticket && core.idle == 0b1
+		clearObservation = true
+		Simulation.Wait(3)
+		clearObservation = false
+	}
+
+	fn Step()
+	{
+		var ticket = ~core.stepAck
+		core.stepRequest = ticket
+		var elapsed: uint = 0
+
+		while (core.stepAck != ticket && elapsed < 300) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.stepAck == ticket && core.idle == 0b1
+	}
+
+	@Test
+	fn ExecutesDependenciesAndFaults()
+	{
+		Prepare()
+		Load(0, 0x06400093) // addi x1, x0, 100
+		Load(1, 0x00700113) // addi x2, x0, 7
+		Load(2, 0x0020818b) // xqdiv x3, x1, x2
+		Load(3, 0x00118213) // addi x4, x3, 1
+		Load(4, 0x0020800b) // xqdiv x0, x1, x2
+		Load(5, 0x00000293) // addi x5, x0, 0
+		Load(6, 0x0050830b) // xqdiv x6, x1, x5: fault
+		core.run = 0b1
+		var start = cycles
+
+		while (core.halted == 0b0 && cycles - start < 1000) {
+			state {}
+		}
+
+		core.run = 0b0
+		assert core.halted == 0b1
+		assert core.faultCause as uint == Rv32iOperations.ILLEGAL_INSTRUCTION
+		assert core.faultValue as uint == 0x0050830b
+		assert observed[3] == 14 && observed[4] == 15
+		assert retireCount == 6
+	}
+
+	@Test
+	fn StepsAndDrainsBeforeRestart()
+	{
+		Prepare()
+		Load(0, 0x06400093)
+		Load(1, 0x00700113)
+		Load(2, 0x0020818b)
+		Load(3, 0x00100073)
+		Step()
+		Step()
+		var stepTicket = ~core.stepAck
+		core.stepRequest = stepTicket
+		Simulation.Wait(8)
+		var restartTicket = ~core.restartAck
+		core.restartRequest = restartTicket
+		var elapsed: uint = 0
+
+		while (core.restartAck != restartTicket && elapsed < 400) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.restartAck == restartTicket
+		assert core.idle == 0b1 && core.halted == 0b0 && core.pc == 0
+	}
+}
+
+/**
+ * Verifies recursive custom-provider matching and conflict rejection independently
+ * of engine sequencing.
+ */
+@Test
+component Rv32CustomInstructionPairTest
+{
+	conflicting: Rv32CustomInstructionPair<Rv32XqdivInstruction, Rv32XqdivInstruction>
+	single: Rv32CustomInstructionPair<Rv32XqdivInstruction, Rv32NoCustomInstruction>
+	instruction: logic[32]
+
+	new()
+	{
+		conflicting = new Rv32CustomInstructionPair<
+			Rv32XqdivInstruction,
+			Rv32XqdivInstruction
+		>()
+		single = new Rv32CustomInstructionPair<
+			Rv32XqdivInstruction,
+			Rv32NoCustomInstruction
+		>()
+	}
+
+	process Connect[]()
+	{
+		conflicting.decodeInstruction = instruction
+		conflicting.executeInstruction = instruction
+		conflicting.request = 0b0
+		conflicting.left = 0
+		conflicting.right = 0
+		single.decodeInstruction = instruction
+		single.executeInstruction = instruction
+		single.request = 0b0
+		single.left = 0
+		single.right = 0
+	}
+
+	@Test
+	fn RejectsOverlappingEncodings()
+	{
+		instruction = 0x0020818b
+		Simulation.Wait(2)
+		assert conflicting.decodeMatch == 0b0
+		assert conflicting.decodeConflict == 0b1
+		assert conflicting.executeMatch == 0b0
+		assert conflicting.executeConflict == 0b1
+		assert single.decodeMatch == 0b1
+		assert single.decodeConflict == 0b0
+	}
+}

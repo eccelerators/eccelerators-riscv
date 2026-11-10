@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.System
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 
 /**
  * Owns a selected core and borrows the caller's fetch and load/store providers.
@@ -8,7 +8,7 @@ using Eccelerators.RiscV.Sequential
  * All components share a clock/reset domain. This wrapper adds no registers
  * or arbitration. Use RvMachineSystem to expose machine interrupt inputs.
  */
-component RvSystem<TCORE : IRv32ControlPort & new(flip IRv32FetchPort, flip IRv32LoadStorePort)> : IRv32ControlPort
+component RvSystem<TCORE: IRv32ControlPort & new(flip IRv32FetchPort, flip IRv32LoadStorePort)> : IRv32ControlPort
 {
 	// Owned core; execution controls have one writer in Connect.
 	core: TCORE

@@ -1,0 +1,15 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * Optional standard-control extension that exposes a gated retirement trace.
+ * Trace outputs are combinational views of the underlying retirement event.
+ */
+interface IRv32RetirementTracePort : IRv32ControlPort
+{
+	traceEnable: in logic
+	traceValid: out logic
+	tracePc: out logic[32]
+	traceInstruction: out logic[32]
+	traceRd: out logic[5]
+	traceValue: out logic[32]
+}

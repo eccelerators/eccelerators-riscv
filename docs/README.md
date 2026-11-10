@@ -8,7 +8,9 @@
 | [Integration](integration.md) | Memory protocol, register storage, reset and controls |
 | [Machine support](machine.md) | CSR map, exceptions, MRET and interrupts |
 | [Peripherals](peripherals.md) | Timer and external interrupt components |
+| [Platform information](platform-info.md) | Software-visible composition identity and implementation choices |
 | [Custom components](custom-components.md) | Explicit composition and extension contracts |
+| [ISA extension boundaries](isa-extensions.md) | Reuse map for standard and custom extensions |
 | [Testing](testing.md) | Functional tests and release validation |
 
 Declaration comments in [src](../src) specify the detailed signal and timing

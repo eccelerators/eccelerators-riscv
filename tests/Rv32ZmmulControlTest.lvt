@@ -1,6 +1,7 @@
 namespace Eccelerators.RiscV.Tests
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.Presets
 
@@ -13,7 +14,7 @@ component Rv32ZmmulControlTest
 	// Owned instruction storage, delayable device, core and retirement observations.
 	fetch: RvFetchRom<64, 6>
 	loadStore: DelayedWordDevice
-	core: Rv32iZmmulSequentialCore
+	core: Rv32iZmmulSequentialCore<Rv32IterativeMultiplier>
 	clearObservation: bool
 	count: uint
 	lastValue: uint
@@ -25,7 +26,7 @@ component Rv32ZmmulControlTest
 	{
 		fetch = new RvFetchRom<64, 6>()
 		loadStore = new DelayedWordDevice()
-		core = new Rv32iZmmulSequentialCore(fetch, loadStore)
+		core = new Rv32iZmmulSequentialCore<Rv32IterativeMultiplier>(fetch, loadStore)
 	}
 
 	/**

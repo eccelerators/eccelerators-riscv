@@ -2,6 +2,39 @@
 
 All notable changes to `Eccelerators.RiscV` are recorded here.
 
+## Unreleased
+
+### Added
+
+- Add the read-only `RvPlatformInfo` device and stable value vocabulary for
+  software-visible composition identity, ISA capabilities, execution engine,
+  multiplier, register-file implementation and platform clock frequency.
+- Add `IRv32IntegerPort` as the supported zero-state integer
+  datapath boundary used by both sequential and pipeline engines.
+- Add the general owned-provider `Rv32Core` composition, thin inherited sequential
+  and pipeline specializations, a variable-latency custom-instruction port,
+  recursive provider pairing, and the `Rv32XqdivInstruction` example.
+- Add typed retirement-trace core and system wrappers as the custom-control
+  composition example.
+
+### Changed
+
+- Move engine-facing signal contracts to `Core` and standard instruction decode,
+  semantics and providers to the new `Isa` namespace. `Sequential` and `Pipeline`
+  contain their controllers and general owned-provider compositions.
+- Make both engines consume the integer interface and qualify an independent
+  implementation through explicit sequential and pipeline compositions.
+- Bind sequential or pipeline scheduling and its register-port contract through
+  thin `Rv32Core` specializations instead of duplicating composition logic.
+- Replace the Zmmul `DSP_MULTIPLY` Boolean with an explicit constrained multiplier
+  provider type, and widen decoded operations to a five-bit family plus eight-bit
+  provider-local operation.
+
+### Removed
+
+- Remove the unused scheduled-call `IRvDecoder` and `IRvExecutionUnit` contracts;
+  supported extension paths now correspond to signal interfaces with consumers.
+
 ## [0.3.0] - 2026-11-08
 
 ### Added

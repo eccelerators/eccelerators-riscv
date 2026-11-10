@@ -1,0 +1,354 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Pipeline
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Machine
+
+/**
+ * Independent combinational implementation used to prove interface substitution.
+ * It deliberately implements the operation match directly instead of delegating to
+ * Rv32iSemantics, so engine tests exercise a distinct datapath component.
+ */
+component Rv32AlternateIntegerUnit : IRv32IntegerPort
+{
+	public const CAPABILITIES: uint = Rv32iOperations.INTEGER_CAPABILITY
+
+	/**
+	 * Produces the selected result without retained state or scheduled calls.
+	 */
+	process Calculate[]()
+	{
+		var leftValue = left as uint
+		var rightValue = right as uint
+		var amount = (rightValue & 31) as int
+		var shifted: uint = 0
+		result = 0
+
+		match (operation as uint)
+		{
+			Rv32iOperations.ADD =>
+			{
+				result = (leftValue + rightValue) as logic[32]
+			}
+			Rv32iOperations.SUB =>
+			{
+				result = (leftValue - rightValue) as logic[32]
+			}
+			Rv32iOperations.SLL =>
+			{
+				result = (leftValue << amount) as logic[32]
+			}
+			Rv32iOperations.SLT =>
+			{
+				if ((leftValue ^ 0x80000000) < (rightValue ^ 0x80000000)) {
+					result = 1
+				}
+			}
+			Rv32iOperations.SLTU =>
+			{
+				if (leftValue < rightValue) {
+					result = 1
+				}
+			}
+			Rv32iOperations.XOR =>
+			{
+				result = (leftValue ^ rightValue) as logic[32]
+			}
+			Rv32iOperations.SRL =>
+			{
+				result = (leftValue >> amount) as logic[32]
+			}
+			Rv32iOperations.SRA =>
+			{
+				shifted = leftValue >> amount
+
+				if (amount != 0 && (leftValue & 0x80000000) != 0) {
+					shifted = shifted | (0xffffffff << (32 - amount))
+				}
+
+				result = shifted as logic[32]
+			}
+			Rv32iOperations.OR =>
+			{
+				result = (leftValue | rightValue) as logic[32]
+			}
+			Rv32iOperations.AND =>
+			{
+				result = (leftValue & rightValue) as logic[32]
+			}
+			_ =>
+			{
+				result = 0
+			}
+		}
+	}
+}
+
+/**
+ * Explicit sequential composition using the alternate integer provider.
+ */
+@Test
+component Rv32SequentialIntegerSubstitutionTest
+{
+	registers: Rv32RegisterBank
+	fetch: RvFetchRom<256, 8>
+	loadStore: RvLoadStoreRam<256, 8>
+	decoder: Rv32iDecoder
+	integer: Rv32AlternateIntegerUnit
+	noMultiplier: Rv32NoMultiplier
+	noCsrs: Rv32NoCsrs
+	custom: Rv32NoCustomInstruction
+	engine: Rv32SequentialEngine
+	observed: uint[32]
+	retireCount: uint
+
+	new()
+	{
+		registers = new Rv32RegisterBank()
+		fetch = new RvFetchRom<256, 8>()
+		loadStore = new RvLoadStoreRam<256, 8>()
+		decoder = new Rv32iDecoder()
+		integer = new Rv32AlternateIntegerUnit()
+		noMultiplier = new Rv32NoMultiplier()
+		noCsrs = new Rv32NoCsrs()
+		custom = new Rv32NoCustomInstruction()
+		engine = new Rv32SequentialEngine(registers, fetch, loadStore, decoder,
+			integer, noMultiplier, noCsrs, custom)
+	}
+
+	process Observe()
+	{
+		state {
+			if (engine.retired == 0b1) {
+				retireCount++
+
+				if (engine.retiredRd != 0) {
+					observed[engine.retiredRd as uint] = engine.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[8]
+			fetch.programData = word as logic[32]
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+	}
+
+	@Test
+	fn TestArithmeticDependenciesAndRetirement()
+	{
+		Simulation.Wait(40)
+		assert engine.idle == 0b1
+		LoadProgram()
+		RunAndCheck()
+	}
+
+	fn LoadProgram()
+	{
+		Load(0, 0xfff00093)
+		Load(1, 0x01f00113)
+		Load(2, 0x800001b7)
+		Load(3, 0x12345217)
+		Load(4, 0x07b00013)
+		Load(5, 0x00208233)
+		Load(6, 0xfff18613)
+		Load(7, 0x002092b3)
+		Load(8, 0x01f19693)
+		Load(9, 0x0020a333)
+		Load(10, 0xfff1a713)
+		Load(11, 0x0020b3b3)
+		Load(12, 0xfff1b793)
+		Load(13, 0x0020c433)
+		Load(14, 0xfff1c813)
+		Load(15, 0x0020d4b3)
+		Load(16, 0x01f1d893)
+		Load(17, 0x0020e533)
+		Load(18, 0xfff1e913)
+		Load(19, 0x0020f5b3)
+		Load(20, 0xfff1f993)
+		Load(21, 0x40118a33)
+		Load(22, 0x4021dab3)
+		Load(23, 0x41f1db13)
+		Load(24, 0x4001db93)
+		Load(25, 0x02000c13)
+		Load(26, 0x01809cb3)
+		Load(27, 0x4181dd33)
+		Load(28, 0x0ff0000f)
+		Load(29, 0x8330808f)
+		Load(30, 0x00100073)
+	}
+
+	fn RunAndCheck()
+	{
+		engine.run = 0b1
+		var elapsed: uint = 0
+
+		while (engine.halted == 0b0 && elapsed < 20000) {
+			state {
+				elapsed++
+			}
+		}
+
+		engine.run = 0b0
+		assert engine.halted == 0b1
+		assert engine.faultCause == 3
+		assert engine.pc == 120
+		assert retireCount == 30
+		assert observed[4] == 0x0000001e
+		assert observed[5] == 0x80000000
+		assert observed[6] == 1
+		assert observed[8] == 0xffffffe0
+		assert observed[9] == 1
+		assert observed[10] == 0xffffffff
+		assert observed[11] == 0x0000001f
+		assert observed[20] == 0x80000001
+		assert observed[21] == 0xffffffff
+		assert observed[22] == 0xffffffff
+		assert observed[23] == 0x80000000
+		assert elapsed < 20000
+	}
+}
+
+/**
+ * Explicit pipeline composition using the same alternate integer provider.
+ */
+@Test
+component Rv32PipelineIntegerSubstitutionTest
+{
+	registers: Rv32DualReadRegisterBank
+	fetch: RvFetchRom<256, 8>
+	loadStore: RvLoadStoreRam<256, 8>
+	decoder: Rv32iDecoder
+	integer: Rv32AlternateIntegerUnit
+	noMultiplier: Rv32NoMultiplier
+	noCsrs: Rv32NoCsrs
+	custom: Rv32NoCustomInstruction
+	engine: Rv32PipelineEngine
+	observed: uint[32]
+	retireCount: uint
+
+	new()
+	{
+		registers = new Rv32DualReadRegisterBank()
+		fetch = new RvFetchRom<256, 8>()
+		loadStore = new RvLoadStoreRam<256, 8>()
+		decoder = new Rv32iDecoder()
+		integer = new Rv32AlternateIntegerUnit()
+		noMultiplier = new Rv32NoMultiplier()
+		noCsrs = new Rv32NoCsrs()
+		custom = new Rv32NoCustomInstruction()
+		engine = new Rv32PipelineEngine(registers, fetch, loadStore, decoder,
+			integer, noMultiplier, noCsrs, custom)
+	}
+
+	process Observe()
+	{
+		state {
+			if (engine.retired == 0b1) {
+				retireCount++
+
+				if (engine.retiredRd != 0) {
+					observed[engine.retiredRd as uint] = engine.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[8]
+			fetch.programData = word as logic[32]
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+	}
+
+	@Test
+	fn TestArithmeticHazardsAndRetirement()
+	{
+		Simulation.Wait(40)
+		assert engine.idle == 0b1
+		LoadProgram()
+		RunAndCheck()
+	}
+
+	fn LoadProgram()
+	{
+		Load(0, 0xfff00093)
+		Load(1, 0x01f00113)
+		Load(2, 0x800001b7)
+		Load(3, 0x12345217)
+		Load(4, 0x07b00013)
+		Load(5, 0x00208233)
+		Load(6, 0xfff18613)
+		Load(7, 0x002092b3)
+		Load(8, 0x01f19693)
+		Load(9, 0x0020a333)
+		Load(10, 0xfff1a713)
+		Load(11, 0x0020b3b3)
+		Load(12, 0xfff1b793)
+		Load(13, 0x0020c433)
+		Load(14, 0xfff1c813)
+		Load(15, 0x0020d4b3)
+		Load(16, 0x01f1d893)
+		Load(17, 0x0020e533)
+		Load(18, 0xfff1e913)
+		Load(19, 0x0020f5b3)
+		Load(20, 0xfff1f993)
+		Load(21, 0x40118a33)
+		Load(22, 0x4021dab3)
+		Load(23, 0x41f1db13)
+		Load(24, 0x4001db93)
+		Load(25, 0x02000c13)
+		Load(26, 0x01809cb3)
+		Load(27, 0x4181dd33)
+		Load(28, 0x0ff0000f)
+		Load(29, 0x8330808f)
+		Load(30, 0x00100073)
+	}
+
+	fn RunAndCheck()
+	{
+		engine.run = 0b1
+		var elapsed: uint = 0
+
+		while (engine.halted == 0b0 && elapsed < 20000) {
+			state {
+				elapsed++
+			}
+		}
+
+		engine.run = 0b0
+		assert engine.halted == 0b1
+		assert engine.faultCause == 3
+		assert engine.pc == 120
+		assert retireCount == 30
+		assert observed[4] == 0x0000001e
+		assert observed[5] == 0x80000000
+		assert observed[6] == 1
+		assert observed[8] == 0xffffffe0
+		assert observed[9] == 1
+		assert observed[10] == 0xffffffff
+		assert observed[11] == 0x0000001f
+		assert observed[20] == 0x80000001
+		assert observed[21] == 0xffffffff
+		assert observed[22] == 0xffffffff
+		assert observed[23] == 0x80000000
+		assert elapsed < 20000
+	}
+}

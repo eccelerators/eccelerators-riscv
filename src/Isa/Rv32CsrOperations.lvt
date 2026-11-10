@@ -1,0 +1,16 @@
+namespace Eccelerators.RiscV.Isa
+
+/**
+ * Zicsr decode vocabulary; CSR addresses and machine state are separate contracts.
+ */
+public class Rv32CsrOperations
+{
+	// Operation-family bit, packed kind, SYSTEM opcode and CSR operation encodings.
+	public const CAPABILITY: uint = 16
+	public const KIND: uint = 14
+	public const OPCODE: uint = 0x73
+	public const WRITE: uint = 1
+	public const SET: uint = 2
+	public const CLEAR: uint = 3
+	public const IMMEDIATE_BIT: uint = 4
+}

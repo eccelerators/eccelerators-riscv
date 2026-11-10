@@ -1,6 +1,6 @@
 namespace Eccelerators.RiscV.Machine
 
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 
 /**
  * Execution control plus synchronous persistent machine interrupt levels.

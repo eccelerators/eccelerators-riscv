@@ -8,7 +8,9 @@ borrowed providers must outlive the core and share its clock/reset domain.
 | Namespace | Responsibility |
 |---|---|
 | `Presets` | Named sequential and pipeline assemblies |
-| `Sequential` | Sequential ordering, decode/integer/multiply ports and units, memory/control contracts |
+| `Core` | Engine-facing signal contracts and generic composition helpers |
+| `Isa` | Standard encodings, operation vocabularies, semantics, decoders and execution providers |
+| `Sequential` | Sequential instruction ordering and architectural commit |
 | `Pipeline` | Pipeline ordering and physical timing checks |
 | `Storage` | Synchronous register banks and fetch/data memories |
 | `Machine` | Zicsr composition, machine CSR state, trap vocabulary and machine instruction decoding |
@@ -29,6 +31,7 @@ classDiagram
     class Decoder
     class IntegerUnit
     class Multiplier
+    class CustomInstruction
     class ZicsrComposition
     class FetchPort {
         <<interface>>
@@ -41,11 +44,13 @@ classDiagram
     NamedCore *-- Decoder
     NamedCore *-- IntegerUnit
     NamedCore *-- Multiplier
+    NamedCore *-- CustomInstruction
     NamedCore *-- ZicsrComposition
     Engine --> RegisterBank : borrows
     Engine --> Decoder : borrows
     Engine --> IntegerUnit : borrows
     Engine --> Multiplier : borrows
+    Engine --> CustomInstruction : borrows
     Engine --> ZicsrComposition : borrows
     Engine --> FetchPort : instructions
     Engine --> LoadStorePort : data
@@ -62,11 +67,24 @@ overlapping pipeline need different scheduling and hazards. The pipeline uses
 `IRv32DualReadRegisterPort`; the sequential engine uses `IRv32RegisterPort`.
 Neither interface implies arbitrary interchangeability.
 
+Both engines borrow `IRv32IntegerPort`. Its operation, operand and
+result signals form a zero-state combinational path sampled at the engine's
+execution edge. A provider may replace `Rv32iIntegerUnit` only when it preserves
+that timing and implements every operation declared by the composition. A unit
+that needs acceptance or completion cycles requires a separate protocol.
+
 `RvOperationCoverage`, `RvTimingContract` and `RvPipelineContract` check declared
 operation coverage and timing requirements during elaboration. They add no runtime
 registry. A passing assertion cannot prove provider behavior or arbitrary wiring;
 functional tests and implementation reports are still required.
 
-The scheduled reference cores and their method-style buses have been removed.
+The scheduled reference cores and the unused method-style decoder/execution
+contracts have been removed. Supported extension points are the signal interfaces
+used by the engines and systems. `Rv32Core` owns providers selected through
+constrained generic types. `Rv32SequentialCore` and `Rv32PipelineCore` inherit it
+as zero-body specializations that bind the appropriate engine and register-port
+contract. They preserve the distinct single-read sequential and dual-read pipeline
+interfaces without duplicating ownership or forwarding logic. Named presets bind
+qualified ISA combinations and retain their coverage and timing checks.
 Applications control execution through run/step/restart handshakes; see
 [system composition](system.md) for complete device ownership and routing.

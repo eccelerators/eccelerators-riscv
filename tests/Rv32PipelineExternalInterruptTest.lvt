@@ -1,7 +1,8 @@
 namespace Eccelerators.RiscV.Tests
 
+using Eccelerators.RiscV.Isa
 using Eccelerators.RiscV.Pipeline
-using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Storage
 using Eccelerators.RiscV.Presets
 using Eccelerators.RiscV.Machine
@@ -16,6 +17,7 @@ component Rv32PipelineExternalInterruptTest
 	// Owned platform, explicit execution composition and architectural scoreboard.
 	fetch: RvFetchRom<512, 9>
 	loadStore: PipelineWordDevice
+	custom: Rv32NoCustomInstruction
 	core: Rv32PipelineEngine<0, true>
 	registers: Rv32DualReadRegisterBank
 	baseDecoder: Rv32iZmmulDecoder
@@ -49,7 +51,8 @@ component Rv32PipelineExternalInterruptTest
 		decoder = new Rv32MachineDecoder(zicsr)
 		integer = new Rv32iIntegerUnit()
 		multiplier = new Rv32DspMultiplier()
-		core = new Rv32PipelineEngine<0, true>(registers, fetch, loadStore, decoder, integer, multiplier, zicsr)
+		custom = new Rv32NoCustomInstruction()
+		core = new Rv32PipelineEngine<0, true>(registers, fetch, loadStore, decoder, integer, multiplier, zicsr, custom)
 	}
 
 	/**

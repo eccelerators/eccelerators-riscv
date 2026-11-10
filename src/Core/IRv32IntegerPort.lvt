@@ -1,0 +1,18 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * Stateless single-cycle RV32 integer datapath in the consumer's clock domain.
+ * The engine drives operation and operands continuously and samples result at its
+ * execution edge. The provider adds no acceptance, completion or retained state;
+ * multicycle execution uses a separate request/completion contract.
+ */
+interface IRv32IntegerPort
+{
+	// Integer operation and operands selected by the exclusive engine owner.
+	operation: in logic[4]
+	left: in logic[32]
+	right: in logic[32]
+
+	// Combinational result for the currently driven command.
+	result: out logic[32]
+}

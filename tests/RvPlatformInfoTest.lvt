@@ -1,0 +1,100 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Platform
+
+/**
+ * Verifies immutable platform description reads and the held-response contract.
+ */
+@Test
+component RvPlatformInfoTest
+{
+	// Representative machine-pipeline description under test.
+	info: RvPlatformInfo<0x40000400, 0x00030001, 63, 2, 1, 2, 50000000>
+
+	/**
+	 * Owns one read-only information device.
+	 */
+	new()
+	{
+		info = new RvPlatformInfo<0x40000400, 0x00030001, 63, 2, 1, 2, 50000000>()
+	}
+
+	/**
+	 * Starts a request with all payload fields initialized.
+	 */
+	fn Request(address: uint, write: bool)
+	{
+		state {
+			info.address = address as logic[32]
+			info.write = write as logic
+			info.byteEnable = 0b1111
+			info.writeData = 0xffffffff
+			info.request = 0b1
+		}
+
+		state {}
+	}
+
+	/**
+	 * Releases a completed request before another transaction.
+	 */
+	fn Release()
+	{
+		state {
+			info.request = 0b0
+		}
+
+		state {}
+	}
+
+	/**
+	 * Reads all composition fields with their exact configured values.
+	 */
+	@Test
+	fn ReportsConfiguredComposition()
+	{
+		var expected: uint[6] = [0x00030001, 63, 2, 1, 2, 50000000]
+
+		for (var index = 0; index < expected.Length(); index++) {
+			Request(0x40000400 + ((index as uint) * 4), false)
+			assert info.ready == 0b1
+			assert info.error == 0b0
+			assert info.readData as uint == expected[index]
+			Release()
+		}
+	}
+
+	/**
+	 * Holds one response stable and rejects writes and invalid addresses.
+	 */
+	@Test
+	fn HoldsResponsesAndRejectsUnsupportedAccesses()
+	{
+		Request(0x40000408, false)
+		assert info.ready == 0b1
+		assert info.readData as uint == 2
+
+		state {
+			info.address = 0x40000414
+		}
+
+		assert info.ready == 0b1
+		assert info.readData as uint == 2
+		Release()
+
+		Request(0x40000400, true)
+		assert info.ready == 0b1
+		assert info.error == 0b1
+		Release()
+
+		Request(0x40000418, false)
+		assert info.ready == 0b1
+		assert info.error == 0b1
+		Release()
+
+		Request(0x40000402, false)
+		assert info.ready == 0b1
+		assert info.error == 0b1
+		Release()
+	}
+}
