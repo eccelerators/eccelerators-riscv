@@ -29,4 +29,14 @@ public class RvInstructionAlignmentInfo
 			}
 		}
 	}
+
+	/** Mask used by xepc CSRs for the selected architectural alignment. */
+	public static fn AddressMask[](alignment: RvInstructionAlignment) uint
+	{
+		if (alignment == RvInstructionAlignment.Halfword) {
+			return 0xfffffffe
+		}
+
+		return 0xfffffffc
+	}
 }

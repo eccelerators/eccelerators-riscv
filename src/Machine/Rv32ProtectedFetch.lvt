@@ -1,0 +1,36 @@
+namespace Eccelerators.RiscV.Machine
+
+using Eccelerators.RiscV.Core
+
+/**
+ * Physical fetch adapter that rejects a complete instruction word before the
+ * provider observes it. Synchronization is forwarded independently of permission.
+ */
+component Rv32ProtectedFetch : IRv32FetchPort, IRv32InstructionProtectionRequestPort
+{
+	physical: IRv32FetchPort
+
+	new(physical: flip IRv32FetchPort)
+	{
+		this.physical = physical
+	}
+
+	process Connect[]()
+	{
+		instructionAddress = address
+		instructionBytes = 4
+		physical.address = address
+		physical.request = request & instructionAllowed
+		physical.synchronize = synchronize
+		ready = physical.ready
+		error = physical.error
+		instruction = physical.instruction
+		synchronized = physical.synchronized
+
+		if (request == 0b1 && instructionAllowed == 0b0) {
+			ready = 0b1
+			error = 0b1
+			instruction = 0
+		}
+	}
+}

@@ -1,0 +1,46 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Contracts
+
+/**
+ * Exact MRET, SRET and WFI overlay for an M/S/U privileged composition.
+ * Legality that depends on current privilege and mstatus remains with the shared
+ * privilege provider; all other SYSTEM encodings retain the borrowed result.
+ */
+component Rv32PrivilegedDecoder : IRv32DecodePort
+{
+	public const CAPABILITIES: uint = Rv32TrapOperations.CAPABILITY
+
+	base: IRv32DecodePort
+
+	new(base: flip IRv32DecodePort)
+	{
+		this.base = base
+	}
+
+	process Decode[]()
+	{
+		base.instruction = instruction
+		control = base.control
+		immediate = base.immediate
+		var word = instruction as uint
+
+		if (word == Rv32TrapOperations.MRET_ENCODING
+			|| word == Rv32TrapOperations.SRET_ENCODING
+			|| word == Rv32TrapOperations.WFI_ENCODING) {
+			control = RvDecoded.Pack(
+				(Rv32TrapOperations.PRIVILEGED_KIND << Rv32iOperations.KIND_SHIFT)
+					| Rv32TrapOperations.Operation(word),
+				0,
+				0,
+				0,
+				false,
+				false,
+				false,
+				true
+			) as logic[32]
+			immediate = 0
+		}
+	}
+}

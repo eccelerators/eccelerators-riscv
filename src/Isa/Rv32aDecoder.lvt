@@ -68,3 +68,26 @@ component Rv32iaDecoder : IRv32DecodePort
 		immediate = extension.immediate
 	}
 }
+
+/** Full RV32I + M + A decoder chain for privileged and explicit compositions. */
+component Rv32imaDecoder : IRv32DecodePort
+{
+	public const CAPABILITIES: uint = Rv32iMDecoder.CAPABILITIES
+		| Rv32AtomicOperations.CAPABILITY
+
+	base: Rv32iMDecoder
+	extension: Rv32aDecoder
+
+	new()
+	{
+		base = new Rv32iMDecoder()
+		extension = new Rv32aDecoder(base)
+	}
+
+	process Connect[]()
+	{
+		extension.instruction = instruction
+		control = extension.control
+		immediate = extension.immediate
+	}
+}

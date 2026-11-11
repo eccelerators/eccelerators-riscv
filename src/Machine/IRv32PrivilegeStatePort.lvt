@@ -1,0 +1,13 @@
+namespace Eccelerators.RiscV.Machine
+
+/**
+ * Read-only privilege context used by translation and protection adapters.
+ * Encodings follow the privileged ISA: U=0, S=1 and M=3.
+ */
+interface IRv32PrivilegeStatePort
+{
+	currentMode: out logic[2]
+	effectiveDataMode: out logic[2]
+	sumEnabled: out logic
+	mxrEnabled: out logic
+}

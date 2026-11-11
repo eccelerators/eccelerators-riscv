@@ -34,7 +34,7 @@ measurements expose a different dependency.
 - [x] OS01 — Define the first concrete OS target and its resource budget.
 - [x] I04 — Add the standard C compressed-instruction extension.
 - [x] I05 — Add the standard A atomic-instruction extension.
-- [ ] OS02 — Add user and supervisor privilege modes.
+- [x] OS02 — Add user and supervisor privilege modes.
 - [ ] OS03 — Add Sv32 virtual memory and precise page faults.
 - [ ] A03 — Introduce an optional memory protocol for higher throughput.
 - [ ] A04 — Define progress, timeout and recovery behavior for stalled providers.
@@ -576,6 +576,18 @@ smaller simulation platform for architectural work before external-memory hardwa
 is available.
 
 ### OS02 — User and supervisor privilege modes
+
+**Status:** Completed in simulation. `Rv32PrivilegedArchitecture` owns M/S/U
+mode, delegated trap and interrupt state, supervisor CSR views, counters and an
+eight-entry TOR/NAPOT PMP. `Rv32PrivilegedCore` composes that provider with
+narrow instruction/data protection adapters and either execution engine. Named
+RV32IMAC sequential and pipeline presets select halfword instruction alignment.
+Directed tests cover transition and return legality, CSR access, delegated
+interrupts and exceptions, counter visibility, writable SSIP, PMP permissions,
+locked TOR bounds and atomic read/write checks. An integrated pipeline payload
+runs M-mode setup, enters S-mode, drops to U-mode and handles a delegated U-mode
+ECALL in S-mode. Six directed tests and the payload simulation pass. Board
+resource, timing and physical interrupt qualification are deferred until OS04.
 
 **Constraint:** Current machine cores implement a machine-only subset. Linux normally
 runs in supervisor mode and requires user-mode isolation, delegated traps and

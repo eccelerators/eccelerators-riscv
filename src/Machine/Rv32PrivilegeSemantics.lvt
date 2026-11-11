@@ -1,0 +1,16 @@
+namespace Eccelerators.RiscV.Machine
+
+/** Pure privileged control calculations without an owned hardware context. */
+public class Rv32PrivilegeSemantics
+{
+	public static fn VectorAddress[](vector: uint, cause: uint) uint
+	{
+		var result = vector & 0xfffffffc
+
+		if ((vector & 3) == 1 && (cause & 0x80000000) != 0) {
+			result = result + ((cause & 31) << 2)
+		}
+
+		return result
+	}
+}

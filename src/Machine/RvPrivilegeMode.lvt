@@ -1,0 +1,45 @@
+namespace Eccelerators.RiscV.Machine
+
+/** Architectural execution modes supported by the M/S/U privilege provider. */
+enum RvPrivilegeMode
+{
+	User
+	Supervisor
+	Machine
+}
+
+/** Pure conversions between the typed mode and the privileged-ISA encoding. */
+public class RvPrivilegeModeInfo
+{
+	public static fn Encoding[](mode: RvPrivilegeMode) uint
+	{
+		match mode
+		{
+			RvPrivilegeMode.User =>
+			{
+				return 0
+			}
+			RvPrivilegeMode.Supervisor =>
+			{
+				return 1
+			}
+			RvPrivilegeMode.Machine =>
+			{
+				return 3
+			}
+		}
+	}
+
+	public static fn FromEncoding[](encoding: uint) RvPrivilegeMode
+	{
+		if (encoding == 3) {
+			return RvPrivilegeMode.Machine
+		}
+
+		if (encoding == 1) {
+			return RvPrivilegeMode.Supervisor
+		}
+
+		return RvPrivilegeMode.User
+	}
+}

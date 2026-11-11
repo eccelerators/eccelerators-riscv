@@ -32,6 +32,11 @@ All notable changes to `Eccelerators.RiscV` are recorded here.
 - Add complete RV32A word decode and AMO semantics, memory-owned LR/SC
   reservations, atomic RAM transactions and named RV32IA sequential and pipeline
   presets.
+- Add a cohesive M/S/U privileged provider with trap and interrupt delegation,
+  supervisor CSR views, counters, MRET/SRET/WFI and eight TOR/NAPOT PMP entries.
+- Add protected physical-memory adapters, shared privileged core composition,
+  named RV32IMAC sequential and pipeline presets and an integrated M-to-S-to-U
+  payload simulation.
 
 ### Changed
 
@@ -53,6 +58,9 @@ All notable changes to `Eccelerators.RiscV` are recorded here.
   halfword alignment and the compressed front end.
 - Extend `IRv32LoadStorePort` with explicit atomic operation and acquire/release
   attributes. RAM implements atomics; MMIO devices reject them before effects.
+- Split CSR access from trap control through `IRv32CsrPort`, `IRv32TrapPort` and
+  their `IRv32PrivilegePort` aggregate so engines and privilege providers depend
+  on cohesive contracts.
 
 ### Removed
 

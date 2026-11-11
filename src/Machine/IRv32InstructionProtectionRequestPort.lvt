@@ -1,0 +1,9 @@
+namespace Eccelerators.RiscV.Machine
+
+/** Requester side of a combinational physical instruction-permission query. */
+interface IRv32InstructionProtectionRequestPort
+{
+	instructionAddress: out logic[32]
+	instructionBytes: out logic[3]
+	instructionAllowed: in logic
+}

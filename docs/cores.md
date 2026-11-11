@@ -26,6 +26,11 @@ atomic memory transactions from their ordered memory/commit boundary.
 Machine presets additionally select Zicsr, machine exceptions, MRET and both
 same-clock `timerPending` and `externalPending` inputs. Named machine presets use
 hart ID zero; use explicit composition for another hart ID or CSR provider.
+Privileged RV32IMAC presets add M/S/U state, delegation, SRET, WFI, supervisor
+CSRs and PMP. They use the compressed front end and expose separate machine and
+supervisor software, timer and external interrupt inputs plus architectural
+time. Their default `Rv32PrivilegedArchitecture` remains a replaceable provider
+behind `IRv32SupervisorCsrPort`.
 The multiplier is required explicitly because Livt 1.2.0 cannot currently use a
 component type as a default generic value. The choice is still structural and
 does not produce runtime selection logic.
@@ -91,6 +96,9 @@ after the provider acknowledges it. Pipeline execution also invalidates younger
 prefetched instructions. Other presets keep FENCE.I illegal.
 Base and non-machine Zmmul presets stop diagnostically on faults, ECALL and EBREAK.
 Machine presets instead enter the handler described in [machine support](machine.md).
+Privileged presets route exceptions and interrupts to M-mode or S-mode according
+to the delegation CSRs and enforce PMP before physical providers observe a request.
+See [privileged architecture](privileged.md).
 Restart is required to leave a diagnostic halt.
 
 Performance depends on dependencies, branches, multiplier choice and memory

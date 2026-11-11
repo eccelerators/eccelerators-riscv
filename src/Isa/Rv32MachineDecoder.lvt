@@ -34,7 +34,7 @@ component Rv32MachineDecoder : IRv32DecodePort
 		immediate = base.immediate
 
 		if (instruction as uint == Rv32TrapOperations.MRET_ENCODING) {
-			control = RvDecoded.Pack(Rv32TrapOperations.RETURN_KIND << Rv32iOperations.KIND_SHIFT,
+			control = RvDecoded.Pack(Rv32TrapOperations.PRIVILEGED_KIND << Rv32iOperations.KIND_SHIFT,
 				0, 0, 0, false, false, false, true) as logic[32]
 			immediate = 0
 		}

@@ -1,0 +1,125 @@
+namespace Eccelerators.RiscV.Machine
+
+/** Pure PMP address matching used by instruction and data policy ports. */
+public class Rv32PmpSemantics
+{
+	/** Applies the reserved R=0,W=1 WARL rule and removes unimplemented bits. */
+	public static fn NormalizeConfiguration[](value: uint) uint
+	{
+		var normalized = value & 0x9f
+
+		if ((normalized & Rv32PrivilegedCsrMap.PMP_WRITE) != 0
+			&& (normalized & Rv32PrivilegedCsrMap.PMP_READ) == 0) {
+			normalized = normalized & ~Rv32PrivilegedCsrMap.PMP_WRITE
+		}
+
+		return normalized
+	}
+
+	/** Checks all entries in architectural priority order. */
+	public static fn Allows[](
+		configurations: uint[8],
+		addresses: uint[8],
+		address: uint,
+		bytes: uint,
+		read: bool,
+		write: bool,
+		execute: bool,
+		mode: RvPrivilegeMode
+	) bool
+	{
+		var matched = false
+		var allowed = false
+		var previous: uint = 0
+
+		for (var index: uint = 0; index < Rv32PrivilegedCsrMap.PMP_ENTRIES; index++) {
+			var config = configurations[index]
+
+			if (!matched && Matches(
+				config,
+				addresses[index],
+				previous,
+				address,
+				bytes
+			)) {
+				matched = true
+
+				if (mode == RvPrivilegeMode.Machine
+					&& (config & Rv32PrivilegedCsrMap.PMP_LOCK) == 0) {
+					allowed = true
+				} else {
+					allowed = (!read || (config & Rv32PrivilegedCsrMap.PMP_READ) != 0)
+						&& (!write || (config & Rv32PrivilegedCsrMap.PMP_WRITE) != 0)
+						&& (!execute || (config & Rv32PrivilegedCsrMap.PMP_EXECUTE) != 0)
+				}
+			}
+
+			previous = addresses[index]
+		}
+
+		if (!matched && mode == RvPrivilegeMode.Machine) {
+			allowed = true
+		}
+
+		return allowed
+	}
+
+	public static fn Matches[](
+		config: uint,
+		encodedAddress: uint,
+		previousAddress: uint,
+		address: uint,
+		bytes: uint
+	) bool
+	{
+		var mode = config & Rv32PrivilegedCsrMap.PMP_ADDRESS_MASK
+
+		if (mode == 0 || bytes == 0) {
+			return false
+		}
+
+		var last = address + bytes - 1
+
+		if (last < address) {
+			return false
+		}
+
+		if (mode == Rv32PrivilegedCsrMap.PMP_TOR) {
+			var lower = previousAddress << 2
+			var upper = encodedAddress << 2
+			return address >= lower && last < upper
+		}
+
+		if (mode == Rv32PrivilegedCsrMap.PMP_NAPOT) {
+			var ones: uint = 0
+			var counting = true
+
+			for (var bit: uint = 0; bit < 29; bit++) {
+				if (counting && ((encodedAddress >> (bit as int)) & 1) != 0) {
+					ones++
+				} else {
+					counting = false
+				}
+			}
+
+			// Twenty-nine encoded low ones cover the complete 32-bit address space.
+			// Handle that range explicitly so neither size nor upper-bound arithmetic
+			// wraps to zero in the uint representation.
+			if (ones >= 29) {
+				return true
+			}
+
+			var lowMask: uint = 0
+
+			if (ones != 0) {
+				lowMask = ((1 as uint) << (ones as int)) - 1
+			}
+
+			var size = (1 as uint) << ((ones + 3) as int)
+			var base = (encodedAddress & ~lowMask) << 2
+			return address >= base && last < base + size
+		}
+
+		return false
+	}
+}

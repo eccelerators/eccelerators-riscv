@@ -1,0 +1,10 @@
+namespace Eccelerators.RiscV.Machine
+
+/**
+ * Aggregate engine-facing privilege contract. Implementations may provide only
+ * machine mode or the complete M/S/U architecture, while engines retain one stable
+ * dependency and one exclusive owner for CSR and trap state.
+ */
+interface IRv32PrivilegePort : IRv32CsrPort, IRv32TrapPort
+{
+}

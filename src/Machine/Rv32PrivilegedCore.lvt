@@ -1,0 +1,109 @@
+namespace Eccelerators.RiscV.Machine
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Isa
+
+/**
+ * General M/S/U composition. The selected privilege provider is shared by Zicsr,
+ * privileged instruction execution and both physical protection adapters. All
+ * provider choices are elaboration-time and machine-only cores remain independent.
+ */
+component Rv32PrivilegedCore<
+	REGISTER_PORT: interface,
+	PRIVILEGE_PORT: interface & IRv32SupervisorCsrPort,
+	ENGINE: IRv32ControlPort & new(
+		flip REGISTER_PORT,
+		flip IRv32FetchPort,
+		flip IRv32LoadStorePort,
+		flip IRv32DecodePort,
+		flip IRv32IntegerPort,
+		flip IRv32MPort,
+		flip IRv32PrivilegePort,
+		flip IRv32CustomInstructionPort
+	),
+	REGISTERS: REGISTER_PORT & new(),
+	BASE_DECODER: IRv32DecodePort & new(),
+	CSR_DECODER: IRv32DecodePort & new(flip IRv32DecodePort),
+	PRIVILEGED_DECODER: IRv32DecodePort & new(flip IRv32DecodePort),
+	INTEGER: IRv32IntegerPort & new(),
+	MULTIPLIER: IRv32MPort & new(),
+	PRIVILEGE: PRIVILEGE_PORT & new(),
+	CUSTOM: IRv32CustomInstructionPort & new()
+> : IRv32SupervisorControlPort
+{
+	registers: REGISTERS
+	baseDecoder: BASE_DECODER
+	csrDecoder: CSR_DECODER
+	decoder: PRIVILEGED_DECODER
+	integer: INTEGER
+	multiplier: MULTIPLIER
+	privilege: PRIVILEGE
+	custom: CUSTOM
+	protectedFetch: Rv32ProtectedFetch
+	protectedLoadStore: Rv32ProtectedLoadStore
+	engine: ENGINE
+
+	new(fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort)
+	{
+		registers = new REGISTERS()
+		baseDecoder = new BASE_DECODER()
+		csrDecoder = new CSR_DECODER(baseDecoder)
+		decoder = new PRIVILEGED_DECODER(csrDecoder)
+		integer = new INTEGER()
+		multiplier = new MULTIPLIER()
+		privilege = new PRIVILEGE()
+		custom = new CUSTOM()
+		protectedFetch = new Rv32ProtectedFetch(fetch)
+		protectedLoadStore = new Rv32ProtectedLoadStore(loadStore)
+		engine = new ENGINE(
+			registers,
+			protectedFetch,
+			protectedLoadStore,
+			decoder,
+			integer,
+			multiplier,
+			privilege,
+			custom
+		)
+	}
+
+	process Connect[]()
+	{
+		privilege.machineSoftwarePending = machineSoftwarePending
+		privilege.machineTimerPending = machineTimerPending
+		privilege.machineExternalPending = machineExternalPending
+		privilege.supervisorSoftwarePending = supervisorSoftwarePending
+		privilege.supervisorTimerPending = supervisorTimerPending
+		privilege.supervisorExternalPending = supervisorExternalPending
+		privilege.timeLow = timeLow
+		privilege.timeHigh = timeHigh
+		privilege.instructionAddress = protectedFetch.instructionAddress
+		privilege.instructionBytes = protectedFetch.instructionBytes
+		protectedFetch.instructionAllowed = privilege.instructionAllowed
+		privilege.dataAddress = protectedLoadStore.dataAddress
+		privilege.dataBytes = protectedLoadStore.dataBytes
+		privilege.dataWrite = protectedLoadStore.dataWrite
+		privilege.dataAtomic = protectedLoadStore.dataAtomic
+		protectedLoadStore.dataAllowed = privilege.dataAllowed
+		currentMode = privilege.currentMode
+		engine.run = run
+		engine.stepRequest = stepRequest
+		engine.restartRequest = restartRequest
+		stepAck = engine.stepAck
+		restartAck = engine.restartAck
+		idle = engine.idle
+		halted = engine.halted
+		pc = engine.pc
+		faultCause = engine.faultCause
+		faultValue = engine.faultValue
+		trapped = engine.trapped
+		trapPc = engine.trapPc
+		trapCause = privilege.architecturalCause
+		trapValue = engine.trapValue
+		retired = engine.retired
+		retiredPc = engine.retiredPc
+		retiredInstruction = engine.retiredInstruction
+		retiredRd = engine.retiredRd
+		retiredValue = engine.retiredValue
+	}
+}

@@ -3,7 +3,9 @@
 Machine presets combine RV32I, Zmmul, Zicsr, machine exceptions/MRET and timer and
 external interrupts. This is a machine-only subset, not a complete privileged
 platform. Lower privilege modes, delegation, PMP, software interrupts, WFI, PLIC,
-MMU and architectural debug are absent.
+MMU and architectural debug are absent from these compact presets. Select the
+[privileged architecture](privileged.md) presets for implemented M/S/U,
+delegation, software-interrupt state, WFI and PMP support.
 
 ## CSR instructions and ownership
 

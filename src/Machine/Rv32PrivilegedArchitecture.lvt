@@ -1,0 +1,722 @@
+namespace Eccelerators.RiscV.Machine
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Contracts
+
+/**
+ * Privileged Architecture 1.12 M/S/U state for the single-hart OS composition.
+ * One clocked process exclusively owns CSR, trap, counter, mode and eight-entry PMP
+ * state. Combinational query ports centralize CSR legality, delegation, interrupt
+ * selection and physical-access policy. Address translation remains an OS03 concern.
+ */
+component Rv32PrivilegedArchitecture<
+	HART_ID: uint = 0,
+	INSTRUCTION_ALIGNMENT: RvInstructionAlignment = RvInstructionAlignment.Word
+> : IRv32SupervisorCsrPort
+{
+	public const CAPABILITIES: uint = Rv32CsrOperations.CAPABILITY
+	public const TRAP_CAPABILITIES: uint = Rv32TrapOperations.CAPABILITY
+
+	// Current execution mode and writable status/delegation state.
+	privilege: RvPrivilegeMode
+	status: uint
+	exceptionDelegation: uint
+	interruptDelegation: uint
+	interruptEnable: uint
+	machineCounterEnable: uint
+	supervisorCounterEnable: uint
+
+	// Machine and supervisor trap banks.
+	machineVector: uint
+	machineScratch: uint
+	machineEpc: uint
+	machineCause: uint
+	machineValue: uint
+	supervisorVector: uint
+	supervisorScratch: uint
+	supervisorEpc: uint
+	supervisorCause: uint
+	supervisorValue: uint
+	lastArchitecturalCause: uint
+
+	// Counter control and 64-bit architectural values.
+	cycleLow: uint
+	cycleHigh: uint
+	retireLow: uint
+	retireHigh: uint
+	inhibit: uint
+	softwareSupervisorPending: bool
+
+	// Eight TOR/NAPOT entries, packed through pmpcfg0/1.
+	pmpConfig: uint[8]
+	pmpAddress: uint[8]
+
+	// Query and selected read/modify/write values.
+	pending: uint
+	oldValue: uint
+	newValue: uint
+	known: bool
+	writeAccepted: bool
+	delegatedEntry: bool
+
+	/** Publishes interrupt, trap, protection and CSR query results without effects. */
+	process Query[]()
+	{
+		var privilegeEncoding = RvPrivilegeModeInfo.Encoding(privilege)
+		currentMode = privilegeEncoding as logic[2]
+		var dataMode = privilege
+
+		if (privilege == RvPrivilegeMode.Machine
+			&& (status & Rv32PrivilegedCsrMap.STATUS_MPRV) != 0) {
+			dataMode = RvPrivilegeModeInfo.FromEncoding(
+				(status & Rv32PrivilegedCsrMap.STATUS_MPP) >> 11
+			)
+		}
+
+		effectiveDataMode = RvPrivilegeModeInfo.Encoding(dataMode) as logic[2]
+		sumEnabled = ((status & Rv32PrivilegedCsrMap.STATUS_SUM) != 0) as logic
+		mxrEnabled = ((status & Rv32PrivilegedCsrMap.STATUS_MXR) != 0) as logic
+		instructionAllowed = Rv32PmpSemantics.Allows(
+			pmpConfig,
+			pmpAddress,
+			instructionAddress as uint,
+			instructionBytes as uint,
+			false,
+			false,
+			true,
+			privilege
+		) as logic
+		dataAllowed = Rv32PmpSemantics.Allows(
+			pmpConfig,
+			pmpAddress,
+			dataAddress as uint,
+			dataBytes as uint,
+			(dataWrite == 0b0) || (dataAtomic == 0b1),
+			(dataWrite == 0b1) || (dataAtomic == 0b1),
+			false,
+			dataMode
+		) as logic
+
+		pending = 0
+
+		if (machineSoftwarePending == 0b1) {
+			pending = pending | Rv32PrivilegedCsrMap.MSIP
+		}
+
+		if (machineTimerPending == 0b1) {
+			pending = pending | Rv32PrivilegedCsrMap.MTIP
+		}
+
+		if (machineExternalPending == 0b1) {
+			pending = pending | Rv32PrivilegedCsrMap.MEIP
+		}
+
+		if (supervisorSoftwarePending == 0b1 || softwareSupervisorPending) {
+			pending = pending | Rv32PrivilegedCsrMap.SSIP
+		}
+
+		if (supervisorTimerPending == 0b1) {
+			pending = pending | Rv32PrivilegedCsrMap.STIP
+		}
+
+		if (supervisorExternalPending == 0b1) {
+			pending = pending | Rv32PrivilegedCsrMap.SEIP
+		}
+
+		interruptPending = ((pending & interruptEnable) != 0) as logic
+		interruptEligible = 0b0
+		interruptCause = 0
+		var candidates = pending & interruptEnable
+		var selectedMask: uint = 0
+		var selectedCause: uint = 0
+
+		if ((candidates & Rv32PrivilegedCsrMap.MEIP) != 0) {
+			selectedMask = Rv32PrivilegedCsrMap.MEIP
+			selectedCause = 11
+		} elif ((candidates & Rv32PrivilegedCsrMap.MSIP) != 0) {
+			selectedMask = Rv32PrivilegedCsrMap.MSIP
+			selectedCause = 3
+		} elif ((candidates & Rv32PrivilegedCsrMap.MTIP) != 0) {
+			selectedMask = Rv32PrivilegedCsrMap.MTIP
+			selectedCause = 7
+		} elif ((candidates & Rv32PrivilegedCsrMap.SEIP) != 0) {
+			selectedMask = Rv32PrivilegedCsrMap.SEIP
+			selectedCause = 9
+		} elif ((candidates & Rv32PrivilegedCsrMap.SSIP) != 0) {
+			selectedMask = Rv32PrivilegedCsrMap.SSIP
+			selectedCause = 1
+		} elif ((candidates & Rv32PrivilegedCsrMap.STIP) != 0) {
+			selectedMask = Rv32PrivilegedCsrMap.STIP
+			selectedCause = 5
+		}
+
+		if (selectedMask != 0) {
+			var delegatedInterrupt = (interruptDelegation & selectedMask) != 0
+			var globallyEnabled = false
+
+			if (delegatedInterrupt) {
+				globallyEnabled = privilege == RvPrivilegeMode.User
+					|| (privilege == RvPrivilegeMode.Supervisor
+						&& (status & Rv32PrivilegedCsrMap.STATUS_SIE) != 0)
+			} else {
+				globallyEnabled = privilege != RvPrivilegeMode.Machine
+					|| (status & Rv32PrivilegedCsrMap.STATUS_MIE) != 0
+			}
+
+			if (globallyEnabled) {
+				interruptEligible = 0b1
+				interruptCause = (0x80000000 | selectedCause) as logic[32]
+			}
+		}
+
+		var entryCode = entryCause as uint
+
+		if (entryCode == Rv32iOperations.ENVIRONMENT_CALL) {
+			entryCode = 8 + privilegeEncoding
+		}
+
+		architecturalCause = lastArchitecturalCause as logic[32]
+
+		var entryMask = (1 as uint) << ((entryCode & 31) as int)
+		delegatedEntry = privilege != RvPrivilegeMode.Machine
+			&& (((entryCode & 0x80000000) != 0 && (interruptDelegation & entryMask) != 0)
+				|| ((entryCode & 0x80000000) == 0 && (exceptionDelegation & entryMask) != 0))
+		trapVector = Rv32PrivilegeSemantics.VectorAddress(
+			machineVector,
+			entryCode
+		) as logic[32]
+
+		if (delegatedEntry) {
+			trapVector = Rv32PrivilegeSemantics.VectorAddress(
+				supervisorVector,
+				entryCode
+			) as logic[32]
+		}
+
+		returnPc = machineEpc as logic[32]
+		returnIllegal = (privilege != RvPrivilegeMode.Machine) as logic
+
+		if (returnOperation as uint == Rv32TrapOperations.SRET) {
+			returnPc = supervisorEpc as logic[32]
+			returnIllegal = (privilege != RvPrivilegeMode.Supervisor
+				|| (status & Rv32PrivilegedCsrMap.STATUS_TSR) != 0) as logic
+		} elif (returnOperation as uint != Rv32TrapOperations.MRET) {
+			returnIllegal = 0b1
+		}
+
+		waitIllegal = (privilege == RvPrivilegeMode.User
+			|| (privilege != RvPrivilegeMode.Machine
+				&& (status & Rv32PrivilegedCsrMap.STATUS_TW) != 0)) as logic
+
+		var index = address as uint
+		oldValue = 0
+		known = true
+
+		match (index)
+		{
+			Rv32MachineCsrMap.MSTATUS =>
+			{
+				oldValue = status
+			}
+			Rv32MachineCsrMap.MISA =>
+			{
+				oldValue = Rv32PrivilegedCsrMap.ISA
+			}
+			Rv32PrivilegedCsrMap.MEDELEG =>
+			{
+				oldValue = exceptionDelegation
+			}
+			Rv32PrivilegedCsrMap.MIDELEG =>
+			{
+				oldValue = interruptDelegation
+			}
+			Rv32MachineCsrMap.MIE =>
+			{
+				oldValue = interruptEnable
+			}
+			Rv32MachineCsrMap.MTVEC =>
+			{
+				oldValue = machineVector
+			}
+			Rv32MachineCsrMap.MCOUNTEREN =>
+			{
+				oldValue = machineCounterEnable
+			}
+			Rv32MachineCsrMap.MCOUNTINHIBIT =>
+			{
+				oldValue = inhibit
+			}
+			Rv32MachineCsrMap.MSCRATCH =>
+			{
+				oldValue = machineScratch
+			}
+			Rv32MachineCsrMap.MEPC =>
+			{
+				oldValue = machineEpc
+			}
+			Rv32MachineCsrMap.MCAUSE =>
+			{
+				oldValue = machineCause
+			}
+			Rv32MachineCsrMap.MTVAL =>
+			{
+				oldValue = machineValue
+			}
+			Rv32MachineCsrMap.MIP =>
+			{
+				oldValue = pending
+			}
+			Rv32MachineCsrMap.MCYCLE =>
+			{
+				oldValue = cycleLow
+			}
+			Rv32MachineCsrMap.MCYCLEH =>
+			{
+				oldValue = cycleHigh
+			}
+			Rv32MachineCsrMap.MINSTRET =>
+			{
+				oldValue = retireLow
+			}
+			Rv32MachineCsrMap.MINSTRETH =>
+			{
+				oldValue = retireHigh
+			}
+			Rv32MachineCsrMap.MHARTID =>
+			{
+				oldValue = HART_ID
+			}
+			Rv32MachineCsrMap.MVENDORID, Rv32MachineCsrMap.MARCHID,
+				Rv32MachineCsrMap.MIMPID, Rv32MachineCsrMap.MCONFIGPTR =>
+			{
+				oldValue = 0
+			}
+			Rv32PrivilegedCsrMap.SSTATUS =>
+			{
+				oldValue = status & Rv32PrivilegedCsrMap.STATUS_S_MASK
+			}
+			Rv32PrivilegedCsrMap.SIE =>
+			{
+				oldValue = interruptEnable & interruptDelegation
+			}
+			Rv32PrivilegedCsrMap.STVEC =>
+			{
+				oldValue = supervisorVector
+			}
+			Rv32PrivilegedCsrMap.SCOUNTEREN =>
+			{
+				oldValue = supervisorCounterEnable
+			}
+			Rv32PrivilegedCsrMap.SSCRATCH =>
+			{
+				oldValue = supervisorScratch
+			}
+			Rv32PrivilegedCsrMap.SEPC =>
+			{
+				oldValue = supervisorEpc
+			}
+			Rv32PrivilegedCsrMap.SCAUSE =>
+			{
+				oldValue = supervisorCause
+			}
+			Rv32PrivilegedCsrMap.STVAL =>
+			{
+				oldValue = supervisorValue
+			}
+			Rv32PrivilegedCsrMap.SIP =>
+			{
+				oldValue = pending & interruptDelegation
+			}
+			Rv32PrivilegedCsrMap.PMPCFG0, Rv32PrivilegedCsrMap.PMPCFG1 =>
+			{
+				var first = (index - Rv32PrivilegedCsrMap.PMPCFG0) * 4
+				oldValue = pmpConfig[first] | (pmpConfig[first + 1] << 8)
+					| (pmpConfig[first + 2] << 16) | (pmpConfig[first + 3] << 24)
+			}
+			Rv32PrivilegedCsrMap.CYCLE =>
+			{
+				oldValue = cycleLow
+			}
+			Rv32PrivilegedCsrMap.TIME =>
+			{
+				oldValue = timeLow as uint
+			}
+			Rv32PrivilegedCsrMap.INSTRET =>
+			{
+				oldValue = retireLow
+			}
+			Rv32PrivilegedCsrMap.CYCLEH =>
+			{
+				oldValue = cycleHigh
+			}
+			Rv32PrivilegedCsrMap.TIMEH =>
+			{
+				oldValue = timeHigh as uint
+			}
+			Rv32PrivilegedCsrMap.INSTRETH =>
+			{
+				oldValue = retireHigh
+			}
+			_ =>
+			{
+				known = index >= Rv32PrivilegedCsrMap.PMPADDR0
+					&& index <= Rv32PrivilegedCsrMap.PMPADDR7
+
+				if (known) {
+					oldValue = pmpAddress[index - Rv32PrivilegedCsrMap.PMPADDR0]
+				}
+			}
+		}
+
+		var requiredPrivilege = (index >> 8) & 3
+		var counterBit = index & 31
+		var counterAllowed = true
+
+		if (index == Rv32PrivilegedCsrMap.CYCLE || index == Rv32PrivilegedCsrMap.CYCLEH
+			|| index == Rv32PrivilegedCsrMap.TIME || index == Rv32PrivilegedCsrMap.TIMEH
+			|| index == Rv32PrivilegedCsrMap.INSTRET || index == Rv32PrivilegedCsrMap.INSTRETH) {
+			if (privilege != RvPrivilegeMode.Machine
+				&& (machineCounterEnable & ((1 as uint) << (counterBit as int))) == 0) {
+				counterAllowed = false
+			}
+
+			if (privilege == RvPrivilegeMode.User
+				&& (supervisorCounterEnable & ((1 as uint) << (counterBit as int))) == 0) {
+				counterAllowed = false
+			}
+		}
+
+		illegal = (!known || operation == 0 || privilegeEncoding < requiredPrivilege
+			|| !counterAllowed || (writeEnable == 0b1 && (index & 0xc00) == 0xc00)) as logic
+		readData = 0
+
+		if (readEnable == 0b1) {
+			readData = oldValue as logic[32]
+		}
+
+		newValue = operand as uint
+
+		if (operation as uint == Rv32CsrOperations.SET) {
+			newValue = oldValue | (operand as uint)
+		} elif (operation as uint == Rv32CsrOperations.CLEAR) {
+			newValue = oldValue & ~(operand as uint)
+		}
+
+		writeAccepted = commit == 0b1 && writeEnable == 0b1 && illegal == 0b0
+			&& enterTrap == 0b0 && returnTrap == 0b0
+	}
+
+	/** Applies the one-writer priority: clear, trap, return, CSR write, counters. */
+	process Advance()
+	{
+		state {
+			var index = address as uint
+
+			if (clear == 0b1) {
+				privilege = RvPrivilegeMode.Machine
+				status = 0
+				exceptionDelegation = 0
+				interruptDelegation = 0
+				interruptEnable = 0
+				machineCounterEnable = 0
+				supervisorCounterEnable = 0
+				machineVector = 0
+				machineScratch = 0
+				machineEpc = 0
+				machineCause = 0
+				machineValue = 0
+				supervisorVector = 0
+				supervisorScratch = 0
+				supervisorEpc = 0
+				supervisorCause = 0
+				supervisorValue = 0
+				lastArchitecturalCause = 0
+				cycleLow = 0
+				cycleHigh = 0
+				retireLow = 0
+				retireHigh = 0
+				inhibit = 0
+				softwareSupervisorPending = false
+
+				pmpConfig[0] = 0
+				pmpConfig[1] = 0
+				pmpConfig[2] = 0
+				pmpConfig[3] = 0
+				pmpConfig[4] = 0
+				pmpConfig[5] = 0
+				pmpConfig[6] = 0
+				pmpConfig[7] = 0
+				pmpAddress[0] = 0
+				pmpAddress[1] = 0
+				pmpAddress[2] = 0
+				pmpAddress[3] = 0
+				pmpAddress[4] = 0
+				pmpAddress[5] = 0
+				pmpAddress[6] = 0
+				pmpAddress[7] = 0
+			} else {
+				if ((inhibit & Rv32MachineCsrMap.INHIBIT_CYCLE) == 0
+					&& !(writeAccepted && (index == Rv32MachineCsrMap.MCYCLE
+						|| index == Rv32MachineCsrMap.MCYCLEH))) {
+					if (cycleLow == 0xffffffff) {
+						cycleHigh++
+					}
+
+					cycleLow++
+				}
+
+				if (retire == 0b1 && enterTrap == 0b0
+					&& (inhibit & Rv32MachineCsrMap.INHIBIT_RETIRE) == 0
+					&& !(writeAccepted && (index == Rv32MachineCsrMap.MINSTRET
+						|| index == Rv32MachineCsrMap.MINSTRETH))) {
+					if (retireLow == 0xffffffff) {
+						retireHigh++
+					}
+
+					retireLow++
+				}
+
+				if (enterTrap == 0b1) {
+					var enteredCause = entryCause as uint
+
+					if (enteredCause == Rv32iOperations.ENVIRONMENT_CALL) {
+						enteredCause = 8 + RvPrivilegeModeInfo.Encoding(privilege)
+					}
+
+					lastArchitecturalCause = enteredCause
+
+					if (delegatedEntry) {
+						supervisorEpc = (entryPc as uint)
+							& RvInstructionAlignmentInfo.AddressMask(INSTRUCTION_ALIGNMENT)
+						supervisorCause = enteredCause
+						supervisorValue = entryValue as uint
+						status = status & ~Rv32PrivilegedCsrMap.STATUS_SPIE
+
+						if ((status & Rv32PrivilegedCsrMap.STATUS_SIE) != 0) {
+							status = status | Rv32PrivilegedCsrMap.STATUS_SPIE
+						}
+
+						status = status & ~(Rv32PrivilegedCsrMap.STATUS_SIE
+							| Rv32PrivilegedCsrMap.STATUS_SPP)
+
+						if (privilege == RvPrivilegeMode.Supervisor) {
+							status = status | Rv32PrivilegedCsrMap.STATUS_SPP
+						}
+
+						privilege = RvPrivilegeMode.Supervisor
+					} else {
+						machineEpc = (entryPc as uint)
+							& RvInstructionAlignmentInfo.AddressMask(INSTRUCTION_ALIGNMENT)
+						machineCause = enteredCause
+						machineValue = entryValue as uint
+						status = status & ~(Rv32PrivilegedCsrMap.STATUS_MPIE
+							| Rv32PrivilegedCsrMap.STATUS_MPP)
+
+						if ((status & Rv32PrivilegedCsrMap.STATUS_MIE) != 0) {
+							status = status | Rv32PrivilegedCsrMap.STATUS_MPIE
+						}
+
+						status = status | (RvPrivilegeModeInfo.Encoding(privilege) << 11)
+						status = status & ~Rv32PrivilegedCsrMap.STATUS_MIE
+						privilege = RvPrivilegeMode.Machine
+					}
+				} elif (returnTrap == 0b1 && returnIllegal == 0b0) {
+					if (returnOperation as uint == Rv32TrapOperations.MRET) {
+						var target = RvPrivilegeModeInfo.FromEncoding(
+							(status & Rv32PrivilegedCsrMap.STATUS_MPP) >> 11
+						)
+						status = status & ~(Rv32PrivilegedCsrMap.STATUS_MIE
+							| Rv32PrivilegedCsrMap.STATUS_MPP)
+
+						if ((status & Rv32PrivilegedCsrMap.STATUS_MPIE) != 0) {
+							status = status | Rv32PrivilegedCsrMap.STATUS_MIE
+						}
+
+						status = status | Rv32PrivilegedCsrMap.STATUS_MPIE
+
+						if (target != RvPrivilegeMode.Machine) {
+							status = status & ~Rv32PrivilegedCsrMap.STATUS_MPRV
+						}
+
+						privilege = target
+					} else {
+						var target = RvPrivilegeMode.User
+
+						if ((status & Rv32PrivilegedCsrMap.STATUS_SPP) != 0) {
+							target = RvPrivilegeMode.Supervisor
+						}
+
+						status = status & ~(Rv32PrivilegedCsrMap.STATUS_SIE
+							| Rv32PrivilegedCsrMap.STATUS_SPP | Rv32PrivilegedCsrMap.STATUS_MPRV)
+
+						if ((status & Rv32PrivilegedCsrMap.STATUS_SPIE) != 0) {
+							status = status | Rv32PrivilegedCsrMap.STATUS_SIE
+						}
+
+						status = status | Rv32PrivilegedCsrMap.STATUS_SPIE
+						privilege = target
+					}
+				} elif (writeAccepted) {
+					match (index)
+					{
+						Rv32MachineCsrMap.MSTATUS =>
+						{
+							status = newValue & Rv32PrivilegedCsrMap.STATUS_M_MASK
+						}
+						Rv32PrivilegedCsrMap.MEDELEG =>
+						{
+							exceptionDelegation = newValue
+								& Rv32PrivilegedCsrMap.DELEGATABLE_EXCEPTION_MASK
+						}
+						Rv32PrivilegedCsrMap.MIDELEG =>
+						{
+							interruptDelegation = newValue
+								& Rv32PrivilegedCsrMap.SUPERVISOR_INTERRUPT_MASK
+						}
+						Rv32MachineCsrMap.MIE =>
+						{
+							interruptEnable = newValue & Rv32PrivilegedCsrMap.INTERRUPT_MASK
+						}
+						Rv32MachineCsrMap.MTVEC =>
+						{
+							machineVector = newValue & 0xfffffffd
+						}
+						Rv32MachineCsrMap.MCOUNTEREN =>
+						{
+							machineCounterEnable = newValue & 7
+						}
+						Rv32MachineCsrMap.MCOUNTINHIBIT =>
+						{
+							inhibit = newValue & Rv32MachineCsrMap.COUNTER_MASK
+						}
+						Rv32MachineCsrMap.MSCRATCH =>
+						{
+							machineScratch = newValue
+						}
+						Rv32MachineCsrMap.MEPC =>
+						{
+							machineEpc = newValue
+								& RvInstructionAlignmentInfo.AddressMask(INSTRUCTION_ALIGNMENT)
+						}
+						Rv32MachineCsrMap.MCAUSE =>
+						{
+							machineCause = newValue
+						}
+						Rv32MachineCsrMap.MTVAL =>
+						{
+							machineValue = newValue
+						}
+						Rv32MachineCsrMap.MIP =>
+						{
+							softwareSupervisorPending = (newValue
+								& Rv32PrivilegedCsrMap.SSIP) != 0
+						}
+						Rv32MachineCsrMap.MCYCLE =>
+						{
+							cycleLow = newValue
+						}
+						Rv32MachineCsrMap.MCYCLEH =>
+						{
+							cycleHigh = newValue
+						}
+						Rv32MachineCsrMap.MINSTRET =>
+						{
+							retireLow = newValue
+						}
+						Rv32MachineCsrMap.MINSTRETH =>
+						{
+							retireHigh = newValue
+						}
+						Rv32PrivilegedCsrMap.SSTATUS =>
+						{
+							status = (status & ~Rv32PrivilegedCsrMap.STATUS_S_MASK)
+								| (newValue & Rv32PrivilegedCsrMap.STATUS_S_MASK)
+						}
+						Rv32PrivilegedCsrMap.SIE =>
+						{
+							interruptEnable = (interruptEnable & ~interruptDelegation)
+								| (newValue & interruptDelegation)
+						}
+						Rv32PrivilegedCsrMap.STVEC =>
+						{
+							supervisorVector = newValue & 0xfffffffd
+						}
+						Rv32PrivilegedCsrMap.SCOUNTEREN =>
+						{
+							supervisorCounterEnable = newValue & 7
+						}
+						Rv32PrivilegedCsrMap.SSCRATCH =>
+						{
+							supervisorScratch = newValue
+						}
+						Rv32PrivilegedCsrMap.SEPC =>
+						{
+							supervisorEpc = newValue
+								& RvInstructionAlignmentInfo.AddressMask(INSTRUCTION_ALIGNMENT)
+						}
+						Rv32PrivilegedCsrMap.SCAUSE =>
+						{
+							supervisorCause = newValue
+						}
+						Rv32PrivilegedCsrMap.STVAL =>
+						{
+							supervisorValue = newValue
+						}
+						Rv32PrivilegedCsrMap.SIP =>
+						{
+							softwareSupervisorPending = (newValue
+								& interruptDelegation & Rv32PrivilegedCsrMap.SSIP) != 0
+						}
+						Rv32PrivilegedCsrMap.PMPCFG0, Rv32PrivilegedCsrMap.PMPCFG1 =>
+						{
+							var first = (index - Rv32PrivilegedCsrMap.PMPCFG0) * 4
+
+							if ((pmpConfig[first] & Rv32PrivilegedCsrMap.PMP_LOCK) == 0) {
+								pmpConfig[first] = Rv32PmpSemantics.NormalizeConfiguration(newValue)
+							}
+
+							if ((pmpConfig[first + 1] & Rv32PrivilegedCsrMap.PMP_LOCK) == 0) {
+								pmpConfig[first + 1] = Rv32PmpSemantics.NormalizeConfiguration(
+									newValue >> 8
+								)
+							}
+
+							if ((pmpConfig[first + 2] & Rv32PrivilegedCsrMap.PMP_LOCK) == 0) {
+								pmpConfig[first + 2] = Rv32PmpSemantics.NormalizeConfiguration(
+									newValue >> 16
+								)
+							}
+
+							if ((pmpConfig[first + 3] & Rv32PrivilegedCsrMap.PMP_LOCK) == 0) {
+								pmpConfig[first + 3] = Rv32PmpSemantics.NormalizeConfiguration(
+									newValue >> 24
+								)
+							}
+						}
+						_ =>
+						{
+							if (index >= Rv32PrivilegedCsrMap.PMPADDR0
+								&& index <= Rv32PrivilegedCsrMap.PMPADDR7) {
+								var pmpIndex = index - Rv32PrivilegedCsrMap.PMPADDR0
+
+								var nextTorLocked = false
+
+								if (pmpIndex < Rv32PrivilegedCsrMap.PMP_ENTRIES - 1) {
+									var nextConfig = pmpConfig[pmpIndex + 1]
+									nextTorLocked = (nextConfig & Rv32PrivilegedCsrMap.PMP_LOCK) != 0
+										&& (nextConfig & Rv32PrivilegedCsrMap.PMP_ADDRESS_MASK)
+											== Rv32PrivilegedCsrMap.PMP_TOR
+								}
+
+								if ((pmpConfig[pmpIndex] & Rv32PrivilegedCsrMap.PMP_LOCK) == 0
+									&& !nextTorLocked) {
+									pmpAddress[pmpIndex] = newValue
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

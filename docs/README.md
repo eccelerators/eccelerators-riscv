@@ -8,6 +8,7 @@
 | [Integration](integration.md) | Memory protocol, register storage, reset and controls |
 | [Atomic memory](atomic-memory.md) | LR/SC ownership, AMO indivisibility and multi-master obligations |
 | [Machine support](machine.md) | CSR map, exceptions, MRET and interrupts |
+| [Privileged architecture](privileged.md) | M/S/U state, delegation, supervisor CSRs and PMP |
 | [Peripherals](peripherals.md) | Timer and external interrupt components |
 | [Platform information](platform-info.md) | Software-visible composition identity and implementation choices |
 | [Custom components](custom-components.md) | Explicit composition and extension contracts |
@@ -17,6 +18,6 @@
 
 Declaration comments in [src](../src) specify the detailed signal and timing
 contracts. The operating-system target is an explicit qualification contract for
-planned work; the other guides describe implemented behavior. A storage hint or
+planned work beyond OS02; the other guides describe implemented behavior. A storage hint or
 capability declaration does not establish resource usage, timing closure or ISA
 certification for a new composition.

@@ -4,7 +4,7 @@ namespace Eccelerators.RiscV.Machine
  * Stateless termination for compositions without Zicsr. Rejects all CSR queries;
  * the owning engine must disable CSR dispatch and bind a decoder without Zicsr.
  */
-component Rv32NoCsrs : IRv32CsrPort
+component Rv32NoCsrs : IRv32PrivilegePort
 {
 	// No CSR operation coverage or storage.
 	public const CAPABILITIES: uint = 0
@@ -18,7 +18,11 @@ component Rv32NoCsrs : IRv32CsrPort
 		readData = 0
 		illegal = 0b1
 		trapVector = 0
+		architecturalCause = entryCause
 		returnPc = 0
+		returnIllegal = 0b1
+		waitIllegal = 0b1
+		interruptPending = 0b0
 		interruptEligible = 0b0
 		interruptCause = 0
 	}

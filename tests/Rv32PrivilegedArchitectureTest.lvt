@@ -1,0 +1,263 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Contracts
+
+/** Directed M/S/U, delegation, interrupt, counter and PMP policy simulation. */
+@Test
+component Rv32PrivilegedArchitectureTest
+{
+	subject: Rv32PrivilegedArchitecture<0, RvInstructionAlignment.Halfword>
+
+	new()
+	{
+		subject = new Rv32PrivilegedArchitecture<0, RvInstructionAlignment.Halfword>()
+	}
+
+	fn Prepare()
+	{
+		subject.address = 0
+		subject.operation = Rv32CsrOperations.WRITE as logic[2]
+		subject.operand = 0
+		subject.readEnable = 0b0
+		subject.writeEnable = 0b0
+		subject.commit = 0b0
+		subject.retire = 0b0
+		subject.enterTrap = 0b0
+		subject.returnTrap = 0b0
+		subject.returnOperation = 0
+		subject.entryPc = 0
+		subject.entryCause = 0
+		subject.entryValue = 0
+		subject.machineSoftwarePending = 0b0
+		subject.machineTimerPending = 0b0
+		subject.machineExternalPending = 0b0
+		subject.supervisorSoftwarePending = 0b0
+		subject.supervisorTimerPending = 0b0
+		subject.supervisorExternalPending = 0b0
+		subject.timeLow = 0
+		subject.timeHigh = 0
+		subject.instructionAddress = 0
+		subject.instructionBytes = 4
+		subject.dataAddress = 0
+		subject.dataBytes = 4
+		subject.dataWrite = 0b0
+		subject.dataAtomic = 0b0
+		subject.clear = 0b1
+		Simulation.Wait(2)
+		subject.clear = 0b0
+		Simulation.Wait(2)
+		assert subject.currentMode == 3
+	}
+
+	fn Write(address: uint, value: uint)
+	{
+		subject.address = address as logic[12]
+		subject.operation = Rv32CsrOperations.WRITE as logic[2]
+		subject.operand = value as logic[32]
+		subject.readEnable = 0b0
+		subject.writeEnable = 0b1
+		Simulation.Wait(1)
+		assert subject.illegal == 0b0
+		state {
+			subject.commit = 0b1
+		}
+
+		state {
+			subject.commit = 0b0
+		}
+
+		Simulation.Wait(1)
+	}
+
+	fn Read(address: uint, expected: uint)
+	{
+		subject.address = address as logic[12]
+		subject.operation = Rv32CsrOperations.SET as logic[2]
+		subject.operand = 0
+		subject.readEnable = 0b1
+		subject.writeEnable = 0b0
+		Simulation.Wait(2)
+		assert subject.illegal == 0b0
+		assert subject.readData as uint == expected
+	}
+
+	fn Return(operation: uint, expectedPc: uint, expectedMode: uint)
+	{
+		subject.returnOperation = operation as logic[2]
+		Simulation.Wait(1)
+		assert subject.returnIllegal == 0b0
+		assert subject.returnPc as uint == expectedPc
+		state {
+			subject.returnTrap = 0b1
+		}
+
+		state {
+			subject.returnTrap = 0b0
+		}
+
+		Simulation.Wait(1)
+		assert subject.currentMode as uint == expectedMode
+	}
+
+	fn EnterSupervisor(pc: uint)
+	{
+		Write(Rv32MachineCsrMap.MSTATUS, 1 << 11)
+		Write(Rv32MachineCsrMap.MEPC, pc)
+		Return(Rv32TrapOperations.MRET, pc, 1)
+	}
+
+	@Test
+	fn TransitionsAndDelegatedEnvironmentCall()
+	{
+		Prepare()
+		Write(Rv32PrivilegedCsrMap.MEDELEG, 1 << 8)
+		Write(Rv32PrivilegedCsrMap.STVEC, 0x201)
+		EnterSupervisor(0x100)
+		Write(Rv32PrivilegedCsrMap.SEPC, 0x140)
+		Return(Rv32TrapOperations.SRET, 0x140, 0)
+		assert subject.waitIllegal == 0b1
+		subject.address = Rv32MachineCsrMap.MSTATUS as logic[12]
+		subject.operation = Rv32CsrOperations.SET as logic[2]
+		subject.readEnable = 0b1
+		subject.writeEnable = 0b0
+		Simulation.Wait(1)
+		assert subject.illegal == 0b1
+		subject.entryPc = 0x144
+		subject.entryCause = Rv32iOperations.ENVIRONMENT_CALL as logic[32]
+		subject.entryValue = 0
+		Simulation.Wait(1)
+		assert subject.trapVector == 0x200
+		state {
+			subject.enterTrap = 0b1
+		}
+
+		state {
+			subject.enterTrap = 0b0
+		}
+
+		Simulation.Wait(1)
+		assert subject.currentMode == 1
+		Read(Rv32PrivilegedCsrMap.SEPC, 0x144)
+		Read(Rv32PrivilegedCsrMap.SCAUSE, 8)
+	}
+
+	@Test
+	fn DelegatedSupervisorInterrupt()
+	{
+		Prepare()
+		Write(Rv32PrivilegedCsrMap.MIDELEG, Rv32PrivilegedCsrMap.SEIP)
+		Write(Rv32MachineCsrMap.MIE, Rv32PrivilegedCsrMap.SEIP)
+		Write(Rv32PrivilegedCsrMap.STVEC, 0x400)
+		Write(Rv32MachineCsrMap.MSTATUS,
+			(1 << 11) | Rv32PrivilegedCsrMap.STATUS_SIE)
+		Write(Rv32MachineCsrMap.MEPC, 0x300)
+		Return(Rv32TrapOperations.MRET, 0x300, 1)
+		subject.supervisorExternalPending = 0b1
+		Simulation.Wait(2)
+		assert subject.interruptPending == 0b1
+		assert subject.interruptEligible == 0b1
+		assert subject.interruptCause == 0x80000009
+		subject.entryPc = 0x304
+		subject.entryCause = subject.interruptCause
+		state {
+			subject.enterTrap = 0b1
+		}
+
+		state {
+			subject.enterTrap = 0b0
+		}
+
+		Simulation.Wait(1)
+		Read(Rv32PrivilegedCsrMap.SEPC, 0x304)
+		Read(Rv32PrivilegedCsrMap.SCAUSE, 0x80000009)
+	}
+
+	@Test
+	fn CounterAccessControl()
+	{
+		Prepare()
+		EnterSupervisor(0x100)
+		subject.address = Rv32PrivilegedCsrMap.CYCLE as logic[12]
+		subject.operation = Rv32CsrOperations.SET as logic[2]
+		subject.readEnable = 0b1
+		subject.writeEnable = 0b0
+		Simulation.Wait(1)
+		assert subject.illegal == 0b1
+		Prepare()
+		Write(Rv32MachineCsrMap.MCOUNTEREN, 7)
+		Write(Rv32MachineCsrMap.MSTATUS, 1 << 11)
+		Write(Rv32MachineCsrMap.MEPC, 0x100)
+		Return(Rv32TrapOperations.MRET, 0x100, 1)
+		Write(Rv32PrivilegedCsrMap.SCOUNTEREN, 7)
+		Write(Rv32PrivilegedCsrMap.SEPC, 0x120)
+		Return(Rv32TrapOperations.SRET, 0x120, 0)
+		subject.address = Rv32PrivilegedCsrMap.TIME as logic[12]
+		subject.timeLow = 0x12345678
+		subject.readEnable = 0b1
+		subject.writeEnable = 0b0
+		Simulation.Wait(1)
+		assert subject.illegal == 0b0
+		assert subject.readData == 0x12345678
+	}
+
+	@Test
+	fn PmpPermissions()
+	{
+		Prepare()
+		Write(Rv32PrivilegedCsrMap.PMPADDR0, 0x401)
+		Write(Rv32PrivilegedCsrMap.PMPCFG0, 0x1f)
+		EnterSupervisor(0x1000)
+		subject.instructionAddress = 0x1000
+		subject.instructionBytes = 4
+		subject.dataAddress = 0x1008
+		subject.dataBytes = 4
+		Simulation.Wait(1)
+		assert subject.instructionAllowed == 0b1
+		assert subject.dataAllowed == 0b1
+		subject.dataWrite = 0b1
+		Simulation.Wait(1)
+		assert subject.dataAllowed == 0b1
+		subject.dataAtomic = 0b1
+		Simulation.Wait(1)
+		assert subject.dataAllowed == 0b1
+		subject.instructionAddress = 0x1010
+		subject.dataAddress = 0x0ffc
+		Simulation.Wait(1)
+		assert subject.instructionAllowed == 0b0
+		assert subject.dataAllowed == 0b0
+
+		Prepare()
+		Write(Rv32PrivilegedCsrMap.PMPADDR0, 0x401)
+		Write(Rv32PrivilegedCsrMap.PMPCFG0, 0x1d)
+		EnterSupervisor(0x1000)
+		subject.dataAddress = 0x1000
+		subject.dataBytes = 4
+		subject.dataWrite = 0b0
+		subject.dataAtomic = 0b1
+		Simulation.Wait(1)
+		assert subject.dataAllowed == 0b0
+
+		Prepare()
+		Write(Rv32PrivilegedCsrMap.PMPADDR0, 0x100)
+		Write(Rv32PrivilegedCsrMap.PMPADDR0 + 1, 0x200)
+		Write(Rv32PrivilegedCsrMap.PMPCFG0, 0x8800)
+		Write(Rv32PrivilegedCsrMap.PMPADDR0, 0x180)
+		Read(Rv32PrivilegedCsrMap.PMPADDR0, 0x100)
+	}
+
+	@Test
+	fn SupervisorSoftwareInterruptAndHalfwordEpc()
+	{
+		Prepare()
+		Write(Rv32PrivilegedCsrMap.MIDELEG, Rv32PrivilegedCsrMap.SSIP)
+		Write(Rv32MachineCsrMap.MSTATUS, 1 << 11)
+		Write(Rv32MachineCsrMap.MEPC, 0x102)
+		Return(Rv32TrapOperations.MRET, 0x102, 1)
+		Write(Rv32PrivilegedCsrMap.SIP, Rv32PrivilegedCsrMap.SSIP)
+		Read(Rv32PrivilegedCsrMap.SIP, Rv32PrivilegedCsrMap.SSIP)
+		Write(Rv32PrivilegedCsrMap.SIP, 0)
+		Read(Rv32PrivilegedCsrMap.SIP, 0)
+	}
+}

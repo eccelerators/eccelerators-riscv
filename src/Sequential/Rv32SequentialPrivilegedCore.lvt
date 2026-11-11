@@ -1,0 +1,34 @@
+namespace Eccelerators.RiscV.Sequential
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Contracts
+
+/** Sequential specialization of the shared M/S/U privileged composition. */
+component Rv32SequentialPrivilegedCore<
+	PRIVILEGE_PORT: interface & IRv32SupervisorCsrPort,
+	REGISTERS: IRv32RegisterPort & new(),
+	BASE_DECODER: IRv32DecodePort & new(),
+	CSR_DECODER: IRv32DecodePort & new(flip IRv32DecodePort),
+	PRIVILEGED_DECODER: IRv32DecodePort & new(flip IRv32DecodePort),
+	INTEGER: IRv32IntegerPort & new(),
+	MULTIPLIER: IRv32MPort & new(),
+	PRIVILEGE: PRIVILEGE_PORT & new(),
+	CUSTOM: IRv32CustomInstructionPort & new(),
+	RESET_PC: uint = 0,
+	REGISTER_COUNT: uint = 32,
+	INSTRUCTION_ALIGNMENT: RvInstructionAlignment = RvInstructionAlignment.Word,
+	INSTRUCTIONS: IRv32InstructionPort & new(flip IRv32FetchPort) = Rv32WordInstructionFetch
+> : Rv32PrivilegedCore<
+	IRv32RegisterPort,
+	PRIVILEGE_PORT,
+	Rv32SequentialEngine<RESET_PC, true, REGISTER_COUNT, INSTRUCTION_ALIGNMENT, INSTRUCTIONS>,
+	REGISTERS,
+	BASE_DECODER,
+	CSR_DECODER,
+	PRIVILEGED_DECODER,
+	INTEGER,
+	MULTIPLIER,
+	PRIVILEGE,
+	CUSTOM
+> {}

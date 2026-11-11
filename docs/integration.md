@@ -82,7 +82,7 @@ implementation reports to determine the physical resources actually used.
 
 ## Run and monitor controls
 
-[`IRv32ControlPort`](../src/Sequential/IRv32ControlPort.lvt) exposes run, step,
+[`IRv32ControlPort`](../src/Core/IRv32ControlPort.lvt) exposes run, step,
 restart, status and retirement observation.
 
 - After reset, wait for `idle`; register initialization must finish first.
@@ -108,3 +108,15 @@ Machine interrupt inputs must be synchronous persistent levels. The application
 owns device acknowledgement and synchronization. CPU restart clears CPU enables
 but does not clear platform pending sources; reinitialize them before enabling
 interrupt delivery. See [peripherals](peripherals.md).
+
+Privileged cores expose the wider `IRv32SupervisorControlPort`: machine and
+supervisor software, timer and external interrupt levels, a 64-bit architectural
+time input split into two words and the current privilege mode. All inputs are
+synchronous to the core. `Rv32PrivilegedArchitecture` combines an internally
+writable supervisor software-pending bit with the external SSIP level; clearing
+the CSR cannot clear a still-asserted platform source.
+
+PMP adapters complete denied instruction and data requests locally as access
+faults, before the physical provider sees them. Atomic accesses require both read
+and write permission. PMP protects physical addresses; address translation and
+page-fault behavior belong to the separate Sv32 composition planned for OS03.

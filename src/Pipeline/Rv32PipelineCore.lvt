@@ -15,7 +15,7 @@ component Rv32PipelineCore<
 	DECODER: IRv32DecodePort & new(),
 	INTEGER: IRv32IntegerPort & new(),
 	MULTIPLIER: IRv32MPort & new(),
-	CSRS: IRv32CsrPort & new(),
+	CSRS: IRv32PrivilegePort & new(),
 	CUSTOM: IRv32CustomInstructionPort & new(),
 	RESET_PC: uint = 0,
 	REGISTER_COUNT: uint = 32,

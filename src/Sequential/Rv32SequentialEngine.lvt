@@ -57,7 +57,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 	decoder: IRv32DecodePort
 	integer: IRv32IntegerPort
 	multiplier: IRv32MPort
-	csrs: IRv32CsrPort
+	csrs: IRv32PrivilegePort
 	custom: IRv32CustomInstructionPort
 
 	// Owned sequencing, instruction identity, operands and pending completion.
@@ -79,6 +79,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 	stopValue: logic[32]
 	trapPulse: logic
 	retirementPulse: logic
+	waiting: bool
 	commitPc: logic[32]
 	commitRd: logic[5]
 	commitValue: logic[32]
@@ -93,14 +94,16 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 	 * Binds caller-owned resources. Hardware reset starts bank initialization;
 	 * wait for idle before requesting a single step or provisioning shared resources.
 	 */
-	new(registers: flip IRv32RegisterPort,
+	new(
+		registers: flip IRv32RegisterPort,
 		fetch: flip IRv32FetchPort,
 		loadStore: flip IRv32LoadStorePort,
 		decoder: flip IRv32DecodePort,
 		integer: flip IRv32IntegerPort,
 		multiplier: flip IRv32MPort,
-		csrs: flip IRv32CsrPort,
-		custom: flip IRv32CustomInstructionPort)
+		csrs: flip IRv32PrivilegePort,
+		custom: flip IRv32CustomInstructionPort
+	)
 	{
 		this.registers = registers
 		instructions = new INSTRUCTIONS(fetch)
@@ -265,6 +268,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 
 		csrs.enterTrap = 0b0
 		csrs.returnTrap = 0b0
+		csrs.returnOperation = Rv32TrapOperations.Operation(instruction) as logic[2]
 		csrs.entryPc = programCounter as logic[32]
 		csrs.entryCause = stopCause
 		csrs.entryValue = stopValue
@@ -274,7 +278,8 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 				csrs.enterTrap = 0b1
 			}
 
-			if (phase == COMMIT && kind == Rv32TrapOperations.RETURN_KIND) {
+			if (phase == COMMIT && kind == Rv32TrapOperations.PRIVILEGED_KIND
+				&& Rv32TrapOperations.Operation(instruction) != Rv32TrapOperations.WFI) {
 				csrs.returnTrap = 0b1
 			}
 		}
@@ -347,6 +352,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 					programCounter = RESET_PC
 					stopCause = 0
 					stopValue = 0
+					waiting = false
 
 					if (clearIndex == REGISTER_COUNT - 1) {
 						phase = IDLE
@@ -361,7 +367,9 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 					if (restartRequest != restartCompleted) {
 						clearIndex = 0
 						phase = BOOT
-					} elif (phase == IDLE && (run == 0b1 || stepRequest != stepCompleted)) {
+					} elif (phase == IDLE && waiting && csrs.interruptPending == 0b1) {
+						waiting = false
+					} elif (phase == IDLE && !waiting && (run == 0b1 || stepRequest != stepCompleted)) {
 						activeStep = stepRequest
 
 						if (csrs.interruptEligible == 0b1) {
@@ -390,7 +398,16 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 				}
 				DECODE =>
 				{
-					if (!RvDecoded.IsLegal(control) || (!MACHINE_TRAPS && kind == Rv32TrapOperations.RETURN_KIND)) {
+					var privilegedOperation = Rv32TrapOperations.Operation(instruction)
+					var privilegedIllegal = privilegedOperation == Rv32TrapOperations.WFI
+						&& csrs.waitIllegal == 0b1
+					privilegedIllegal = privilegedIllegal
+						|| (privilegedOperation != Rv32TrapOperations.WFI
+							&& csrs.returnIllegal == 0b1)
+
+					if (!RvDecoded.IsLegal(control)
+						|| (kind == Rv32TrapOperations.PRIVILEGED_KIND
+							&& (!MACHINE_TRAPS || privilegedIllegal))) {
 						stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
 						stopValue = rawInstruction as logic[32]
 						phase = EXCEPTION
@@ -431,9 +448,10 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 
 					match (kind)
 					{
-						Rv32TrapOperations.RETURN_KIND =>
+						Rv32TrapOperations.PRIVILEGED_KIND =>
 						{
-							if (MACHINE_TRAPS) {
+							if (MACHINE_TRAPS
+								&& Rv32TrapOperations.Operation(instruction) != Rv32TrapOperations.WFI) {
 								nextPc = csrs.returnPc as uint
 							}
 						}
@@ -600,6 +618,13 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 					}
 
 					programCounter = nextPc
+
+					if (kind == Rv32TrapOperations.PRIVILEGED_KIND
+						&& Rv32TrapOperations.Operation(instruction) == Rv32TrapOperations.WFI
+						&& csrs.interruptPending == 0b0) {
+						waiting = true
+					}
+
 					stepCompleted = activeStep
 					phase = IDLE
 				}

@@ -1,0 +1,32 @@
+namespace Eccelerators.RiscV.Machine
+
+/**
+ * Privilege-independent precise-trap contract, consumed by one execution engine.
+ * Entry and return are one-edge commands. The provider owns trap delegation,
+ * privilege stacks and redirect selection; the engine remains the sole PC owner.
+ * Entry suppresses retirement and return may retire. interruptEligible is sampled
+ * only at a drained instruction boundary. interruptPending also wakes WFI when the
+ * selected interrupt remains masked. Engines must not issue conflicting commands.
+ */
+interface IRv32TrapPort
+{
+	// Engine-owned trap entry and privileged-instruction command group.
+	enterTrap: in logic
+	returnTrap: in logic
+	returnOperation: in logic[2]
+	entryPc: in logic[32]
+	entryCause: in logic[32]
+	entryValue: in logic[32]
+
+	// Provider-selected redirects and privileged-instruction legality.
+	trapVector: out logic[32]
+	architecturalCause: out logic[32]
+	returnPc: out logic[32]
+	returnIllegal: out logic
+	waitIllegal: out logic
+
+	// Pending wakes WFI; eligible admits an interrupt trap at a precise boundary.
+	interruptPending: out logic
+	interruptEligible: out logic
+	interruptCause: out logic[32]
+}

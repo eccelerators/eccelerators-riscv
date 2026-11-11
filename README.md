@@ -32,6 +32,7 @@ and data providers implementing `flip IRv32FetchPort` and
 | RV32I + Zifencei | `Rv32iZifenceiSequentialCore` | `Rv32iZifenceiPipelineCore` |
 | RV32E | `Rv32eSequentialCore` | `Rv32ePipelineCore` |
 | RV32I + Zmmul + Zicsr, machine traps and interrupts | `Rv32iZmmulSequentialMachineCore` | `Rv32iZmmulPipelineMachineCore` |
+| RV32IMAC + M/S/U privilege and PMP | `Rv32imacSequentialPrivilegedCore` | `Rv32imacPipelinePrivilegedCore` |
 
 The sequential engine favors a compact implementation. The pipeline overlaps
 fetch, decode/read, execution and commit. Both use synchronous register files;
@@ -75,6 +76,11 @@ The application owns memories, firmware provisioning, peripherals and clock/rese
 See [core selection](docs/cores.md) and [integration](docs/integration.md) before
 wiring providers or controls.
 
+The privileged RV32IMAC presets add M/S/U execution, delegated traps and
+interrupts, supervisor CSR views, `MRET`, `SRET`, `WFI`, counters and eight PMP
+entries. The cohesive privilege provider is also replaceable in an explicit
+composition. See [privileged architecture](docs/privileged.md).
+
 ## Compose a system
 
 `RvMemorySystem<Rv32iSequentialCore>` owns a default 4 KiB fetch ROM and
@@ -108,10 +114,11 @@ Software must target the ISA selected by the core. RV32I variants use the `ilp32
 ABI; RV32E uses `ilp32e`. Zmmul includes multiplication without division, while M
 adds DIV, DIVU, REM and REMU. Machine cores implement a documented machine-mode
 subset with MRET, direct traps, timer and external interrupts. Compressed
-integer instructions are available through the RV32IC presets and preserve
-their original encoding in retirement and fault reporting. Atomics, floating
-point, vectors, lower privilege modes, MMU, caches and architectural debug are
-absent. These cores do not boot Linux.
+integer instructions are available through RV32IC and privileged RV32IMAC
+presets and preserve their original encoding in retirement and fault reporting.
+The privileged presets add lower privilege modes and PMP. Floating point,
+vectors, virtual memory, caches and architectural debug remain absent. The
+current package does not yet boot Linux.
 
 ## Documentation and tests
 

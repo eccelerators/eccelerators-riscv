@@ -11,7 +11,8 @@ using Eccelerators.RiscV.Isa
  * Counter half writes retain the other half. Software clear and hardware reset zero
  * storage; MPP and ISA/identification constants are reconstructed on reads.
  */
-component Rv32MachineCsrs<HART_ID: uint = 0, TIMER_INTERRUPTS: bool = false, EXTERNAL_INTERRUPTS: bool = false> : IRv32CsrPort
+component Rv32MachineCsrs<HART_ID: uint = 0, TIMER_INTERRUPTS: bool = false,
+	EXTERNAL_INTERRUPTS: bool = false> : IRv32PrivilegePort
 {
 	// Concrete Zicsr coverage for composition checks.
 	public const CAPABILITIES: uint = Rv32CsrOperations.CAPABILITY
@@ -51,7 +52,11 @@ component Rv32MachineCsrs<HART_ID: uint = 0, TIMER_INTERRUPTS: bool = false, EXT
 	process Query[]()
 	{
 		trapVector = vector as logic[32]
+		architecturalCause = entryCause
 		returnPc = epc as logic[32]
+		returnIllegal = (returnOperation as uint != Rv32TrapOperations.MRET) as logic
+		waitIllegal = 0b0
+		interruptPending = 0b0
 		interruptEligible = 0b0
 		interruptCause = Rv32TrapOperations.TIMER_CAUSE as logic[32]
 
@@ -64,6 +69,11 @@ component Rv32MachineCsrs<HART_ID: uint = 0, TIMER_INTERRUPTS: bool = false, EXT
 				&& (interruptEnable & Rv32TrapOperations.TIMER_MASK) != 0) {
 				interruptEligible = 0b1
 			}
+		}
+
+		if ((TIMER_INTERRUPTS && timerPending == 0b1)
+			|| (EXTERNAL_INTERRUPTS && externalPending == 0b1)) {
+			interruptPending = 0b1
 		}
 
 		var index = address as uint

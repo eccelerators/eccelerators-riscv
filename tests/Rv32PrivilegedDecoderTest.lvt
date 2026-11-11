@@ -1,0 +1,43 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Contracts
+
+/** Exact privileged encodings remain separate from current-mode legality. */
+@Test
+component Rv32PrivilegedDecoderTest
+{
+	base: Rv32iDecoder
+	csr: Rv32ZicsrDecoder
+	subject: Rv32PrivilegedDecoder
+
+	new()
+	{
+		base = new Rv32iDecoder()
+		csr = new Rv32ZicsrDecoder(base)
+		subject = new Rv32PrivilegedDecoder(csr)
+	}
+
+	fn Check(instruction: uint, operation: uint)
+	{
+		subject.instruction = instruction as logic[32]
+		Simulation.Wait(2)
+		var decoded = RvDecoded.Operation(subject.control as uint)
+		assert RvDecoded.IsLegal(subject.control as uint)
+		var kind = decoded >> Rv32iOperations.KIND_SHIFT
+		assert kind == Rv32TrapOperations.PRIVILEGED_KIND
+		assert (decoded & 3) == operation
+	}
+
+	@Test
+	fn ExactOperations()
+	{
+		Check(Rv32TrapOperations.MRET_ENCODING, Rv32TrapOperations.MRET)
+		Check(Rv32TrapOperations.SRET_ENCODING, Rv32TrapOperations.SRET)
+		Check(Rv32TrapOperations.WFI_ENCODING, Rv32TrapOperations.WFI)
+		subject.instruction = 0x10600073
+		Simulation.Wait(2)
+		assert !RvDecoded.IsLegal(subject.control as uint)
+	}
+}

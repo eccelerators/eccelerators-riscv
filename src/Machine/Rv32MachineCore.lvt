@@ -5,7 +5,7 @@ using Eccelerators.RiscV.Core
 /**
  * General owned-provider machine-mode composition. ZICSR is one shared decoder
  * and CSR state owner: MACHINE_DECODER overlays it for execution while the engine
- * borrows the same instance through IRv32CsrPort. All choices are elaboration-time.
+ * borrows the same instance through IRv32PrivilegePort. All choices are elaboration-time.
  */
 component Rv32MachineCore<
 	REGISTER_PORT: interface,
@@ -16,7 +16,7 @@ component Rv32MachineCore<
 		flip IRv32DecodePort,
 		flip IRv32IntegerPort,
 		flip IRv32MPort,
-		flip IRv32CsrPort,
+		flip IRv32PrivilegePort,
 		flip IRv32CustomInstructionPort
 	),
 	REGISTERS: REGISTER_PORT & new(),

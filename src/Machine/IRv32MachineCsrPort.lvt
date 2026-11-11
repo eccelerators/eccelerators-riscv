@@ -5,7 +5,7 @@ namespace Eccelerators.RiscV.Machine
  * engine consumes the inherited CSR contract; the composition root exclusively
  * drives pending levels after any required clock-domain synchronization.
  */
-interface IRv32MachineCsrPort : IRv32CsrPort
+interface IRv32MachineCsrPort : IRv32PrivilegePort
 {
 	timerPending: in logic
 	externalPending: in logic

@@ -1,0 +1,74 @@
+namespace Eccelerators.RiscV.Machine
+
+/** CSR addresses and writable fields for the privileged architecture 1.12 subset. */
+public class Rv32PrivilegedCsrMap
+{
+	// Supervisor trap, interrupt and counter state.
+	public const SSTATUS: uint = 0x100
+	public const SIE: uint = 0x104
+	public const STVEC: uint = 0x105
+	public const SCOUNTEREN: uint = 0x106
+	public const SSCRATCH: uint = 0x140
+	public const SEPC: uint = 0x141
+	public const SCAUSE: uint = 0x142
+	public const STVAL: uint = 0x143
+	public const SIP: uint = 0x144
+
+	// Machine delegation and physical-memory protection state.
+	public const MEDELEG: uint = 0x302
+	public const MIDELEG: uint = 0x303
+	public const PMPCFG0: uint = 0x3a0
+	public const PMPCFG1: uint = 0x3a1
+	public const PMPADDR0: uint = 0x3b0
+	public const PMPADDR7: uint = 0x3b7
+
+	// User counter views.
+	public const CYCLE: uint = 0xc00
+	public const TIME: uint = 0xc01
+	public const INSTRET: uint = 0xc02
+	public const CYCLEH: uint = 0xc80
+	public const TIMEH: uint = 0xc81
+	public const INSTRETH: uint = 0xc82
+
+	// mstatus/sstatus fields used by M/S/U execution and future Sv32 translation.
+	public const STATUS_SIE: uint = 0x00000002
+	public const STATUS_MIE: uint = 0x00000008
+	public const STATUS_SPIE: uint = 0x00000020
+	public const STATUS_MPIE: uint = 0x00000080
+	public const STATUS_SPP: uint = 0x00000100
+	public const STATUS_MPP: uint = 0x00001800
+	public const STATUS_MPRV: uint = 0x00020000
+	public const STATUS_SUM: uint = 0x00040000
+	public const STATUS_MXR: uint = 0x00080000
+	public const STATUS_TVM: uint = 0x00100000
+	public const STATUS_TW: uint = 0x00200000
+	public const STATUS_TSR: uint = 0x00400000
+	public const STATUS_S_MASK: uint = STATUS_SIE | STATUS_SPIE | STATUS_SPP
+		| STATUS_SUM | STATUS_MXR
+	public const STATUS_M_MASK: uint = STATUS_S_MASK | STATUS_MIE | STATUS_MPIE
+		| STATUS_MPP | STATUS_MPRV | STATUS_TVM | STATUS_TW | STATUS_TSR
+
+	// Standard software, timer and external interrupt bits.
+	public const SSIP: uint = 0x00000002
+	public const MSIP: uint = 0x00000008
+	public const STIP: uint = 0x00000020
+	public const MTIP: uint = 0x00000080
+	public const SEIP: uint = 0x00000200
+	public const MEIP: uint = 0x00000800
+	public const INTERRUPT_MASK: uint = SSIP | MSIP | STIP | MTIP | SEIP | MEIP
+	public const SUPERVISOR_INTERRUPT_MASK: uint = SSIP | STIP | SEIP
+	public const DELEGATABLE_EXCEPTION_MASK: uint = 0x0000b3ff
+
+	// PMP byte fields.
+	public const PMP_READ: uint = 0x01
+	public const PMP_WRITE: uint = 0x02
+	public const PMP_EXECUTE: uint = 0x04
+	public const PMP_ADDRESS_MASK: uint = 0x18
+	public const PMP_TOR: uint = 0x08
+	public const PMP_NAPOT: uint = 0x18
+	public const PMP_LOCK: uint = 0x80
+
+	// RV32IMAC and the fixed eight-entry target.
+	public const ISA: uint = 0x40001105
+	public const PMP_ENTRIES: uint = 8
+}

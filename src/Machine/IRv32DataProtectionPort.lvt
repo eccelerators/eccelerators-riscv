@@ -1,0 +1,11 @@
+namespace Eccelerators.RiscV.Machine
+
+/** Combinational physical load, store or atomic-access permission query. */
+interface IRv32DataProtectionPort
+{
+	dataAddress: in logic[32]
+	dataBytes: in logic[3]
+	dataWrite: in logic
+	dataAtomic: in logic
+	dataAllowed: out logic
+}

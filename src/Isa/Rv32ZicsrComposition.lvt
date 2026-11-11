@@ -10,7 +10,7 @@ using Eccelerators.RiscV.Contracts
  * Exposes separate decode and CSR interfaces backed by private owned children.
  * One engine owns each command group; combinational forwarding adds no cycles.
  * Machine instruction decoding and engine trap policy remain explicit choices.
- * For a custom CSR provider, compose Rv32ZicsrDecoder and IRv32CsrPort directly.
+ * For a custom provider, compose Rv32ZicsrDecoder and IRv32PrivilegePort directly.
  */
 component Rv32ZicsrComposition<HART_ID: uint = 0,
 	TIMER_INTERRUPTS: bool = false,
@@ -57,11 +57,16 @@ component Rv32ZicsrComposition<HART_ID: uint = 0,
 		csrs.clear = clear
 		csrs.enterTrap = enterTrap
 		csrs.returnTrap = returnTrap
+		csrs.returnOperation = returnOperation
 		csrs.entryPc = entryPc
 		csrs.entryCause = entryCause
 		csrs.entryValue = entryValue
 		trapVector = csrs.trapVector
+		architecturalCause = csrs.architecturalCause
 		returnPc = csrs.returnPc
+		returnIllegal = csrs.returnIllegal
+		waitIllegal = csrs.waitIllegal
+		interruptPending = csrs.interruptPending
 		interruptEligible = csrs.interruptEligible
 		interruptCause = csrs.interruptCause
 		readData = csrs.readData

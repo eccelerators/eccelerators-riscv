@@ -1,0 +1,50 @@
+namespace Eccelerators.RiscV.Presets
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Pipeline
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Contracts
+using Livt.IO
+
+/** Named RV32IMAC M/S/U pipeline core for the single-hart OS path. */
+component Rv32imacPipelinePrivilegedCore<
+	RESET_PC: uint = 0,
+	REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block
+> : Rv32PipelinePrivilegedCore<
+	IRv32SupervisorCsrPort,
+	Rv32DualReadRegisterBank<REGISTER_FILE_STYLE>,
+	Rv32imaDecoder,
+	Rv32ZicsrDecoder,
+	Rv32PrivilegedDecoder,
+	Rv32iIntegerUnit,
+	Rv32MUnit<Rv32IterativeMultiplier, Rv32IterativeDivider>,
+	Rv32PrivilegedArchitecture<0, RvInstructionAlignment.Halfword>,
+	Rv32NoCustomInstruction,
+	RESET_PC,
+	32,
+	RvInstructionAlignment.Halfword,
+	Rv32cInstructionFetch
+> {}
+
+/** Named RV32IMAC M/S/U sequential core for architectural comparison. */
+component Rv32imacSequentialPrivilegedCore<
+	RESET_PC: uint = 0,
+	REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block
+> : Rv32SequentialPrivilegedCore<
+	IRv32SupervisorCsrPort,
+	Rv32RegisterBank<REGISTER_FILE_STYLE>,
+	Rv32imaDecoder,
+	Rv32ZicsrDecoder,
+	Rv32PrivilegedDecoder,
+	Rv32iIntegerUnit,
+	Rv32MUnit<Rv32IterativeMultiplier, Rv32IterativeDivider>,
+	Rv32PrivilegedArchitecture<0, RvInstructionAlignment.Halfword>,
+	Rv32NoCustomInstruction,
+	RESET_PC,
+	32,
+	RvInstructionAlignment.Halfword,
+	Rv32cInstructionFetch
+> {}

@@ -1,0 +1,66 @@
+namespace Eccelerators.RiscV.Machine
+
+using Eccelerators.RiscV.Core
+
+/**
+ * Physical data adapter that applies one centralized PMP decision before forwarding
+ * a load, store or atomic request. Denied requests complete as access faults without
+ * reaching RAM, MMIO or an external-memory fabric.
+ */
+component Rv32ProtectedLoadStore : IRv32LoadStorePort, IRv32DataProtectionRequestPort
+{
+	physical: IRv32LoadStorePort
+
+	new(physical: flip IRv32LoadStorePort)
+	{
+		this.physical = physical
+	}
+
+	process Connect[]()
+	{
+		var mask = byteEnable as uint
+		var offset: uint = 0
+		var bytes: uint = 1
+
+		if (atomic == 0b1) {
+			bytes = 4
+		} elif (mask == 15) {
+			bytes = 4
+		} elif (mask == 3 || mask == 6 || mask == 12) {
+			bytes = 2
+		}
+
+		if ((mask & 1) == 0) {
+			if ((mask & 2) != 0) {
+				offset = 1
+			} elif ((mask & 4) != 0) {
+				offset = 2
+			} elif ((mask & 8) != 0) {
+				offset = 3
+			}
+		}
+
+		dataAddress = ((address as uint) + offset) as logic[32]
+		dataBytes = bytes as logic[3]
+		dataWrite = write
+		dataAtomic = atomic
+		physical.address = address
+		physical.write = write
+		physical.byteEnable = byteEnable
+		physical.writeData = writeData
+		physical.atomic = atomic
+		physical.atomicOperation = atomicOperation
+		physical.acquire = acquire
+		physical.release = release
+		physical.request = request & dataAllowed
+		ready = physical.ready
+		error = physical.error
+		readData = physical.readData
+
+		if (request == 0b1 && dataAllowed == 0b0) {
+			ready = 0b1
+			error = 0b1
+			readData = 0
+		}
+	}
+}

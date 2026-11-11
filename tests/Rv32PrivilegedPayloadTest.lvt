@@ -1,0 +1,123 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Presets
+using Eccelerators.RiscV.Storage
+
+/** Boots a tiny M-mode monitor, enters S then U mode and delegates the U ECALL. */
+@Test
+component Rv32PrivilegedPayloadTest
+{
+	fetch: RvFetchRom<64, 6>
+	data: RvLoadStoreRam<64, 6>
+	core: Rv32imacPipelinePrivilegedCore
+	userValue: uint
+	supervisorValue: uint
+	userRetiredInUserMode: bool
+	supervisorRetiredInSupervisorMode: bool
+	trapCount: uint
+	lastTrapCause: uint
+	lastTrapPc: uint
+
+	new()
+	{
+		fetch = new RvFetchRom<64, 6>()
+		data = new RvLoadStoreRam<64, 6>()
+		core = new Rv32imacPipelinePrivilegedCore(fetch, data)
+	}
+
+	process Observe()
+	{
+		state {
+			if (core.retired == 0b1 && core.retiredRd == 5) {
+				userValue = core.retiredValue as uint
+				userRetiredInUserMode = core.currentMode == 0
+			}
+
+			if (core.retired == 0b1 && core.retiredRd == 6) {
+				supervisorValue = core.retiredValue as uint
+				supervisorRetiredInSupervisorMode = core.currentMode == 1
+			}
+
+			if (core.trapped == 0b1) {
+				trapCount++
+				lastTrapCause = core.trapCause as uint
+				lastTrapPc = core.trapPc as uint
+			}
+		}
+	}
+
+	fn Load(index: uint, instruction: uint)
+	{
+		state {
+			fetch.programWrite = 0b1
+			fetch.programIndex = index as logic[6]
+			fetch.programData = instruction as logic[32]
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+	}
+
+	@Test
+	fn DelegatedUserEnvironmentCall()
+	{
+		core.run = 0b0
+		core.stepRequest = 0b0
+		core.restartRequest = 0b0
+		core.machineSoftwarePending = 0b0
+		core.machineTimerPending = 0b0
+		core.machineExternalPending = 0b0
+		core.supervisorSoftwarePending = 0b0
+		core.supervisorTimerPending = 0b0
+		core.supervisorExternalPending = 0b0
+		core.timeLow = 0
+		core.timeHigh = 0
+		data.programWrite = 0b0
+		Simulation.Wait(80)
+		assert core.idle == 0b1
+
+		Load(0, 0x08000093)  // addi x1,x0,128
+		Load(1, 0x10509073)  // csrw stvec,x1
+		Load(2, 0x10000093)  // addi x1,x0,1<<8
+		Load(3, 0x30209073)  // csrw medeleg,x1
+		Load(4, 0x400000b7)  // lui x1,0x40000
+		Load(5, 0xfff08093)  // addi x1,x1,-1
+		Load(6, 0x3b009073)  // csrw pmpaddr0,x1
+		Load(7, 0x01f00093)  // addi x1,x0,RWX NAPOT
+		Load(8, 0x3a009073)  // csrw pmpcfg0,x1
+		Load(9, 0x04000093)  // addi x1,x0,64
+		Load(10, 0x34109073) // csrw mepc,x1
+		Load(11, 0x000010b7) // lui x1,1
+		Load(12, 0x80008093) // addi x1,x1,-2048: MPP=S
+		Load(13, 0x30009073) // csrw mstatus,x1
+		Load(14, 0x30200073) // mret
+		Load(16, 0x06000093) // addi x1,x0,96
+		Load(17, 0x14109073) // csrw sepc,x1
+		Load(18, 0x10200073) // sret
+		Load(24, 0x02a00293) // addi x5,x0,42
+		Load(25, 0x00000073) // ecall
+		Load(32, 0x00700313) // addi x6,x0,7
+		Load(33, 0x0000006f) // jal x0,0
+
+		core.run = 0b1
+		var elapsed: uint = 0
+
+		while (supervisorValue != 7 && elapsed < 1500) {
+			state {
+				elapsed++
+			}
+		}
+
+		core.run = 0b0
+		Simulation.Wait(20)
+		assert supervisorValue == 7
+		assert userValue == 42
+		assert userRetiredInUserMode
+		assert supervisorRetiredInSupervisorMode
+		assert trapCount == 1
+		assert lastTrapCause == 8
+		assert lastTrapPc == 100
+		assert core.currentMode == 1
+	}
+}

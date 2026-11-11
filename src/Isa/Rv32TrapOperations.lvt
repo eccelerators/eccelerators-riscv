@@ -7,8 +7,13 @@ public class Rv32TrapOperations
 {
 	// Decoder/controller capability and operation category, distinct from CSR access.
 	public const CAPABILITY: uint = 32
-	public const RETURN_KIND: uint = 15
+	public const PRIVILEGED_KIND: uint = 15
+	public const MRET: uint = 0
+	public const SRET: uint = 1
+	public const WFI: uint = 2
 	public const MRET_ENCODING: uint = 0x30200073
+	public const SRET_ENCODING: uint = 0x10200073
+	public const WFI_ENCODING: uint = 0x10500073
 
 	// Timer interrupt mask, cause and elaboration capability.
 	public const TIMER_MASK: uint = 0x80
@@ -24,4 +29,18 @@ public class Rv32TrapOperations
 	public const STATUS_MIE: uint = 0x08
 	public const STATUS_MPIE: uint = 0x80
 	public const STATUS_STACK_SHIFT: int = 4
+
+	/** Maps an exact privileged-system encoding to the engine operation value. */
+	public static fn Operation[](instruction: uint) uint
+	{
+		if (instruction == SRET_ENCODING) {
+			return SRET
+		}
+
+		if (instruction == WFI_ENCODING) {
+			return WFI
+		}
+
+		return MRET
+	}
 }

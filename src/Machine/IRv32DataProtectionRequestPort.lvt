@@ -1,0 +1,11 @@
+namespace Eccelerators.RiscV.Machine
+
+/** Requester side of a combinational physical data-permission query. */
+interface IRv32DataProtectionRequestPort
+{
+	dataAddress: out logic[32]
+	dataBytes: out logic[3]
+	dataWrite: out logic
+	dataAtomic: out logic
+	dataAllowed: in logic
+}

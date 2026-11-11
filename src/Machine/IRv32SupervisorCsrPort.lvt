@@ -1,0 +1,18 @@
+namespace Eccelerators.RiscV.Machine
+
+/**
+ * Complete M/S/U privileged provider surface. Platform interrupt levels and time
+ * are synchronous inputs; the provider owns CSR, trap, privilege and PMP state.
+ */
+interface IRv32SupervisorCsrPort : IRv32PrivilegePort, IRv32PrivilegeStatePort,
+	IRv32InstructionProtectionPort, IRv32DataProtectionPort
+{
+	machineSoftwarePending: in logic
+	machineTimerPending: in logic
+	machineExternalPending: in logic
+	supervisorSoftwarePending: in logic
+	supervisorTimerPending: in logic
+	supervisorExternalPending: in logic
+	timeLow: in logic[32]
+	timeHigh: in logic[32]
+}

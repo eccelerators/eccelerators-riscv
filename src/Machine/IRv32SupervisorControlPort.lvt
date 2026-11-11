@@ -1,0 +1,17 @@
+namespace Eccelerators.RiscV.Machine
+
+using Eccelerators.RiscV.Core
+
+/** Execution control plus synchronous platform inputs for an M/S/U hart. */
+interface IRv32SupervisorControlPort : IRv32ControlPort
+{
+	machineSoftwarePending: in logic
+	machineTimerPending: in logic
+	machineExternalPending: in logic
+	supervisorSoftwarePending: in logic
+	supervisorTimerPending: in logic
+	supervisorExternalPending: in logic
+	timeLow: in logic[32]
+	timeHigh: in logic[32]
+	currentMode: out logic[2]
+}

@@ -39,7 +39,7 @@ component Rv32MachineDecoderTest
 		assert !RvDecoded.HasSource1(control) && !RvDecoded.HasSource2(control)
 		assert !RvDecoded.HasDestinationWrite(control)
 		assert RvDecoded.Operation(control)
-			== (Rv32TrapOperations.RETURN_KIND << Rv32iOperations.KIND_SHIFT)
+			== (Rv32TrapOperations.PRIVILEGED_KIND << Rv32iOperations.KIND_SHIFT)
 
 		for (var bit: uint = 0; bit < 32; bit++) {
 			subject.instruction = (0x30200073 ^ ((1 as uint) << bit)) as logic[32]

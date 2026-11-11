@@ -1,0 +1,9 @@
+namespace Eccelerators.RiscV.Machine
+
+/** Combinational physical instruction-access permission query. */
+interface IRv32InstructionProtectionPort
+{
+	instructionAddress: in logic[32]
+	instructionBytes: in logic[3]
+	instructionAllowed: out logic
+}
