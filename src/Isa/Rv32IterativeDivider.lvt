@@ -1,0 +1,132 @@
+namespace Eccelerators.RiscV.Isa
+
+/**
+ * Compact radix-two divider for DIV, DIVU, REM and REMU. It performs one
+ * quotient bit per edge and holds completion until the caller releases request.
+ */
+component Rv32IterativeDivider : IRv32DividerPort
+{
+	public const CAPABILITIES: uint = Rv32MultiplyOperations.DIVIDE_CAPABILITY
+
+	const IDLE: uint = 0
+	const ITERATE: uint = 1
+	const CORRECT: uint = 2
+	const COMPLETE: uint = 3
+	const LAST_BIT: uint = 31
+
+	phase: logic[2]
+	bitIndex: logic[5]
+	selectedOperation: logic[3]
+	quotient: logic[32]
+	remainder: logic[32]
+	divisor: logic[32]
+	negateQuotient: bool
+	negateRemainder: bool
+
+	shiftedRemainder: uint
+	nextRemainder: uint
+	nextQuotient: uint
+	subtract: bool
+
+	/** Calculates one restoring division step and publishes held completion. */
+	process Calculate[]()
+	{
+		shiftedRemainder = ((remainder as uint) << 1) | ((quotient as uint) >> 31)
+		subtract = (remainder as uint >> 31) != 0
+			|| shiftedRemainder >= divisor as uint
+		nextRemainder = shiftedRemainder
+		nextQuotient = (quotient as uint) << 1
+
+		if (subtract) {
+			nextRemainder = shiftedRemainder - (divisor as uint)
+			nextQuotient = nextQuotient | 1
+		}
+
+		ready = 0b0
+		result = quotient
+
+		if (selectedOperation as uint == Rv32MultiplyOperations.REM
+			|| selectedOperation as uint == Rv32MultiplyOperations.REMU) {
+			result = remainder
+		}
+
+		if (phase as uint == COMPLETE) {
+			ready = 0b1
+		}
+	}
+
+	/** Samples operands, iterates, applies signed correction and holds the result. */
+	process Advance()
+	{
+		state {
+			match (phase as uint)
+			{
+				IDLE =>
+				{
+					if (request == 0b1) {
+						var operationValue = operation as uint
+						var signedOperation = operationValue == Rv32MultiplyOperations.DIV
+							|| operationValue == Rv32MultiplyOperations.REM
+						var leftNegative = signedOperation && (left as uint >> 31) != 0
+						var rightNegative = signedOperation && (right as uint >> 31) != 0
+						var leftMagnitude = left as uint
+						var rightMagnitude = right as uint
+
+						if (leftNegative) {
+							leftMagnitude = (~leftMagnitude) + 1
+						}
+
+						if (rightNegative) {
+							rightMagnitude = (~rightMagnitude) + 1
+						}
+
+						selectedOperation = operation as logic[3]
+						negateQuotient = leftNegative != rightNegative
+						negateRemainder = leftNegative
+						bitIndex = 0
+
+						if (right as uint == 0) {
+							quotient = 0xffffffff
+							remainder = left
+							phase = COMPLETE as logic[2]
+						} else {
+							quotient = leftMagnitude as logic[32]
+							remainder = 0
+							divisor = rightMagnitude as logic[32]
+							phase = ITERATE as logic[2]
+						}
+					}
+				}
+				ITERATE =>
+				{
+					quotient = nextQuotient as logic[32]
+					remainder = nextRemainder as logic[32]
+
+					if (bitIndex as uint == LAST_BIT) {
+						phase = CORRECT as logic[2]
+					} else {
+						bitIndex = (bitIndex as uint + 1) as logic[5]
+					}
+				}
+				CORRECT =>
+				{
+					if (negateQuotient) {
+						quotient = ((~(quotient as uint)) + 1) as logic[32]
+					}
+
+					if (negateRemainder) {
+						remainder = ((~(remainder as uint)) + 1) as logic[32]
+					}
+
+					phase = COMPLETE as logic[2]
+				}
+				_ =>
+				{
+					if (request == 0b0) {
+						phase = IDLE as logic[2]
+					}
+				}
+			}
+		}
+	}
+}

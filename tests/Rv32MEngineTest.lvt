@@ -1,0 +1,167 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+
+/** Shared dependency chain for full-M engine integration tests. */
+public class Rv32MProgram
+{
+	public const WORDS: uint[8] = [
+		0x06400093, // addi x1, x0, 100
+		0x00700113, // addi x2, x0, 7
+		0x0220c1b3, // div x3, x1, x2
+		0x0220e233, // rem x4, x1, x2
+		0x004182b3, // add x5, x3, x4
+		0x0200d333, // divu x6, x1, x0
+		0x0200f3b3, // remu x7, x1, x0
+		0x00100073  // ebreak
+	]
+}
+
+/** Sequential full-M integration checks stalls, dependencies and ordered retirement. */
+@Test
+component Rv32MSequentialEngineTest
+{
+	fetch: RvFetchRom<64, 6>
+	data: RvLoadStoreRam<64, 6>
+	core: Rv32iMSequentialCore<Rv32IterativeMultiplier, Rv32IterativeDivider>
+	observed: uint[8]
+	retired: uint
+
+	new()
+	{
+		fetch = new RvFetchRom<64, 6>()
+		data = new RvLoadStoreRam<64, 6>()
+		core = new Rv32iMSequentialCore<
+			Rv32IterativeMultiplier,
+			Rv32IterativeDivider
+		>(fetch, data)
+	}
+
+	process Observe()
+	{
+		state {
+			if (core.retired == 0b1) {
+				retired++
+
+				if (core.retiredRd as uint < 8 && core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	fn Load()
+	{
+		for (var index: uint = 0; index < Rv32MProgram.WORDS.Length as uint; index++) {
+			state {
+				fetch.programWrite = 0b1
+				fetch.programIndex = index as logic[6]
+				fetch.programData = Rv32MProgram.WORDS[index] as logic[32]
+			}
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+	}
+
+	@Test
+	fn Dependencies()
+	{
+		core.run = 0b0
+		Simulation.Wait(40)
+		Load()
+		core.run = 0b1
+		var elapsed: uint = 0
+
+		while (core.halted == 0b0 && elapsed < 500) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.halted == 0b1 && core.faultCause as uint == 3
+		assert retired == 7
+		assert observed[3] == 14
+		assert observed[4] == 2
+		assert observed[5] == 16
+		assert observed[6] == 0xffffffff
+		assert observed[7] == 100
+	}
+}
+
+/** Pipeline full-M integration checks commit stalls and dependent operand hazards. */
+@Test
+component Rv32MPipelineEngineTest
+{
+	fetch: RvFetchRom<64, 6>
+	data: RvLoadStoreRam<64, 6>
+	core: Rv32iMPipelineCore<Rv32IterativeMultiplier, Rv32IterativeDivider>
+	observed: uint[8]
+	retired: uint
+
+	new()
+	{
+		fetch = new RvFetchRom<64, 6>()
+		data = new RvLoadStoreRam<64, 6>()
+		core = new Rv32iMPipelineCore<
+			Rv32IterativeMultiplier,
+			Rv32IterativeDivider
+		>(fetch, data)
+	}
+
+	process Observe()
+	{
+		state {
+			if (core.retired == 0b1) {
+				retired++
+
+				if (core.retiredRd as uint < 8 && core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	fn Load()
+	{
+		for (var index: uint = 0; index < Rv32MProgram.WORDS.Length as uint; index++) {
+			state {
+				fetch.programWrite = 0b1
+				fetch.programIndex = index as logic[6]
+				fetch.programData = Rv32MProgram.WORDS[index] as logic[32]
+			}
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+	}
+
+	@Test
+	fn Dependencies()
+	{
+		core.run = 0b0
+		Simulation.Wait(40)
+		Load()
+		core.run = 0b1
+		var elapsed: uint = 0
+
+		while (core.halted == 0b0 && elapsed < 500) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert core.halted == 0b1 && core.faultCause as uint == 3
+		assert retired == 7
+		assert observed[3] == 14
+		assert observed[4] == 2
+		assert observed[5] == 16
+		assert observed[6] == 0xffffffff
+		assert observed[7] == 100
+	}
+}

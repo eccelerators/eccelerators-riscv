@@ -45,6 +45,7 @@ component PipelineFetchMemory : IRv32FetchPort
 		ready = responseReady
 		error = responseError
 		instruction = responseData
+		synchronized = synchronize
 	}
 
 	/**

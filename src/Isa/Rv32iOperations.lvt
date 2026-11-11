@@ -14,7 +14,7 @@ public class Rv32iOperations
 
 	// Packing and unsupported-operation sentinel for the decoded operation byte.
 	public const KIND_SHIFT: int = 8
-	public const ALU_MASK: uint = 15
+	public const ALU_MASK: uint = 63
 	public const INVALID_ALU: uint = 255
 
 	// Branch funct3 encodings used by the base integer ISA.
@@ -51,6 +51,7 @@ public class Rv32iOperations
 	public const FENCE: uint = 10
 	public const ECALL: uint = 11
 	public const EBREAK: uint = 12
+	public const INSTRUCTION_FENCE: uint = 17
 
 	// Integer datapath operations, packed in the low nibble.
 	public const ADD: uint = 0

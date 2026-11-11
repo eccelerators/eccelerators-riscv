@@ -71,7 +71,7 @@ component Rv32DspMultiplier : IRv32ZmmulPort
 					if (request == 0b1) {
 						leftWord = left
 						rightWord = right
-						selectedOperation = operation
+						selectedOperation = operation as logic[2]
 						phase = PRODUCT as logic[3]
 					}
 				}

@@ -1,0 +1,34 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Contracts
+
+/** Combinational RV32I plus full M decoder for funct3 values zero through seven. */
+component Rv32iMDecoder : IRv32DecodePort
+{
+	public const CAPABILITIES: uint = Rv32iOperations.RV32I_CAPABILITIES
+		| Rv32MultiplyOperations.M_CAPABILITIES
+
+	/** Adds the complete M encoding space without duplicating RV32I decode. */
+	process Decode[]()
+	{
+		var word = instruction as uint
+		var operation = (word >> 12) & 7
+		control = Rv32iDecode.Control(word) as logic[32]
+		immediate = Rv32iDecode.Immediate(word) as logic[32]
+
+		if ((word & 127) == Rv32MultiplyOperations.OPCODE
+			&& (word >> 25) == Rv32MultiplyOperations.FUNCT7) {
+			control = RvDecoded.Pack(
+				(Rv32MultiplyOperations.KIND << Rv32iOperations.KIND_SHIFT) | operation,
+				(word >> 7) & 31,
+				(word >> 15) & 31,
+				(word >> 20) & 31,
+				true,
+				true,
+				true,
+				true
+			) as logic[32]
+		}
+	}
+}

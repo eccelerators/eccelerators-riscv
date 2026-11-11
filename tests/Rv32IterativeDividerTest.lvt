@@ -1,0 +1,182 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+
+/** Architectural division edge cases plus transaction capture and hold behavior. */
+@Test
+component Rv32IterativeDividerTest
+{
+	subject: Rv32IterativeDivider
+
+	new()
+	{
+		subject = new Rv32IterativeDivider()
+	}
+
+	/** Runs one bounded operation and checks the held result. */
+	fn Check(
+		operation: uint,
+		left: uint,
+		right: uint,
+		expected: uint
+	)
+	{
+		subject.request = 0b0
+		Simulation.Wait(2)
+		assert subject.ready == 0b0
+		subject.operation = operation as logic[3]
+		subject.left = left as logic[32]
+		subject.right = right as logic[32]
+		subject.request = 0b1
+		var attempts: uint = 0
+
+		while (subject.ready == 0b0 && attempts < 40) {
+			state {
+				attempts++
+			}
+		}
+
+		assert attempts < 40
+		assert subject.ready == 0b1
+		assert subject.result as uint == expected
+		Simulation.Wait(3)
+		assert subject.ready == 0b1
+		assert subject.result as uint == expected
+		subject.request = 0b0
+		Simulation.Wait(2)
+		assert subject.ready == 0b0
+	}
+
+	/** Checks signed quotient, overflow and division-by-zero rules. */
+	@Test
+	fn SignedDivision()
+	{
+		Check(
+			Rv32MultiplyOperations.DIV,
+			7,
+			3,
+			2
+		)
+		Check(
+			Rv32MultiplyOperations.DIV,
+			0xfffffff9,
+			3,
+			0xfffffffe
+		)
+		Check(
+			Rv32MultiplyOperations.DIV,
+			7,
+			0xfffffffd,
+			0xfffffffe
+		)
+		Check(
+			Rv32MultiplyOperations.DIV,
+			0xfffffff9,
+			0xfffffffd,
+			2
+		)
+		Check(
+			Rv32MultiplyOperations.DIV,
+			0x80000000,
+			0xffffffff,
+			0x80000000
+		)
+		Check(
+			Rv32MultiplyOperations.DIV,
+			0x80000000,
+			0,
+			0xffffffff
+		)
+	}
+
+	/** Checks unsigned quotient boundaries and division by zero. */
+	@Test
+	fn UnsignedDivision()
+	{
+		Check(
+			Rv32MultiplyOperations.DIVU,
+			0xffffffff,
+			2,
+			0x7fffffff
+		)
+		Check(
+			Rv32MultiplyOperations.DIVU,
+			0xffffffff,
+			0xffffffff,
+			1
+		)
+		Check(
+			Rv32MultiplyOperations.DIVU,
+			0x12345678,
+			0,
+			0xffffffff
+		)
+	}
+
+	/** Checks signed and unsigned remainder sign and zero-divisor rules. */
+	@Test
+	fn Remainder()
+	{
+		Check(
+			Rv32MultiplyOperations.REM,
+			0xfffffff9,
+			3,
+			0xffffffff
+		)
+		Check(
+			Rv32MultiplyOperations.REM,
+			7,
+			0xfffffffd,
+			1
+		)
+		Check(
+			Rv32MultiplyOperations.REM,
+			0xfffffff9,
+			0xfffffffd,
+			0xffffffff
+		)
+		Check(
+			Rv32MultiplyOperations.REM,
+			0x80000000,
+			0xffffffff,
+			0
+		)
+		Check(
+			Rv32MultiplyOperations.REM,
+			0x80000000,
+			0,
+			0x80000000
+		)
+		Check(
+			Rv32MultiplyOperations.REMU,
+			0xffffffff,
+			2,
+			1
+		)
+		Check(
+			Rv32MultiplyOperations.REMU,
+			0x12345678,
+			0,
+			0x12345678
+		)
+	}
+
+	/** Proves operands and operation are captured only on acceptance. */
+	@Test
+	fn CapturesAndHolds()
+	{
+		subject.request = 0b0
+		Simulation.Wait(2)
+		subject.operation = Rv32MultiplyOperations.DIV as logic[3]
+		subject.left = 100
+		subject.right = 7
+		subject.request = 0b1
+		Simulation.Wait(5)
+		subject.operation = Rv32MultiplyOperations.REMU as logic[3]
+		subject.left = 1
+		subject.right = 0
+		Simulation.Wait(35)
+		assert subject.ready == 0b1
+		assert subject.result as uint == 14
+	}
+}

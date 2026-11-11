@@ -1,0 +1,90 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+
+/** Combinational Zba overlay borrowing a fallback integer provider. */
+component Rv32ZbaIntegerUnit : IRv32IntegerPort
+{
+	public const CAPABILITIES: uint = Rv32BitmanipOperations.ZBA_CAPABILITY
+	base: IRv32IntegerPort
+
+	new(base: flip IRv32IntegerPort)
+	{
+		this.base = base
+	}
+
+	process Calculate[]()
+	{
+		base.operation = operation
+		base.left = left
+		base.right = right
+		result = base.result
+
+		if (operation as uint >= Rv32BitmanipOperations.SH1ADD
+			&& operation as uint <= Rv32BitmanipOperations.SH3ADD) {
+			result = Rv32BitmanipSemantics.Execute(
+				operation as uint,
+				left as uint,
+				right as uint
+			) as logic[32]
+		}
+	}
+}
+
+/** Combinational Zbb overlay borrowing a fallback integer provider. */
+component Rv32ZbbIntegerUnit : IRv32IntegerPort
+{
+	public const CAPABILITIES: uint = Rv32BitmanipOperations.ZBB_CAPABILITY
+	base: IRv32IntegerPort
+
+	new(base: flip IRv32IntegerPort)
+	{
+		this.base = base
+	}
+
+	process Calculate[]()
+	{
+		base.operation = operation
+		base.left = left
+		base.right = right
+		result = base.result
+
+		if (operation as uint >= Rv32BitmanipOperations.ANDN
+			&& operation as uint <= Rv32BitmanipOperations.REV8) {
+			result = Rv32BitmanipSemantics.Execute(
+				operation as uint,
+				left as uint,
+				right as uint
+			) as logic[32]
+		}
+	}
+}
+
+/** Combinational Zbs overlay borrowing a fallback integer provider. */
+component Rv32ZbsIntegerUnit : IRv32IntegerPort
+{
+	public const CAPABILITIES: uint = Rv32BitmanipOperations.ZBS_CAPABILITY
+	base: IRv32IntegerPort
+
+	new(base: flip IRv32IntegerPort)
+	{
+		this.base = base
+	}
+
+	process Calculate[]()
+	{
+		base.operation = operation
+		base.left = left
+		base.right = right
+		result = base.result
+
+		if (operation as uint >= Rv32BitmanipOperations.BCLR
+			&& operation as uint <= Rv32BitmanipOperations.BSET) {
+			result = Rv32BitmanipSemantics.Execute(
+				operation as uint,
+				left as uint,
+				right as uint
+			) as logic[32]
+		}
+	}
+}

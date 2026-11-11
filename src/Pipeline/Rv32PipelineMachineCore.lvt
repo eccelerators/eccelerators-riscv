@@ -1,0 +1,28 @@
+namespace Eccelerators.RiscV.Pipeline
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Storage
+
+/** Pipeline specialization of the shared machine-mode composition. */
+component Rv32PipelineMachineCore<
+	REGISTERS: IRv32DualReadRegisterPort & new(),
+	BASE_DECODER: IRv32DecodePort & new(),
+	ZICSR: IRv32DecodePort & IRv32MachineCsrPort & new(flip IRv32DecodePort),
+	MACHINE_DECODER: IRv32DecodePort & new(flip IRv32DecodePort),
+	INTEGER: IRv32IntegerPort & new(),
+	MULTIPLIER: IRv32MPort & new(),
+	CUSTOM: IRv32CustomInstructionPort & new(),
+	RESET_PC: uint = 0,
+	REGISTER_COUNT: uint = 32
+> : Rv32MachineCore<
+		IRv32DualReadRegisterPort,
+		Rv32PipelineEngine<RESET_PC, true, REGISTER_COUNT>,
+		REGISTERS,
+		BASE_DECODER,
+		ZICSR,
+		MACHINE_DECODER,
+		INTEGER,
+		MULTIPLIER,
+		CUSTOM
+	> {}

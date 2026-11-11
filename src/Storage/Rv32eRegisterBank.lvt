@@ -1,0 +1,41 @@
+namespace Eccelerators.RiscV.Storage
+
+using Eccelerators.RiscV.Core
+using Livt.IO
+
+/** One-edge sixteen-entry RV32E register bank with selectable memory style. */
+component Rv32eRegisterBank<STYLE: MemoryStyle = MemoryStyle.Block> : IRv32RegisterPort
+{
+	@Memory(Style = STYLE)
+	@UninitializedStorage
+	storage: logic[16, 32]
+	response: logic[32]
+	zeroRead: bool
+
+	new()
+	{
+	}
+
+	process Access()
+	{
+		state {
+			if (enable == 0b1 && write == 0b0) {
+				response = storage[(index as uint) & 15]
+				zeroRead = index == 0
+			}
+
+			if (enable == 0b1 && write == 0b1 && index != 0) {
+				storage[(index as uint) & 15] = writeData
+			}
+		}
+	}
+
+	process Drive[]()
+	{
+		readData = response
+
+		if (zeroRead) {
+			readData = 0
+		}
+	}
+}

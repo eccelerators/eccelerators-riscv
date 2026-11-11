@@ -1,0 +1,142 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Contracts
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+
+/** RV32E decoder reserves every used x16..x31 encoding. */
+@Test
+component Rv32eDecodeTest
+{
+	subject: Rv32eDecoder
+
+	new()
+	{
+		subject = new Rv32eDecoder()
+	}
+
+	@Test
+	fn RegisterRange()
+	{
+		subject.instruction = 0x00700793
+		Simulation.Wait(1)
+		assert RvDecoded.IsLegal(subject.control as uint)
+		subject.instruction = 0x00100813
+		Simulation.Wait(1)
+		assert !RvDecoded.IsLegal(subject.control as uint)
+		subject.instruction = 0x000800b3
+		Simulation.Wait(1)
+		assert !RvDecoded.IsLegal(subject.control as uint)
+		subject.instruction = 0x010000b3
+		Simulation.Wait(1)
+		assert !RvDecoded.IsLegal(subject.control as uint)
+	}
+}
+
+/** Sequential RV32E retires x15 and traps before an x16 write. */
+@Test
+component Rv32eSequentialEngineTest
+{
+	fetch: RvFetchRom<16, 4>
+	data: RvLoadStoreRam<16, 4>
+	core: Rv32eSequentialCore
+	retired: uint
+
+	new()
+	{
+		fetch = new RvFetchRom<16, 4>()
+		data = new RvLoadStoreRam<16, 4>()
+		core = new Rv32eSequentialCore(fetch, data)
+	}
+
+	process Observe()
+	{
+		state {
+			if (core.retired == 0b1) {
+				retired++
+			}
+		}
+	}
+
+	@Test
+	fn ReservedRegister()
+	{
+		core.run = 0b0
+		Simulation.Wait(24)
+
+		state {
+			fetch.programWrite = 0b1
+			fetch.programIndex = 0
+			fetch.programData = 0x00700793
+		}
+
+		state {
+			fetch.programIndex = 1
+			fetch.programData = 0x00100813
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+
+		core.run = 0b1
+		Simulation.Wait(80)
+		assert core.halted == 0b1 && core.faultCause as uint == 2
+		assert retired == 1 && core.faultValue == 0x00100813
+	}
+}
+
+/** Pipeline RV32E preserves the same reserved-register behavior. */
+@Test
+component Rv32ePipelineEngineTest
+{
+	fetch: RvFetchRom<16, 4>
+	data: RvLoadStoreRam<16, 4>
+	core: Rv32ePipelineCore
+	retired: uint
+
+	new()
+	{
+		fetch = new RvFetchRom<16, 4>()
+		data = new RvLoadStoreRam<16, 4>()
+		core = new Rv32ePipelineCore(fetch, data)
+	}
+
+	process Observe()
+	{
+		state {
+			if (core.retired == 0b1) {
+				retired++
+			}
+		}
+	}
+
+	@Test
+	fn ReservedRegister()
+	{
+		core.run = 0b0
+		Simulation.Wait(24)
+
+		state {
+			fetch.programWrite = 0b1
+			fetch.programIndex = 0
+			fetch.programData = 0x00700793
+		}
+
+		state {
+			fetch.programIndex = 1
+			fetch.programData = 0x00100813
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+
+		core.run = 0b1
+		Simulation.Wait(80)
+		assert core.halted == 0b1 && core.faultCause as uint == 2
+		assert retired == 1 && core.faultValue == 0x00100813
+	}
+}

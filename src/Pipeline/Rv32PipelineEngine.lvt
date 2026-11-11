@@ -18,9 +18,12 @@ using Eccelerators.RiscV.Machine
  * Interrupt delivery samples the CSR provider at a drained boundary (a NoCsrs
  * provider ties interruptEligible low, making delivery inert).
  */
-component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : IRv32ControlPort
+component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
+	REGISTER_COUNT: uint = 32> : IRv32ControlPort
 {
 	static assert (RESET_PC & 3) == 0, "Pipeline reset PC must be word aligned"
+	static assert REGISTER_COUNT == 16 || REGISTER_COUNT == 32,
+		"Architectural register count must select RV32E or RV32I"
 
 	// Semantic families implemented by the controller, excluding the borrowed ALU.
 	public const CAPABILITIES: uint = Rv32iOperations.MEMORY_CAPABILITY | Rv32iOperations.CONTROL_CAPABILITY
@@ -36,7 +39,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 	loadStore: IRv32LoadStorePort
 	decoder: IRv32DecodePort
 	integer: IRv32IntegerPort
-	multiplier: IRv32MultiplyPort
+	multiplier: IRv32MPort
 	csrs: IRv32CsrPort
 	custom: IRv32CustomInstructionPort
 
@@ -129,6 +132,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 	cCustom: bool
 	cCsr: bool
 	cReturn: bool
+	cInstructionFence: bool
 	cSerialize: bool
 	redirectPc: uint
 	takeInterrupt: bool
@@ -151,7 +155,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 	new(registers: flip IRv32DualReadRegisterPort, fetch: flip IRv32FetchPort,
 		loadStore: flip IRv32LoadStorePort, decoder: flip IRv32DecodePort,
 		integer: flip IRv32IntegerPort,
-		multiplier: flip IRv32MultiplyPort, csrs: flip IRv32CsrPort,
+		multiplier: flip IRv32MPort, csrs: flip IRv32CsrPort,
 		custom: flip IRv32CustomInstructionPort)
 	{
 		this.registers = registers
@@ -174,7 +178,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 		var operand2 = xRight
 		xKind = RvDecoded.Operation(control) >> Rv32iOperations.KIND_SHIFT
 		xWidth = (xWord >> 12) & 7
-		integer.operation = (RvDecoded.Operation(control) & Rv32iOperations.ALU_MASK) as logic[4]
+		integer.operation = (RvDecoded.Operation(control) & Rv32iOperations.ALU_MASK) as logic[6]
 		integer.left = xLeft as logic[32]
 		integer.right = xImmediate as logic[32]
 
@@ -251,6 +255,10 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 					xCause = Rv32iOperations.BREAKPOINT as logic[4]
 					xResult = xPc
 				}
+				Rv32iOperations.INSTRUCTION_FENCE =>
+				{
+					xRedirect = true
+				}
 				_ => {
 				// Legal integer operations and FENCE use common ordered commit.
 				}
@@ -297,10 +305,12 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 		cCustom = cKind as uint == Rv32CustomInstructionOperations.KIND
 		cCsr = cKind as uint == Rv32CsrOperations.KIND
 		cReturn = MACHINE_TRAPS && cKind as uint == Rv32TrapOperations.RETURN_KIND
+		cInstructionFence = cKind as uint == Rv32iOperations.INSTRUCTION_FENCE
 		cComplete = cValid && (cFault || (cMemory && !dataGap && loadStore.ready == 0b1)
 			|| (cMultiply && !multiplyGap && multiplier.ready == 0b1)
 			|| (cCustom && !customGap && custom.ready == 0b1)
-			|| (!cMemory && !cMultiply && !cCustom))
+			|| (cInstructionFence && fetch.synchronized == 0b1)
+			|| (!cMemory && !cMultiply && !cCustom && !cInstructionFence))
 		cFailed = cFault || (cMemory && loadStore.error == 0b1) || (cCsr && csrs.illegal == 0b1)
 			|| (cCustom && custom.fault == 0b1)
 		cWrite = cComplete && !cFailed && cWrites && cRd != 0
@@ -322,7 +332,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 			redirectPc = csrs.returnPc as uint
 		}
 
-		cSerialize = cComplete && !cFailed && (cCsr || cReturn)
+		cSerialize = cComplete && !cFailed && (cCsr || cReturn || cInstructionFence)
 		quiescent = !fBusy && !fValid && !fGap && !dValid && !xValid && !cValid
 			&& !dataGap && !multiplyGap && !customGap && !trapPending && !boundaryCheck
 		takeInterrupt = initialized && !stopped && !trapPending && !stepActive
@@ -369,9 +379,14 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 
 		fetch.request = 0b0
 		fetch.address = fPc as logic[32]
+		fetch.synchronize = 0b0
 
 		if (fBusy) {
 			fetch.request = 0b1
+		}
+
+		if (cValid && cInstructionFence && !cFault) {
+			fetch.synchronize = 0b1
 		}
 
 		loadStore.request = 0b0
@@ -389,7 +404,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 		}
 
 		multiplier.request = 0b0
-		multiplier.operation = cWidth as logic[2]
+		multiplier.operation = cWidth as logic[3]
 		multiplier.left = cOperand as logic[32]
 		multiplier.right = cStoreValue as logic[32]
 
@@ -503,7 +518,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : 
 				stopCause = 0
 				stopValue = 0
 
-				if (clearIndex == 31) {
+				if (clearIndex as uint == REGISTER_COUNT - 1) {
 					initialized = true
 					restartCompleted = restartRequest
 					stepCompleted = stepRequest

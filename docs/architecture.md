@@ -30,7 +30,7 @@ classDiagram
     class RegisterBank
     class Decoder
     class IntegerUnit
-    class Multiplier
+    class MUnit
     class CustomInstruction
     class ZicsrComposition
     class FetchPort {
@@ -43,23 +43,26 @@ classDiagram
     NamedCore *-- RegisterBank
     NamedCore *-- Decoder
     NamedCore *-- IntegerUnit
-    NamedCore *-- Multiplier
+    NamedCore *-- MUnit
     NamedCore *-- CustomInstruction
     NamedCore *-- ZicsrComposition
     Engine --> RegisterBank : borrows
     Engine --> Decoder : borrows
     Engine --> IntegerUnit : borrows
-    Engine --> Multiplier : borrows
+    Engine --> MUnit : borrows
     Engine --> CustomInstruction : borrows
     Engine --> ZicsrComposition : borrows
     Engine --> FetchPort : instructions
     Engine --> LoadStorePort : data
 ```
 
-The diagram summarizes a machine composition; base presets substitute stateless
-terminations for unsupported multiplier/CSR ports. Compile-time selection removes
-unselected hardware. A facade forwards signal interfaces combinationally rather
-than introducing a scheduled adapter.
+The diagram summarizes a machine composition. `Rv32MachineCore` owns the common
+machine topology, including the one `Rv32ZicsrComposition` instance used for both
+decode and CSR access. Its sequential and pipeline specializations bind the
+register-port and engine contracts. Base presets substitute stateless terminations
+for unsupported M/CSR ports. Compile-time selection removes unselected hardware.
+A facade forwards signal interfaces combinationally rather than introducing a
+scheduled adapter.
 
 The engines share ISA semantics and providers where timing permits. They have
 separate controllers because a sequential single-port register bank and an

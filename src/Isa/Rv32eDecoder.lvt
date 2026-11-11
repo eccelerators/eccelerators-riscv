@@ -1,0 +1,31 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Contracts
+
+/** RV32E base decoder rejecting every used architectural register above x15. */
+component Rv32eDecoder : IRv32DecodePort
+{
+	public const CAPABILITIES: uint = Rv32iDecode.CAPABILITIES
+	base: Rv32iDecoder
+
+	new()
+	{
+		base = new Rv32iDecoder()
+	}
+
+	process Decode[]()
+	{
+		base.instruction = instruction
+		control = base.control
+		immediate = base.immediate
+		var decoded = control as uint
+		var invalid = RvDecoded.HasSource1(decoded) && RvDecoded.Rs1(decoded) >= 16
+			|| RvDecoded.HasSource2(decoded) && RvDecoded.Rs2(decoded) >= 16
+			|| RvDecoded.HasDestinationWrite(decoded) && RvDecoded.Rd(decoded) >= 16
+
+		if (invalid) {
+			control = 0
+		}
+	}
+}

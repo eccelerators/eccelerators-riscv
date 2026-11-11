@@ -1,0 +1,48 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+
+/**
+ * Full M provider composed from independently selectable multiplication and
+ * division providers. Operation routing is combinational and fixed at elaboration.
+ */
+component Rv32MUnit<
+	MULTIPLIER: IRv32ZmmulPort & new(),
+	DIVIDER: IRv32DividerPort & new()
+> : IRv32MPort
+{
+	public const CAPABILITIES: uint = Rv32MultiplyOperations.M_CAPABILITIES
+
+	multiplier: MULTIPLIER
+	divider: DIVIDER
+
+	/** Owns one provider for each independent M subset. */
+	new()
+	{
+		multiplier = new MULTIPLIER()
+		divider = new DIVIDER()
+	}
+
+	/** Routes one transaction to exactly one provider and returns its completion. */
+	process Connect[]()
+	{
+		var divide = operation as uint >= Rv32MultiplyOperations.DIV
+		multiplier.request = request
+		divider.request = 0b0
+		multiplier.operation = operation
+		divider.operation = operation
+		multiplier.left = left
+		divider.left = left
+		multiplier.right = right
+		divider.right = right
+		ready = multiplier.ready
+		result = multiplier.result
+
+		if (divide) {
+			multiplier.request = 0b0
+			divider.request = request
+			ready = divider.ready
+			result = divider.result
+		}
+	}
+}

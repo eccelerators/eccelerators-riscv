@@ -1,0 +1,183 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+
+/** No-argument RV32I + Zba decoder composition for general cores. */
+component Rv32iZbaDecoder : IRv32DecodePort
+{
+	base: Rv32iDecoder
+	extension: Rv32ZbaDecoder
+
+	new()
+	{
+		base = new Rv32iDecoder()
+		extension = new Rv32ZbaDecoder(base)
+	}
+
+	process Connect[]()
+	{
+		extension.instruction = instruction
+		control = extension.control
+		immediate = extension.immediate
+	}
+}
+
+/** No-argument RV32I + Zbb decoder composition for general cores. */
+component Rv32iZbbDecoder : IRv32DecodePort
+{
+	base: Rv32iDecoder
+	extension: Rv32ZbbDecoder
+
+	new()
+	{
+		base = new Rv32iDecoder()
+		extension = new Rv32ZbbDecoder(base)
+	}
+
+	process Connect[]()
+	{
+		extension.instruction = instruction
+		control = extension.control
+		immediate = extension.immediate
+	}
+}
+
+/** No-argument RV32I + Zbs decoder composition for general cores. */
+component Rv32iZbsDecoder : IRv32DecodePort
+{
+	base: Rv32iDecoder
+	extension: Rv32ZbsDecoder
+
+	new()
+	{
+		base = new Rv32iDecoder()
+		extension = new Rv32ZbsDecoder(base)
+	}
+
+	process Connect[]()
+	{
+		extension.instruction = instruction
+		control = extension.control
+		immediate = extension.immediate
+	}
+}
+
+/** No-argument RV32I + Zba + Zbb + Zbs decoder composition. */
+component Rv32iBitmanipDecoder : IRv32DecodePort
+{
+	public const CAPABILITIES: uint = Rv32iDecode.CAPABILITIES
+		| Rv32BitmanipOperations.ZBA_CAPABILITY
+		| Rv32BitmanipOperations.ZBB_CAPABILITY
+		| Rv32BitmanipOperations.ZBS_CAPABILITY
+	base: Rv32iDecoder
+	zba: Rv32ZbaDecoder
+	zbb: Rv32ZbbDecoder
+	zbs: Rv32ZbsDecoder
+
+	new()
+	{
+		base = new Rv32iDecoder()
+		zba = new Rv32ZbaDecoder(base)
+		zbb = new Rv32ZbbDecoder(zba)
+		zbs = new Rv32ZbsDecoder(zbb)
+	}
+
+	process Connect[]()
+	{
+		zbs.instruction = instruction
+		control = zbs.control
+		immediate = zbs.immediate
+	}
+}
+
+/** No-argument RV32I + Zba integer composition. */
+component Rv32iZbaIntegerUnit : IRv32IntegerPort
+{
+	base: Rv32iIntegerUnit
+	extension: Rv32ZbaIntegerUnit
+
+	new()
+	{
+		base = new Rv32iIntegerUnit()
+		extension = new Rv32ZbaIntegerUnit(base)
+	}
+
+	process Connect[]()
+	{
+		extension.operation = operation
+		extension.left = left
+		extension.right = right
+		result = extension.result
+	}
+}
+
+/** No-argument RV32I + Zbb integer composition. */
+component Rv32iZbbIntegerUnit : IRv32IntegerPort
+{
+	base: Rv32iIntegerUnit
+	extension: Rv32ZbbIntegerUnit
+
+	new()
+	{
+		base = new Rv32iIntegerUnit()
+		extension = new Rv32ZbbIntegerUnit(base)
+	}
+
+	process Connect[]()
+	{
+		extension.operation = operation
+		extension.left = left
+		extension.right = right
+		result = extension.result
+	}
+}
+
+/** No-argument RV32I + Zbs integer composition. */
+component Rv32iZbsIntegerUnit : IRv32IntegerPort
+{
+	base: Rv32iIntegerUnit
+	extension: Rv32ZbsIntegerUnit
+
+	new()
+	{
+		base = new Rv32iIntegerUnit()
+		extension = new Rv32ZbsIntegerUnit(base)
+	}
+
+	process Connect[]()
+	{
+		extension.operation = operation
+		extension.left = left
+		extension.right = right
+		result = extension.result
+	}
+}
+
+/** No-argument RV32I + Zba + Zbb + Zbs integer composition. */
+component Rv32iBitmanipIntegerUnit : IRv32IntegerPort
+{
+	public const CAPABILITIES: uint = Rv32iIntegerUnit.CAPABILITIES
+		| Rv32BitmanipOperations.ZBA_CAPABILITY
+		| Rv32BitmanipOperations.ZBB_CAPABILITY
+		| Rv32BitmanipOperations.ZBS_CAPABILITY
+	base: Rv32iIntegerUnit
+	zba: Rv32ZbaIntegerUnit
+	zbb: Rv32ZbbIntegerUnit
+	zbs: Rv32ZbsIntegerUnit
+
+	new()
+	{
+		base = new Rv32iIntegerUnit()
+		zba = new Rv32ZbaIntegerUnit(base)
+		zbb = new Rv32ZbbIntegerUnit(zba)
+		zbs = new Rv32ZbsIntegerUnit(zbb)
+	}
+
+	process Connect[]()
+	{
+		zbs.operation = operation
+		zbs.left = left
+		zbs.right = right
+		result = zbs.result
+	}
+}

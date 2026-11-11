@@ -1,0 +1,12 @@
+namespace Eccelerators.RiscV.Machine
+
+/**
+ * Machine CSR state with synchronous platform interrupt levels. The execution
+ * engine consumes the inherited CSR contract; the composition root exclusively
+ * drives pending levels after any required clock-domain synchronization.
+ */
+interface IRv32MachineCsrPort : IRv32CsrPort
+{
+	timerPending: in logic
+	externalPending: in logic
+}

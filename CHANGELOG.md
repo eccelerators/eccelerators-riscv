@@ -16,6 +16,16 @@ All notable changes to `Eccelerators.RiscV` are recorded here.
   recursive provider pairing, and the `Rv32XqdivInstruction` example.
 - Add typed retirement-trace core and system wrappers as the custom-control
   composition example.
+- Add `Rv32MachineCore` with sequential and pipeline specializations so qualified
+  machine presets share one Zicsr/CSR owner and one interrupt/control topology.
+- Add full RV32M decode, a compact iterative divider, structural multiplier/divider
+  composition and named sequential and pipeline M presets.
+- Add independently composable Zba, Zbb and Zbs decoder/integer overlays and named
+  presets for the combined scalar bit-manipulation set.
+- Add RV32E decoders, sixteen-entry register banks and named sequential and pipeline
+  presets with reserved-register enforcement.
+- Add Zifencei decoding and an ordered fetch-synchronization handshake, including
+  pipeline invalidation of prefetched instructions.
 
 ### Changed
 
@@ -29,6 +39,9 @@ All notable changes to `Eccelerators.RiscV` are recorded here.
 - Replace the Zmmul `DSP_MULTIPLY` Boolean with an explicit constrained multiplier
   provider type, and widen decoded operations to a five-bit family plus eight-bit
   provider-local operation.
+- Generalize the engine multiplication boundary to `IRv32MPort`, preserving typed
+  Zmmul providers while allowing full-M compositions. Make architectural register
+  count an explicit engine specialization restricted to RV32I or RV32E.
 
 ### Removed
 

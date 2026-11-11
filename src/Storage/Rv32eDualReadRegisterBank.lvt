@@ -1,0 +1,79 @@
+namespace Eccelerators.RiscV.Storage
+
+using Livt.IO
+
+/** Replicated sixteen-entry RV32E bank for the pipeline's two synchronous reads. */
+component Rv32eDualReadRegisterBank<STYLE: MemoryStyle = MemoryStyle.Block> : IRv32DualReadRegisterPort
+{
+	public const READ_PORTS: int = 2
+	public const READ_LATENCY: int = 1
+	public const INDEPENDENT_WRITE: bool = true
+	public const WRITE_FORWARDING: bool = true
+
+	@Memory(Style = STYLE)
+	@UninitializedStorage
+	leftStorage: logic[16, 32]
+	@Memory(Style = STYLE)
+	@UninitializedStorage
+	rightStorage: logic[16, 32]
+	leftResponse: logic[32]
+	rightResponse: logic[32]
+	leftZero: bool
+	rightZero: bool
+	leftCollision: bool
+	rightCollision: bool
+	forwarded: logic[32]
+
+	new()
+	{
+	}
+
+	process Left()
+	{
+		state {
+			if (readEnable == 0b1) {
+				leftResponse = leftStorage[(leftIndex as uint) & 15]
+				leftZero = leftIndex == 0
+				leftCollision = writeEnable == 0b1 && writeIndex == leftIndex
+				forwarded = writeData
+			}
+
+			if (writeEnable == 0b1 && writeIndex != 0) {
+				leftStorage[(writeIndex as uint) & 15] = writeData
+			}
+		}
+	}
+
+	process Right()
+	{
+		state {
+			if (readEnable == 0b1) {
+				rightResponse = rightStorage[(rightIndex as uint) & 15]
+				rightZero = rightIndex == 0
+				rightCollision = writeEnable == 0b1 && writeIndex == rightIndex
+			}
+
+			if (writeEnable == 0b1 && writeIndex != 0) {
+				rightStorage[(writeIndex as uint) & 15] = writeData
+			}
+		}
+	}
+
+	process Drive[]()
+	{
+		leftData = leftResponse
+		rightData = rightResponse
+
+		if (leftZero) {
+			leftData = 0
+		} elif (leftCollision) {
+			leftData = forwarded
+		}
+
+		if (rightZero) {
+			rightData = 0
+		} elif (rightCollision) {
+			rightData = forwarded
+		}
+	}
+}

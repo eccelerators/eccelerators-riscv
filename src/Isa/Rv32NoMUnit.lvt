@@ -4,11 +4,11 @@ using Eccelerators.RiscV.Core
 
 /**
  * Constant port termination for an RV32I-only composition; owns no arithmetic
- * state. Its engine must disable multiplication dispatch and decoder acceptance.
+ * state. Its engine must disable M-family dispatch and decoder acceptance.
  */
-component Rv32NoMultiplier : IRv32MultiplyPort
+component Rv32NoMUnit : IRv32MPort
 {
-	// No supported multiplication operations.
+	// No supported M-family operations.
 	public const CAPABILITIES: uint = 0
 
 	/**

@@ -13,10 +13,10 @@ Capabilities remain elaboration-time coverage checks, not a runtime registry.
 
 | Extension family | Reusable boundary | Required new work |
 |---|---|---|
-| M division/remainder | Variable-latency integer transaction and existing commit ownership | Standard DIV/REM semantics, decoder and a complete M preset |
-| Zba/Zbb/Zbs | `IRv32IntegerPort`, shared decode representation and engines | Expanded combinational operation vocabulary and coverage |
-| RV32E | RV32 execution engines and most semantics | Register-index legality, 16-register storage and RV32E-qualified presets |
-| Zifencei | Ordered commit and fetch ownership | Instruction-fetch synchronization command and platform contract |
+| M division/remainder | `IRv32MPort`, `IRv32DividerPort` and existing commit ownership | Implemented by the full-M decoder, `Rv32MUnit` and named M presets |
+| Zba/Zbb/Zbs | `IRv32IntegerPort`, typed decoder/execution overlays and engines | Implemented independently and as combined named presets |
+| RV32E | RV32 execution engines and most semantics | Implemented with 16-register storage, legality checks and named presets |
+| Zifencei | Ordered commit and `IRv32FetchPort` synchronization | Implemented by typed decoder overlays and named presets |
 | A | Ordered commit and load/store addressing | Atomic memory transaction, reservation ownership and memory-order contract |
 | C | Integer semantics and later pipeline stages | Halfword fetch assembly, instruction length, cross-word fetch and precise PC/fault handling |
 | F/D | Integer control and memory framework where compatible | Floating-point register state, rounding/status CSRs, execution and commit ports |
@@ -35,6 +35,13 @@ compositions and `Rv32i...` or combined names when a component implements or
 requires a specific instruction set. Standard instruction sources live under
 `Eccelerators.RiscV.Isa`; engines, privilege state, storage and systems remain in
 their responsibility-based namespaces.
+
+The M transaction contract admits one request and holds it until its selected
+provider completes. Zmmul providers implement only multiply operations; `Rv32MUnit`
+combines a multiplier and divider without adding division hardware to Zmmul cores.
+Zba, Zbb and Zbs use typed overlays so a custom composition can select each subset
+independently. RV32E is a base-ISA choice represented by dedicated decoders,
+register banks and presets rather than an arbitrary runtime register count.
 
 An extension is supported only after decode, execution, architectural state,
 faults, software-visible reporting and both relevant engine integrations are

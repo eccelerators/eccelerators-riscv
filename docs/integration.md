@@ -3,8 +3,8 @@
 ## Memory ports
 
 Both engines borrow separate instruction and data providers through
-[`IRv32FetchPort`](../src/Sequential/IRv32FetchPort.lvt) and
-[`IRv32LoadStorePort`](../src/Sequential/IRv32LoadStorePort.lvt). Each port carries
+[`IRv32FetchPort`](../src/Core/IRv32FetchPort.lvt) and
+[`IRv32LoadStorePort`](../src/Core/IRv32LoadStorePort.lvt). Each port carries
 one outstanding aligned 32-bit word transaction in one clock domain. Fetch has
 no write signals; write direction, byte enables and write data apply only to load/store.
 
@@ -18,6 +18,13 @@ transaction exactly once. Reads ignore the byte enable; stores use little-endian
 lanes, with lane zero selecting bits 7..0. A zero store mask has no effect.
 Providers must reject errors before irreversible effects. There is no transaction
 cancellation, retry or rollback protocol.
+
+The fetch port also carries `synchronize`/`synchronized` for Zifencei. A provider
+must accept synchronization only after its earlier fetch transaction has completed,
+make every instruction-side view observe data effects ordered before FENCE.I, and
+hold `synchronized` until `synchronize` falls. A cacheless provider may acknowledge
+without state changes only when the platform guarantees this visibility. Buffered
+or cached providers must invalidate or flush stale instruction state first.
 
 Use distinct providers for instruction and data, or supply explicit arbitration.
 Passing one unarbitrated single-port memory to both ports is unsupported. Pipeline

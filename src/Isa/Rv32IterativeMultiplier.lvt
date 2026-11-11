@@ -101,7 +101,7 @@ component Rv32IterativeMultiplier : IRv32ZmmulPort
 						originalRight = right
 						low = right
 						high = 0
-						selectedOperation = operation
+						selectedOperation = operation as logic[2]
 						bitIndex = 0
 						phase = ITERATE as logic[3]
 					}

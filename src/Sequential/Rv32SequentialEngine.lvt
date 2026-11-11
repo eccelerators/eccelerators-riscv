@@ -15,9 +15,12 @@ using Eccelerators.RiscV.Machine
  * provider at a drained instruction boundary before the next fetch (a NoCsrs
  * provider ties interruptEligible low, making delivery inert).
  */
-component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> : IRv32ControlPort
+component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
+	REGISTER_COUNT: uint = 32> : IRv32ControlPort
 {
 	static assert (RESET_PC & 3) == 0, "Reset PC must be word aligned"
+	static assert REGISTER_COUNT == 16 || REGISTER_COUNT == 32,
+		"Architectural register count must select RV32E or RV32I"
 
 	// Semantic operation families owned by the controller, separate from integer execution.
 	public const CAPABILITIES: uint = Rv32iOperations.MEMORY_CAPABILITY | Rv32iOperations.CONTROL_CAPABILITY
@@ -37,6 +40,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 	const STOPPED: uint = 10
 	const EXCEPTION: uint = 12
 	const CUSTOM_WAIT: uint = 13
+	const INSTRUCTION_FENCE_WAIT: uint = 14
 
 	// Exclusive borrowed implementation instances, with substitutable decode/multiply ports.
 	registers: IRv32RegisterPort
@@ -44,7 +48,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 	loadStore: IRv32LoadStorePort
 	decoder: IRv32DecodePort
 	integer: IRv32IntegerPort
-	multiplier: IRv32MultiplyPort
+	multiplier: IRv32MPort
 	csrs: IRv32CsrPort
 	custom: IRv32CustomInstructionPort
 
@@ -84,7 +88,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 		loadStore: flip IRv32LoadStorePort,
 		decoder: flip IRv32DecodePort,
 		integer: flip IRv32IntegerPort,
-		multiplier: flip IRv32MultiplyPort,
+		multiplier: flip IRv32MPort,
 		csrs: flip IRv32CsrPort,
 		custom: flip IRv32CustomInstructionPort)
 	{
@@ -160,9 +164,14 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 
 		fetch.request = 0b0
 		fetch.address = programCounter as logic[32]
+		fetch.synchronize = 0b0
 
 		if (phase == FETCH) {
 			fetch.request = 0b1
+		}
+
+		if (phase == INSTRUCTION_FENCE_WAIT) {
+			fetch.synchronize = 0b1
 		}
 
 		// Copy values before pure calls so state registers keep direct publication.
@@ -213,7 +222,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 		}
 
 		multiplier.request = 0b0
-		multiplier.operation = funct3 as logic[2]
+		multiplier.operation = funct3 as logic[3]
 		multiplier.left = leftValue as logic[32]
 		multiplier.right = rightValue as logic[32]
 
@@ -273,7 +282,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 			}
 		}
 
-		integer.operation = (RvDecoded.Operation(control) & Rv32iOperations.ALU_MASK) as logic[4]
+		integer.operation = (RvDecoded.Operation(control) & Rv32iOperations.ALU_MASK) as logic[6]
 		integer.left = leftValue as logic[32]
 		integer.right = decoder.immediate
 
@@ -311,7 +320,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 					stopCause = 0
 					stopValue = 0
 
-					if (clearIndex == 31) {
+					if (clearIndex == REGISTER_COUNT - 1) {
 						phase = IDLE
 						restartCompleted = restartRequest
 						stepCompleted = stepRequest
@@ -414,6 +423,10 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 						{
 							phase = CUSTOM_WAIT
 						}
+						Rv32iOperations.INSTRUCTION_FENCE =>
+						{
+							phase = INSTRUCTION_FENCE_WAIT
+						}
 						Rv32iOperations.JAL, Rv32iOperations.JALR =>
 						{
 							var target = arithmetic
@@ -496,6 +509,12 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false> 
 							resultValue = custom.result as uint
 							phase = COMMIT
 						}
+					}
+				}
+				INSTRUCTION_FENCE_WAIT =>
+				{
+					if (fetch.synchronized == 0b1) {
+						phase = COMMIT
 					}
 				}
 				MEMORY =>

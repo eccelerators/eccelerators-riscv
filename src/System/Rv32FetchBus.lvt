@@ -63,6 +63,13 @@ component Rv32FetchBus<A_BASE: uint = 0, A_SIZE: uint = 16, B_BASE: uint = 0,
 
 		slotA.address = address
 		slotB.address = address
+		slotA.synchronize = synchronize
+		slotB.synchronize = synchronize
+		synchronized = 0b0
+
+		if (slotA.synchronized == 0b1 && slotB.synchronized == 0b1) {
+			synchronized = 0b1
+		}
 
 		if (hitA) {
 			slotA.request = request

@@ -1,0 +1,100 @@
+namespace Eccelerators.RiscV.Presets
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Contracts
+using Livt.IO
+
+/** Qualified full M sequential core with independently selectable arithmetic providers. */
+component Rv32iMSequentialCore<
+	MULTIPLIER: IRv32ZmmulPort & new(),
+	DIVIDER: IRv32DividerPort & new(),
+	RESET_PC: uint = 0,
+	REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block
+> : IRv32ControlPort
+{
+	core: Rv32SequentialCore<
+		Rv32RegisterBank<REGISTER_FILE_STYLE>,
+		Rv32iMDecoder,
+		Rv32iIntegerUnit,
+		Rv32MUnit<MULTIPLIER, DIVIDER>,
+		Rv32NoCsrs,
+		Rv32NoCustomInstruction,
+		RESET_PC
+	>
+	coverage: RvOperationCoverage<
+		Rv32iDecode.CAPABILITIES,
+		Rv32iMDecoder.CAPABILITIES,
+		Rv32iIntegerUnit.CAPABILITIES,
+		Rv32SequentialEngine.CAPABILITIES,
+		Rv32iOperations.INTEGER_CAPABILITY,
+		Rv32SequentialEngine.CAPABILITIES
+	>
+	mCoverage: RvOperationCoverage<
+		Rv32MultiplyOperations.M_CAPABILITIES,
+		Rv32iMDecoder.CAPABILITIES,
+		Rv32MUnit.CAPABILITIES,
+		0,
+		Rv32MultiplyOperations.M_CAPABILITIES,
+		0
+	>
+	timing: RvTimingContract<1, 2, true, true, true, 1, 1, true, true, true, false>
+
+	/** Selects all providers at elaboration and borrows the caller's buses. */
+	new(fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort)
+	{
+		core = new Rv32SequentialCore<
+			Rv32RegisterBank<REGISTER_FILE_STYLE>,
+			Rv32iMDecoder,
+			Rv32iIntegerUnit,
+			Rv32MUnit<MULTIPLIER, DIVIDER>,
+			Rv32NoCsrs,
+			Rv32NoCustomInstruction,
+			RESET_PC
+		>(fetch, loadStore)
+		coverage = new RvOperationCoverage<
+			Rv32iDecode.CAPABILITIES,
+			Rv32iMDecoder.CAPABILITIES,
+			Rv32iIntegerUnit.CAPABILITIES,
+			Rv32SequentialEngine.CAPABILITIES,
+			Rv32iOperations.INTEGER_CAPABILITY,
+			Rv32SequentialEngine.CAPABILITIES
+		>()
+		mCoverage = new RvOperationCoverage<
+			Rv32MultiplyOperations.M_CAPABILITIES,
+			Rv32iMDecoder.CAPABILITIES,
+			Rv32MUnit.CAPABILITIES,
+			0,
+			Rv32MultiplyOperations.M_CAPABILITIES,
+			0
+		>()
+		timing = new RvTimingContract<1, 2, true, true, true, 1, 1, true, true, true, false>()
+	}
+
+	/** Forwards the standard control and retirement contract. */
+	process Connect[]()
+	{
+		core.run = run
+		core.stepRequest = stepRequest
+		core.restartRequest = restartRequest
+		stepAck = core.stepAck
+		restartAck = core.restartAck
+		idle = core.idle
+		halted = core.halted
+		pc = core.pc
+		faultCause = core.faultCause
+		faultValue = core.faultValue
+		trapped = core.trapped
+		trapPc = core.trapPc
+		trapCause = core.trapCause
+		trapValue = core.trapValue
+		retired = core.retired
+		retiredPc = core.retiredPc
+		retiredInstruction = core.retiredInstruction
+		retiredRd = core.retiredRd
+		retiredValue = core.retiredValue
+	}
+}

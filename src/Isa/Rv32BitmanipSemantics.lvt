@@ -1,0 +1,177 @@
+namespace Eccelerators.RiscV.Isa
+
+/** Context-free Zba, Zbb and Zbs integer semantics. */
+public class Rv32BitmanipSemantics
+{
+	public static fn Execute[](operation: uint, left: uint, right: uint) uint
+	{
+		var amount = (right & 31) as int
+
+		match (operation)
+		{
+			Rv32BitmanipOperations.SH1ADD =>
+			{
+				return (left << 1) + right
+			}
+			Rv32BitmanipOperations.SH2ADD =>
+			{
+				return (left << 2) + right
+			}
+			Rv32BitmanipOperations.SH3ADD =>
+			{
+				return (left << 3) + right
+			}
+			Rv32BitmanipOperations.ANDN =>
+			{
+				return left & ~right
+			}
+			Rv32BitmanipOperations.ORN =>
+			{
+				return left | ~right
+			}
+			Rv32BitmanipOperations.XNOR =>
+			{
+				return ~(left ^ right)
+			}
+			Rv32BitmanipOperations.CLZ =>
+			{
+				return CountLeadingZeros(left)
+			}
+			Rv32BitmanipOperations.CTZ =>
+			{
+				return CountTrailingZeros(left)
+			}
+			Rv32BitmanipOperations.CPOP =>
+			{
+				return PopulationCount(left)
+			}
+			Rv32BitmanipOperations.MAX =>
+			{
+				if ((left ^ 0x80000000) > (right ^ 0x80000000)) { return left }
+
+				return right
+			}
+			Rv32BitmanipOperations.MAXU =>
+			{
+				if (left > right) { return left }
+
+				return right
+			}
+			Rv32BitmanipOperations.MIN =>
+			{
+				if ((left ^ 0x80000000) < (right ^ 0x80000000)) { return left }
+
+				return right
+			}
+			Rv32BitmanipOperations.MINU =>
+			{
+				if (left < right) { return left }
+
+				return right
+			}
+			Rv32BitmanipOperations.SEXT_B =>
+			{
+				return Rv32iSemantics.SignExtend(left, 8)
+			}
+			Rv32BitmanipOperations.SEXT_H =>
+			{
+				return Rv32iSemantics.SignExtend(left, 16)
+			}
+			Rv32BitmanipOperations.ZEXT_H =>
+			{
+				return left & 0xffff
+			}
+			Rv32BitmanipOperations.ROL =>
+			{
+				if (amount == 0) { return left }
+
+				return (left << amount) | (left >> (32 - amount))
+			}
+			Rv32BitmanipOperations.ROR =>
+			{
+				if (amount == 0) { return left }
+
+				return (left >> amount) | (left << (32 - amount))
+			}
+			Rv32BitmanipOperations.ORC_B =>
+			{
+				return OrcBytes(left)
+			}
+			Rv32BitmanipOperations.REV8 =>
+			{
+				return ((left & 0x000000ff) << 24) | ((left & 0x0000ff00) << 8)
+					| ((left & 0x00ff0000) >> 8) | ((left & 0xff000000) >> 24)
+			}
+			Rv32BitmanipOperations.BCLR =>
+			{
+				return left & ~(1 << amount)
+			}
+			Rv32BitmanipOperations.BEXT =>
+			{
+				return (left >> amount) & 1
+			}
+			Rv32BitmanipOperations.BINV =>
+			{
+				return left ^ (1 << amount)
+			}
+			Rv32BitmanipOperations.BSET =>
+			{
+				return left | (1 << amount)
+			}
+			_ =>
+			{
+				return 0
+			}
+		}
+	}
+
+	public static fn CountLeadingZeros[](value: uint) uint
+	{
+		var count: uint = 0
+		var seen = false
+
+		for (var index: int = 31; index >= 0; index--) {
+			if (!seen && ((value >> index) & 1) == 0) { count++ } else { seen = true }
+		}
+
+		return count
+	}
+
+	public static fn CountTrailingZeros[](value: uint) uint
+	{
+		var count: uint = 0
+		var seen = false
+
+		for (var index: int = 0; index < 32; index++) {
+			if (!seen && ((value >> index) & 1) == 0) { count++ } else { seen = true }
+		}
+
+		return count
+	}
+
+	public static fn PopulationCount[](value: uint) uint
+	{
+		var count: uint = 0
+
+		for (var index: int = 0; index < 32; index++) {
+			count = count + ((value >> index) & 1)
+		}
+
+		return count
+	}
+
+	public static fn OrcBytes[](value: uint) uint
+	{
+		var result: uint = 0
+
+		if ((value & 0x000000ff) != 0) { result = result | 0x000000ff }
+
+		if ((value & 0x0000ff00) != 0) { result = result | 0x0000ff00 }
+
+		if ((value & 0x00ff0000) != 0) { result = result | 0x00ff0000 }
+
+		if ((value & 0xff000000) != 0) { result = result | 0xff000000 }
+
+		return result
+	}
+}

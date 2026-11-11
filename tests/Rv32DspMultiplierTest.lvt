@@ -29,7 +29,7 @@ component Rv32DspMultiplierTest
 		subject.request = 0b0
 		Simulation.Wait(2)
 		assert subject.ready == 0b0
-		subject.operation = operation as logic[2]
+		subject.operation = operation as logic[3]
 		subject.left = left as logic[32]
 		subject.right = right as logic[32]
 		subject.request = 0b1

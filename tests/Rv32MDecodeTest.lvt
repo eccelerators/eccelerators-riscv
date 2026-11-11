@@ -1,0 +1,35 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Contracts
+
+/** Full M accepts all eight funct3 encodings while Zmmul retains only four. */
+@Test
+component Rv32MDecodeTest
+{
+	full: Rv32iMDecoder
+	multiplyOnly: Rv32iZmmulDecoder
+
+	new()
+	{
+		full = new Rv32iMDecoder()
+		multiplyOnly = new Rv32iZmmulDecoder()
+	}
+
+	@Test
+	fn Encodings()
+	{
+		for (var operation: uint = 0; operation < 8; operation++) {
+			var word = 0x02000033 | (operation << 12)
+			full.instruction = word as logic[32]
+			multiplyOnly.instruction = word as logic[32]
+			Simulation.Wait(1)
+			assert RvDecoded.IsLegal(full.control as uint)
+			var expected = (Rv32MultiplyOperations.KIND << Rv32iOperations.KIND_SHIFT)
+				| operation
+			assert RvDecoded.Operation(full.control as uint) == expected
+			assert RvDecoded.IsLegal(multiplyOnly.control as uint) == (operation < 4)
+		}
+	}
+}

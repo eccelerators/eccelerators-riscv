@@ -19,7 +19,7 @@ component Rv32SequentialCustomInstructionTest
 		Rv32RegisterBank,
 		Rv32iDecoder,
 		Rv32iIntegerUnit,
-		Rv32NoMultiplier,
+		Rv32NoMUnit,
 		Rv32NoCsrs,
 		Rv32XqdivInstruction
 	>
@@ -36,7 +36,7 @@ component Rv32SequentialCustomInstructionTest
 			Rv32RegisterBank,
 			Rv32iDecoder,
 			Rv32iIntegerUnit,
-			Rv32NoMultiplier,
+			Rv32NoMUnit,
 			Rv32NoCsrs,
 			Rv32XqdivInstruction
 		>(fetch, loadStore)
@@ -173,7 +173,7 @@ component Rv32PipelineCustomInstructionTest
 		Rv32DualReadRegisterBank,
 		Rv32iDecoder,
 		Rv32iIntegerUnit,
-		Rv32NoMultiplier,
+		Rv32NoMUnit,
 		Rv32NoCsrs,
 		Rv32XqdivInstruction
 	>
@@ -190,7 +190,7 @@ component Rv32PipelineCustomInstructionTest
 			Rv32DualReadRegisterBank,
 			Rv32iDecoder,
 			Rv32iIntegerUnit,
-			Rv32NoMultiplier,
+			Rv32NoMUnit,
 			Rv32NoCsrs,
 			Rv32XqdivInstruction
 		>(fetch, loadStore)

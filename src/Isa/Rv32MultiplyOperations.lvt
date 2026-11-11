@@ -1,12 +1,15 @@
 namespace Eccelerators.RiscV.Isa
 
 /**
- * Shared Zmmul decode and execution vocabulary; division/remainder are excluded.
+ * Shared M-extension decode and execution vocabulary. Zmmul selects only the
+ * multiplication capability; full M also selects division and remainder.
  */
 public class Rv32MultiplyOperations
 {
 	// Multiplication family and kind extend the base sequential vocabulary.
 	public const CAPABILITY: uint = 8
+	public const DIVIDE_CAPABILITY: uint = 16
+	public const M_CAPABILITIES: uint = CAPABILITY | DIVIDE_CAPABILITY
 	public const KIND: uint = 13
 	public const RV32I_ZMMUL_CAPABILITIES: uint = Rv32iOperations.RV32I_CAPABILITIES | CAPABILITY
 
@@ -15,6 +18,10 @@ public class Rv32MultiplyOperations
 	public const MULH: uint = 1
 	public const MULHSU: uint = 2
 	public const MULHU: uint = 3
+	public const DIV: uint = 4
+	public const DIVU: uint = 5
+	public const REM: uint = 6
+	public const REMU: uint = 7
 	public const OPCODE: uint = 0x33
 	public const FUNCT7: uint = 1
 }

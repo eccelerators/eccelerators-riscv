@@ -1,0 +1,213 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Presets
+
+/** Mutable test fetch view whose pending write becomes visible only on synchronization. */
+component ZifenceFetchMemory : IRv32FetchPort
+{
+	public mutate: in logic
+	public mutation: in logic[32]
+	public programWrite: in logic
+	public programIndex: in logic[4]
+	public programData: in logic[32]
+	words: uint[16]
+	pending: logic[32]
+	active: bool
+	response: logic[32]
+
+	process Drive[]()
+	{
+		ready = active as logic
+		error = 0b0
+		instruction = response
+		synchronized = synchronize
+	}
+
+	process Advance()
+	{
+		state {
+			if (programWrite == 0b1) {
+				words[programIndex as uint] = programData as uint
+			}
+
+			if (mutate == 0b1) {
+				pending = mutation
+			}
+
+			if (synchronize == 0b1) {
+				words[5] = pending as uint
+			}
+
+			if (!active && request == 0b1) {
+				response = words[(address as uint) >> 2] as logic[32]
+				active = true
+			} elif (active && request == 0b0) {
+				active = false
+			}
+		}
+	}
+}
+
+/** Delayed store sink exposing the exact accepted payload to the fetch view. */
+component ZifenceStoreDevice : IRv32LoadStorePort
+{
+	public committed: out logic
+	public committedData: out logic[32]
+	active: bool
+	complete: bool
+	remaining: uint
+
+	process Drive[]()
+	{
+		ready = complete as logic
+		error = 0b0
+		readData = 0
+	}
+
+	process Advance()
+	{
+		state {
+			committed = 0b0
+
+			if (!active && request == 0b1) {
+				active = true
+				complete = false
+				remaining = 3
+			} elif (active && request == 0b1 && !complete) {
+				if (remaining == 0) {
+					assert write == 0b1
+					committedData = writeData
+					committed = 0b1
+					complete = true
+				} else {
+					remaining--
+				}
+			} elif (active && request == 0b0) {
+				active = false
+				complete = false
+			}
+		}
+	}
+}
+
+/** Shared self-modifying program used for both engine integrations. */
+public class Rv32ZifenceiProgram
+{
+	public const WORDS: uint[7] = [
+		0x01400093, 0x00700137, 0x19310113, 0x0020a023,
+		0x0000100f, 0x00100193, 0x00100073
+	]
+}
+
+/** Sequential Zifencei orders a delayed store before the next instruction fetch. */
+@Test
+component Rv32ZifenceiSequentialTest
+{
+	fetch: ZifenceFetchMemory
+	data: ZifenceStoreDevice
+	core: Rv32iZifenceiSequentialCore
+	result: uint
+
+	new()
+	{
+		fetch = new ZifenceFetchMemory()
+		data = new ZifenceStoreDevice()
+		core = new Rv32iZifenceiSequentialCore(fetch, data)
+	}
+
+	process Connect[]()
+	{
+		fetch.mutate = data.committed
+		fetch.mutation = data.committedData
+	}
+
+	process Observe()
+	{
+		state {
+			if (core.retired == 0b1 && core.retiredRd == 3) {
+				result = core.retiredValue as uint
+			}
+		}
+	}
+
+	@Test
+	fn SelfModifyingCode()
+	{
+		core.run = 0b0
+		Simulation.Wait(40)
+
+		for (var index: uint = 0; index < 7; index++) {
+			state {
+				fetch.programWrite = 0b1
+				fetch.programIndex = index as logic[4]
+				fetch.programData = Rv32ZifenceiProgram.WORDS[index] as logic[32]
+			}
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+
+		core.run = 0b1
+		Simulation.Wait(180)
+		assert core.halted == 0b1 && core.faultCause as uint == 3
+		assert result == 7
+	}
+}
+
+/** Pipeline Zifencei invalidates a prefetched stale instruction and refetches it. */
+@Test
+component Rv32ZifenceiPipelineTest
+{
+	fetch: ZifenceFetchMemory
+	data: ZifenceStoreDevice
+	core: Rv32iZifenceiPipelineCore
+	result: uint
+
+	new()
+	{
+		fetch = new ZifenceFetchMemory()
+		data = new ZifenceStoreDevice()
+		core = new Rv32iZifenceiPipelineCore(fetch, data)
+	}
+
+	process Connect[]()
+	{
+		fetch.mutate = data.committed
+		fetch.mutation = data.committedData
+	}
+
+	process Observe()
+	{
+		state {
+			if (core.retired == 0b1 && core.retiredRd == 3) {
+				result = core.retiredValue as uint
+			}
+		}
+	}
+
+	@Test
+	fn SelfModifyingCode()
+	{
+		core.run = 0b0
+		Simulation.Wait(40)
+
+		for (var index: uint = 0; index < 7; index++) {
+			state {
+				fetch.programWrite = 0b1
+				fetch.programIndex = index as logic[4]
+				fetch.programData = Rv32ZifenceiProgram.WORDS[index] as logic[32]
+			}
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+
+		core.run = 0b1
+		Simulation.Wait(180)
+		assert core.halted == 0b1 && core.faultCause as uint == 3
+		assert result == 7
+	}
+}

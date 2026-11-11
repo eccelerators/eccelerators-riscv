@@ -6,6 +6,7 @@ namespace Eccelerators.RiscV.Core
  * once; sample instruction/error there, then deassert request for at least one edge.
  * Provider must not accept again until request falls. No cancellation; software
  * restart drains outstanding work. Fetch has no data, mask or write path.
+ * synchronize requests instruction-side visibility after older data effects.
  */
 interface IRv32FetchPort
 {
@@ -17,4 +18,8 @@ interface IRv32FetchPort
 	ready: out logic
 	error: out logic
 	instruction: out logic[32]
+
+	// Ordered Zifencei synchronization, held until synchronized is asserted.
+	synchronize: in logic
+	synchronized: out logic
 }

@@ -10,6 +10,10 @@ using Livt.IO
  */
 component Rv32RegisterBank<STYLE: MemoryStyle = MemoryStyle.Block> : IRv32RegisterPort
 {
+	// Capabilities consumed by the sequential construction contract.
+	public const READ_PORTS: int = 1
+	public const READ_LATENCY: int = 1
+
 	// Physical storage and registered zero-register selection.
 	storage: SynchronousRam<logic[32], logic[5], 32, STYLE>
 	zeroRead: bool

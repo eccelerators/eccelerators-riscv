@@ -11,9 +11,9 @@ the same narrow provider interfaces, so explicit compositions can substitute
 cohesive providers while the engines retain architectural commit.
 
 Version **0.3.0** removes the scheduled reference layer and uses separate
-instruction-fetch and load/store ports with a system-level composition,
-retaining the sequential and pipeline core presets. See the
-[release notes](CHANGELOG.md#030---2026-11-08) for migration guidance.
+instruction-fetch and load/store ports with a system-level composition. The
+unreleased sources add shared machine composition and structural presets for
+full M, Zba/Zbb/Zbs, RV32E and Zifencei.
 
 ## Choose a core
 
@@ -25,14 +25,20 @@ and data providers implementing `flip IRv32FetchPort` and
 |---|---|---|
 | RV32I | `Rv32iSequentialCore` | `Rv32iPipelineCore` |
 | RV32I + Zmmul | `Rv32iZmmulSequentialCore` | `Rv32iZmmulPipelineCore` |
+| RV32I + M | `Rv32iMSequentialCore` | `Rv32iMPipelineCore` |
+| RV32I + Zba + Zbb + Zbs | `Rv32iBitmanipSequentialCore` | `Rv32iBitmanipPipelineCore` |
+| RV32I + Zifencei | `Rv32iZifenceiSequentialCore` | `Rv32iZifenceiPipelineCore` |
+| RV32E | `Rv32eSequentialCore` | `Rv32ePipelineCore` |
 | RV32I + Zmmul + Zicsr, machine traps and interrupts | `Rv32iZmmulSequentialMachineCore` | `Rv32iZmmulPipelineMachineCore` |
 
 The sequential engine favors a compact implementation. The pipeline overlaps
 fetch, decode/read, execution and commit. Both use synchronous register files;
-`REGISTER_FILE_STYLE` defaults to `MemoryStyle.Block`. Every Zmmul preset takes an
-explicit multiplier provider type, either `Rv32IterativeMultiplier` or
-`Rv32DspMultiplier`. The type is selected during elaboration and adds no runtime
-dispatch or unused multiplier.
+`REGISTER_FILE_STYLE` defaults to `MemoryStyle.Block`. Zmmul presets take an
+explicit multiplier provider type. Full-M presets additionally take a divider
+provider type. The compact choices are `Rv32IterativeMultiplier` and
+`Rv32IterativeDivider`; `Rv32DspMultiplier` is the DSP-oriented multiply option.
+These types are selected during elaboration and add no runtime dispatch or unused
+execution provider.
 
 For example, these constructor fragments select a base sequential core or a
 machine pipeline with DSP multiplication:
@@ -91,12 +97,12 @@ For development against a local checkout, use this dependency instead:
 Run `livt sync` to resolve dependencies. The package uses `Livt.IO` 1.8.1 for
 memory storage and the buffered UART adapter.
 
-Software targets are `rv32i`, `rv32i_zmmul`, or `rv32i_zmmul_zicsr`, with the
-`ilp32` ABI, according to the selected core. Zmmul includes multiplication but
-not division. Machine cores implement a documented machine-mode subset with
-MRET, direct traps, timer and external interrupts. Compressed instructions,
-atomics, floating point, vectors, lower privilege modes, MMU, caches and
-architectural debug are absent. These cores do not boot Linux.
+Software must target the ISA selected by the core. RV32I variants use the `ilp32`
+ABI; RV32E uses `ilp32e`. Zmmul includes multiplication without division, while M
+adds DIV, DIVU, REM and REMU. Machine cores implement a documented machine-mode
+subset with MRET, direct traps, timer and external interrupts. Compressed
+instructions, atomics, floating point, vectors, lower privilege modes, MMU,
+caches and architectural debug are absent. These cores do not boot Linux.
 
 ## Documentation and tests
 

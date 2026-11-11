@@ -98,7 +98,7 @@ component Rv32SequentialIntegerSubstitutionTest
 	loadStore: RvLoadStoreRam<256, 8>
 	decoder: Rv32iDecoder
 	integer: Rv32AlternateIntegerUnit
-	noMultiplier: Rv32NoMultiplier
+	noMultiplier: Rv32NoMUnit
 	noCsrs: Rv32NoCsrs
 	custom: Rv32NoCustomInstruction
 	engine: Rv32SequentialEngine
@@ -112,7 +112,7 @@ component Rv32SequentialIntegerSubstitutionTest
 		loadStore = new RvLoadStoreRam<256, 8>()
 		decoder = new Rv32iDecoder()
 		integer = new Rv32AlternateIntegerUnit()
-		noMultiplier = new Rv32NoMultiplier()
+		noMultiplier = new Rv32NoMUnit()
 		noCsrs = new Rv32NoCsrs()
 		custom = new Rv32NoCustomInstruction()
 		engine = new Rv32SequentialEngine(registers, fetch, loadStore, decoder,
@@ -231,7 +231,7 @@ component Rv32PipelineIntegerSubstitutionTest
 	loadStore: RvLoadStoreRam<256, 8>
 	decoder: Rv32iDecoder
 	integer: Rv32AlternateIntegerUnit
-	noMultiplier: Rv32NoMultiplier
+	noMultiplier: Rv32NoMUnit
 	noCsrs: Rv32NoCsrs
 	custom: Rv32NoCustomInstruction
 	engine: Rv32PipelineEngine
@@ -245,7 +245,7 @@ component Rv32PipelineIntegerSubstitutionTest
 		loadStore = new RvLoadStoreRam<256, 8>()
 		decoder = new Rv32iDecoder()
 		integer = new Rv32AlternateIntegerUnit()
-		noMultiplier = new Rv32NoMultiplier()
+		noMultiplier = new Rv32NoMUnit()
 		noCsrs = new Rv32NoCsrs()
 		custom = new Rv32NoCustomInstruction()
 		engine = new Rv32PipelineEngine(registers, fetch, loadStore, decoder,

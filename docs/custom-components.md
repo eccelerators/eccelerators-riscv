@@ -123,7 +123,7 @@ core = new Rv32PipelineCore<
 	Rv32DualReadRegisterBank,
 	Rv32iDecoder,
 	Rv32iIntegerUnit,
-	Rv32NoMultiplier,
+	Rv32NoMUnit,
 	Rv32NoCsrs,
 	Rv32XqdivInstruction
 >(instructions, data)
@@ -187,12 +187,13 @@ Shared provider interfaces are in `Eccelerators.RiscV.Core`; standard providers
 are in `Eccelerators.RiscV.Isa`; the two controllers are in `Sequential` and
 `Pipeline`. Both engines take
 providers in this order: register bank, instruction memory,
-data memory, decoder, integer unit, multiplier, CSR provider and custom-instruction
+data memory, decoder, integer unit, M provider, CSR provider and custom-instruction
 provider. Select
-`<RESET_PC, MACHINE_TRAPS>` for reset address and exception policy. Decoder and
+the reset address, exception policy and RV32I/RV32E register count through the
+engine's generic parameters. Decoder and
 provider types determine instruction support. Machine traps require a compatible
 CSR provider; interrupts require machine traps. Absent units
-use `Rv32NoMultiplier` and `Rv32NoCsrs` terminations.
+use `Rv32NoMUnit` and `Rv32NoCsrs` terminations.
 
 For a base pipeline, these constructor statements illustrate the assembly:
 
@@ -200,7 +201,7 @@ For a base pipeline, these constructor statements illustrate the assembly:
 registers = new Rv32DualReadRegisterBank()
 decoder = new Rv32iDecoder()
 integer = new Rv32iIntegerUnit()
-noMultiplier = new Rv32NoMultiplier()
+noM = new Rv32NoMUnit()
 noCsrs = new Rv32NoCsrs()
 noCustom = new Rv32NoCustomInstruction()
 engine = new Rv32PipelineEngine(
@@ -209,7 +210,7 @@ engine = new Rv32PipelineEngine(
 	data,
 	decoder,
 	integer,
-	noMultiplier,
+	noM,
 	noCsrs,
 	noCustom
 )

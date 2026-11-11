@@ -9,7 +9,7 @@ namespace Eccelerators.RiscV.Core
 interface IRv32IntegerPort
 {
 	// Integer operation and operands selected by the exclusive engine owner.
-	operation: in logic[4]
+	operation: in logic[6]
 	left: in logic[32]
 	right: in logic[32]
 

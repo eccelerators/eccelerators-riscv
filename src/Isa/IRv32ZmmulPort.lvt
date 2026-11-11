@@ -6,4 +6,4 @@ using Eccelerators.RiscV.Core
  * Complete RV32 Zmmul execution contract. Implementations accept all four
  * Zmmul funct3 operations through the inherited variable-latency port.
  */
-interface IRv32ZmmulPort : IRv32MultiplyPort {}
+interface IRv32ZmmulPort : IRv32MPort {}

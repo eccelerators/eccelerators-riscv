@@ -12,15 +12,13 @@ using Eccelerators.RiscV.Contracts
  * Machine instruction decoding and engine trap policy remain explicit choices.
  * For a custom CSR provider, compose Rv32ZicsrDecoder and IRv32CsrPort directly.
  */
-component Rv32ZicsrComposition<HART_ID: uint = 0, TIMER_INTERRUPTS: bool = false, EXTERNAL_INTERRUPTS: bool = false> : IRv32DecodePort, IRv32CsrPort
+component Rv32ZicsrComposition<HART_ID: uint = 0,
+	TIMER_INTERRUPTS: bool = false,
+	EXTERNAL_INTERRUPTS: bool = false> : IRv32DecodePort, IRv32MachineCsrPort
 {
 	// Added operation coverage; the caller checks its borrowed base decoder separately.
 	public const CAPABILITIES: uint = Rv32CsrOperations.CAPABILITY
 	public const TRAP_CAPABILITIES: uint = Rv32TrapOperations.CAPABILITY
-
-	// Platform pending levels, synchronous to this component.
-	public timerPending: in logic
-	public externalPending: in logic
 
 	// Private implementation; consumers borrow this component through its two ports.
 	decoder: Rv32ZicsrDecoder

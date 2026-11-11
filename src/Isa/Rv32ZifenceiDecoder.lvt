@@ -1,0 +1,56 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Contracts
+
+/** Zifencei overlay accepting only the canonical FENCE.I encoding. */
+component Rv32ZifenceiDecoder : IRv32DecodePort
+{
+	base: IRv32DecodePort
+
+	new(base: flip IRv32DecodePort)
+	{
+		this.base = base
+	}
+
+	process Decode[]()
+	{
+		base.instruction = instruction
+		control = base.control
+		immediate = base.immediate
+
+		if (instruction as uint == 0x0000100f) {
+			control = RvDecoded.Pack(
+				Rv32iOperations.INSTRUCTION_FENCE << Rv32iOperations.KIND_SHIFT,
+				0,
+				0,
+				0,
+				false,
+				false,
+				false,
+				true
+			) as logic[32]
+		}
+	}
+}
+
+/** No-argument RV32I + Zifencei composition for the general cores. */
+component Rv32iZifenceiDecoder : IRv32DecodePort
+{
+	public const CAPABILITIES: uint = Rv32iDecode.CAPABILITIES | 256
+	base: Rv32iDecoder
+	extension: Rv32ZifenceiDecoder
+
+	new()
+	{
+		base = new Rv32iDecoder()
+		extension = new Rv32ZifenceiDecoder(base)
+	}
+
+	process Connect[]()
+	{
+		extension.instruction = instruction
+		control = extension.control
+		immediate = extension.immediate
+	}
+}

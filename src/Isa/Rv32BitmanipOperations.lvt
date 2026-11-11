@@ -1,0 +1,36 @@
+namespace Eccelerators.RiscV.Isa
+
+/** Provider-local operation identifiers and independent extension capabilities. */
+public class Rv32BitmanipOperations
+{
+	public const ZBA_CAPABILITY: uint = 32
+	public const ZBB_CAPABILITY: uint = 64
+	public const ZBS_CAPABILITY: uint = 128
+
+	public const SH1ADD: uint = 16
+	public const SH2ADD: uint = 17
+	public const SH3ADD: uint = 18
+
+	public const ANDN: uint = 20
+	public const ORN: uint = 21
+	public const XNOR: uint = 22
+	public const CLZ: uint = 23
+	public const CTZ: uint = 24
+	public const CPOP: uint = 25
+	public const MAX: uint = 26
+	public const MAXU: uint = 27
+	public const MIN: uint = 28
+	public const MINU: uint = 29
+	public const SEXT_B: uint = 30
+	public const SEXT_H: uint = 31
+	public const ZEXT_H: uint = 32
+	public const ROL: uint = 33
+	public const ROR: uint = 34
+	public const ORC_B: uint = 35
+	public const REV8: uint = 36
+
+	public const BCLR: uint = 40
+	public const BEXT: uint = 41
+	public const BINV: uint = 42
+	public const BSET: uint = 43
+}

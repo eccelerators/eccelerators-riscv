@@ -1,0 +1,6 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+
+/** Complete DIV, DIVU, REM and REMU provider contract for an M composition. */
+interface IRv32DividerPort : IRv32MPort {}

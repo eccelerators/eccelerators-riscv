@@ -1,14 +1,20 @@
 # Core selection
 
-The six [preset declarations](../src/Presets) expose these structural parameters:
+The [preset declarations](../src/Presets) expose these structural parameters:
 
 | Parameter | Default | Meaning |
 |---|---|---|
 | `MULTIPLIER` | required on Zmmul presets | `Rv32IterativeMultiplier` or `Rv32DspMultiplier` |
+| `DIVIDER` | required on full-M presets | A provider such as `Rv32IterativeDivider` |
 | `RESET_PC` | `0` | Four-byte-aligned reset and restart address |
 | `REGISTER_FILE_STYLE` | `MemoryStyle.Block` | Register-file storage mapping request |
 
-The base presets implement RV32I. Zmmul presets add MUL, MULH, MULHSU and MULHU.
+The base presets implement RV32I. RV32E presets use the same execution contracts
+with sixteen architectural registers and reject instructions naming x16 through
+x31. Zmmul presets add MUL, MULH, MULHSU and MULHU. Full-M presets add DIV, DIVU,
+REM and REMU. Bit-manipulation presets combine Zba, Zbb and Zbs through typed
+decoder and integer-unit overlays. Zifencei presets add ordered instruction-fetch
+synchronization.
 Machine presets additionally select Zicsr, machine exceptions, MRET and both
 same-clock `timerPending` and `externalPending` inputs. Named machine presets use
 hart ID zero; use explicit composition for another hart ID or CSR provider.
@@ -49,7 +55,7 @@ An older synchronous fault takes priority over a pending interrupt. Multiplier
 results and younger fetch responses must drain or be discarded before control
 completion; they cannot produce a later stale retirement.
 
-## Multiplication
+## Multiplication and division
 
 `Rv32IterativeMultiplier` avoids DSP requirements. `Rv32DspMultiplier` decomposes
 operands for DSP-oriented arithmetic and implements the same operation/result
@@ -57,8 +63,10 @@ contract with different latency. Engines stall on the completion port, so choosi
 a provider does not change instruction semantics. Mapping still depends on the
 FPGA and synthesis tools; a DSP choice is not an area or frequency guarantee.
 
-Zmmul is not the full M extension: DIV, DIVU, REM and REMU remain illegal and
-`misa.M` remains zero. Compile software for the actual selected extensions.
+`Rv32IterativeDivider` implements compact radix-2 division with the architectural
+division-by-zero and signed-overflow results. `Rv32MUnit` composes multiplier and
+divider providers behind `IRv32MPort`. Zmmul still leaves division illegal and
+does not report full M. Compile software for the actual selected extensions.
 
 ## Software and fault policy
 
@@ -67,7 +75,10 @@ linker map. Instructions are fixed-width, little-endian RV32; instruction addres
 are four-byte aligned. Misaligned halfword/word accesses fault. Loads into x0 still
 perform memory access checks and any permitted device read.
 
-FENCE is ordered by the drained/ordered memory path. FENCE.I is unsupported.
+FENCE is ordered by the drained/ordered memory path. Zifencei presets issue the
+fetch synchronization handshake after older data effects complete and resume only
+after the provider acknowledges it. Pipeline execution also invalidates younger
+prefetched instructions. Other presets keep FENCE.I illegal.
 Base and non-machine Zmmul presets stop diagnostically on faults, ECALL and EBREAK.
 Machine presets instead enter the handler described in [machine support](machine.md).
 Restart is required to leave a diagnostic halt.

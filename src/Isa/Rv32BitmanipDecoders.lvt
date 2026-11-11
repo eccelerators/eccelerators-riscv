@@ -1,0 +1,209 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Contracts
+
+/** Zba decoder overlay for SH1ADD, SH2ADD and SH3ADD. */
+component Rv32ZbaDecoder : IRv32DecodePort
+{
+	public const CAPABILITIES: uint = Rv32BitmanipOperations.ZBA_CAPABILITY
+	base: IRv32DecodePort
+
+	new(base: flip IRv32DecodePort)
+	{
+		this.base = base
+	}
+
+	process Decode[]()
+	{
+		base.instruction = instruction
+		control = base.control
+		immediate = base.immediate
+		var word = instruction as uint
+		var funct3 = (word >> 12) & 7
+		var operation: uint = 0
+		var matches = false
+
+		if ((word & 127) == 0x33 && (word >> 25) == 0x10) {
+			if (funct3 == 2) {
+				operation = Rv32BitmanipOperations.SH1ADD
+				matches = true
+			} elif (funct3 == 4) {
+				operation = Rv32BitmanipOperations.SH2ADD
+				matches = true
+			} elif (funct3 == 6) {
+				operation = Rv32BitmanipOperations.SH3ADD
+				matches = true
+			}
+		}
+
+		if (matches) {
+			control = RvDecoded.Pack(
+				(Rv32iOperations.REGISTER << Rv32iOperations.KIND_SHIFT) | operation,
+				(word >> 7) & 31, (word >> 15) & 31, (word >> 20) & 31,
+				true, true, true, true
+			) as logic[32]
+		}
+	}
+}
+
+/** Zbb decoder overlay for basic scalar bit operations. */
+component Rv32ZbbDecoder : IRv32DecodePort
+{
+	public const CAPABILITIES: uint = Rv32BitmanipOperations.ZBB_CAPABILITY
+	base: IRv32DecodePort
+
+	new(base: flip IRv32DecodePort)
+	{
+		this.base = base
+	}
+
+	process Decode[]()
+	{
+		base.instruction = instruction
+		control = base.control
+		immediate = base.immediate
+		var word = instruction as uint
+		var opcode = word & 127
+		var funct3 = (word >> 12) & 7
+		var funct7 = word >> 25
+		var selector = (word >> 20) & 31
+		var operation: uint = 0
+		var kind = Rv32iOperations.REGISTER
+		var source2 = true
+		var matches = false
+
+		if (opcode == 0x33 && funct7 == 0x20 && funct3 == 7) {
+			operation = Rv32BitmanipOperations.ANDN
+		matches = true
+		} elif (opcode == 0x33 && funct7 == 0x20 && funct3 == 6) {
+			operation = Rv32BitmanipOperations.ORN
+		matches = true
+		} elif (opcode == 0x33 && funct7 == 0x20 && funct3 == 4) {
+			operation = Rv32BitmanipOperations.XNOR
+		matches = true
+		} elif (opcode == 0x33 && funct7 == 0x05 && funct3 >= 4) {
+			if (funct3 == 4) {
+				operation = Rv32BitmanipOperations.MIN
+				matches = true
+			} elif (funct3 == 5) {
+				operation = Rv32BitmanipOperations.MINU
+				matches = true
+			} elif (funct3 == 6) {
+				operation = Rv32BitmanipOperations.MAX
+				matches = true
+			} elif (funct3 == 7) {
+				operation = Rv32BitmanipOperations.MAXU
+				matches = true
+			}
+		} elif (opcode == 0x33 && funct7 == 0x30 && funct3 == 1) {
+			operation = Rv32BitmanipOperations.ROL
+		matches = true
+		} elif (opcode == 0x33 && funct7 == 0x30 && funct3 == 5) {
+			operation = Rv32BitmanipOperations.ROR
+		matches = true
+		} elif (opcode == 0x33 && funct7 == 0x04 && funct3 == 4 && selector == 0) {
+			operation = Rv32BitmanipOperations.ZEXT_H
+		matches = true
+		source2 = false
+		} elif (opcode == 0x13 && funct7 == 0x30 && funct3 == 1 && selector <= 5) {
+			source2 = false
+		kind = Rv32iOperations.IMMEDIATE
+			if (selector == 0) {
+				operation = Rv32BitmanipOperations.CLZ
+				matches = true
+			} elif (selector == 1) {
+				operation = Rv32BitmanipOperations.CTZ
+				matches = true
+			} elif (selector == 2) {
+				operation = Rv32BitmanipOperations.CPOP
+				matches = true
+			} elif (selector == 4) {
+				operation = Rv32BitmanipOperations.SEXT_B
+				matches = true
+			} elif (selector == 5) {
+				operation = Rv32BitmanipOperations.SEXT_H
+				matches = true
+			}
+		} elif (opcode == 0x13 && funct7 == 0x30 && funct3 == 5) {
+			operation = Rv32BitmanipOperations.ROR
+		matches = true
+			kind = Rv32iOperations.IMMEDIATE
+		source2 = false
+			immediate = selector as logic[32]
+		} elif (opcode == 0x13 && funct3 == 5 && (word >> 20) == 0x287) {
+			operation = Rv32BitmanipOperations.ORC_B
+		matches = true
+			kind = Rv32iOperations.IMMEDIATE
+		source2 = false
+		} elif (opcode == 0x13 && funct3 == 5 && (word >> 20) == 0x698) {
+			operation = Rv32BitmanipOperations.REV8
+		matches = true
+			kind = Rv32iOperations.IMMEDIATE
+		source2 = false
+		}
+
+		if (matches) {
+			control = RvDecoded.Pack(
+				(kind << Rv32iOperations.KIND_SHIFT) | operation,
+				(word >> 7) & 31, (word >> 15) & 31, (word >> 20) & 31,
+				true, source2, true, true
+			) as logic[32]
+		}
+	}
+}
+
+/** Zbs decoder overlay for register and immediate single-bit operations. */
+component Rv32ZbsDecoder : IRv32DecodePort
+{
+	public const CAPABILITIES: uint = Rv32BitmanipOperations.ZBS_CAPABILITY
+	base: IRv32DecodePort
+
+	new(base: flip IRv32DecodePort)
+	{
+		this.base = base
+	}
+
+	process Decode[]()
+	{
+		base.instruction = instruction
+		control = base.control
+		immediate = base.immediate
+		var word = instruction as uint
+		var opcode = word & 127
+		var funct3 = (word >> 12) & 7
+		var funct7 = word >> 25
+		var operation: uint = 0
+		var matches = false
+
+		if ((opcode == 0x33 || opcode == 0x13) && (funct3 == 1 || funct3 == 5)) {
+			if (funct7 == 0x24 && funct3 == 1) {
+				operation = Rv32BitmanipOperations.BCLR
+		matches = true
+			} elif (funct7 == 0x24 && funct3 == 5) {
+				operation = Rv32BitmanipOperations.BEXT
+		matches = true
+			} elif (funct7 == 0x34 && funct3 == 1) {
+				operation = Rv32BitmanipOperations.BINV
+		matches = true
+			} elif (funct7 == 0x14 && funct3 == 1) {
+				operation = Rv32BitmanipOperations.BSET
+		matches = true
+			}
+		}
+
+		if (matches) {
+			var immediateForm = opcode == 0x13
+			var kind = Rv32iOperations.REGISTER
+			if (immediateForm) {
+				kind = Rv32iOperations.IMMEDIATE
+				immediate = ((word >> 20) & 31) as logic[32]
+			}
+			control = RvDecoded.Pack(
+				(kind << Rv32iOperations.KIND_SHIFT) | operation,
+				(word >> 7) & 31, (word >> 15) & 31, (word >> 20) & 31,
+				true, !immediateForm, true, true
+			) as logic[32]
+		}
+	}
+}

@@ -55,6 +55,7 @@ component RvFetchRom<WORDS: int = 1024, ADDRESS_BITS: int = 10,
 		error = responseError
 		instruction = responseData
 		ready = 0b0
+		synchronized = synchronize
 
 		if (phase == RESPONSE) {
 			ready = 0b1

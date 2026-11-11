@@ -1,7 +1,7 @@
 [project]
 name = "Eccelerators.RiscV"
 version = "0.3.0"
-description = "Composable RV32I and Zmmul processors, machine-mode support, and reusable FPGA system components written in Livt."
+description = "Composable RV32I/RV32E processors, standard ISA extensions, machine-mode support, and reusable FPGA system components written in Livt."
 authors = ["Denis Vasilík"]
 repository = "https://github.com/eccelerators/eccelerators-riscv"
 homepage = "https://github.com/eccelerators/eccelerators-riscv"
@@ -58,6 +58,18 @@ components = [
     "Rv32ZicsrDecoderTest",
     "Rv32CsrEngineTest",
     "Rv32ZmmulDecodeTest",
+    "Rv32MDecodeTest",
+    "Rv32BitmanipTest",
+    "Rv32BitmanipSequentialEngineTest",
+    "Rv32BitmanipPipelineEngineTest",
+    "Rv32eDecodeTest",
+    "Rv32eSequentialEngineTest",
+    "Rv32ePipelineEngineTest",
+    "Rv32ZifenceiSequentialTest",
+    "Rv32ZifenceiPipelineTest",
+    "Rv32IterativeDividerTest",
+    "Rv32MSequentialEngineTest",
+    "Rv32MPipelineEngineTest",
     "Rv32IterativeMultiplierTest",
     "Rv32DspMultiplierTest",
     "Rv32DspEngineTest",

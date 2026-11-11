@@ -1,19 +1,20 @@
 namespace Eccelerators.RiscV.Core
 
 /**
- * One outstanding multiplication, exclusively borrowed in one clock/reset domain.
+ * One outstanding M-family operation, exclusively borrowed in one clock/reset domain.
  * A high request accepts stable operation/operands on an idle edge. Keep request
  * high through completion; ready/result then remain stable until a low-request
  * edge releases the transaction. No reacceptance while request remains high.
- * Operation is the Zmmul funct3 (0..3). The caller must not issue other values.
+ * Operation is the M-extension funct3 (0..7). The selected decoder and provider
+ * must agree on the implemented subset, allowing Zmmul and full M compositions.
  * Hardware reset cancels work and clears ready; caller also resets/deasserts its
  * request. No software cancellation. Only the engine commits architectural state.
  */
-interface IRv32MultiplyPort
+interface IRv32MPort
 {
 	// Stable command through the completion sampling edge.
 	request: in logic
-	operation: in logic[2]
+	operation: in logic[3]
 	left: in logic[32]
 	right: in logic[32]
 

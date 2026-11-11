@@ -1,0 +1,97 @@
+namespace Eccelerators.RiscV.Presets
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Pipeline
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Contracts
+using Livt.IO
+
+/**
+ * Named RV32I + Zba + Zbb + Zbs pipeline composition using the general owned-provider core.
+ * The dual-read register bank uses BRAM by default. The caller owns
+ * instruction and data providers in the same clock/reset domain. Qualification
+ * applies to documented providers and targets, not arbitrary attached buses.
+ */
+component Rv32iBitmanipPipelineCore<RESET_PC: uint = 0,
+	REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block> : IRv32ControlPort
+{
+	const BITMANIP: uint = Rv32BitmanipOperations.ZBA_CAPABILITY
+		| Rv32BitmanipOperations.ZBB_CAPABILITY | Rv32BitmanipOperations.ZBS_CAPABILITY
+	static assert (Rv32iBitmanipDecoder.CAPABILITIES & BITMANIP) == BITMANIP,
+		"Decoder lacks a selected bit-manipulation subset"
+	static assert (Rv32iBitmanipIntegerUnit.CAPABILITIES & BITMANIP) == BITMANIP,
+		"Integer provider lacks a selected bit-manipulation subset"
+	core: Rv32PipelineCore<
+		Rv32DualReadRegisterBank<REGISTER_FILE_STYLE>,
+		Rv32iBitmanipDecoder,
+		Rv32iBitmanipIntegerUnit,
+		Rv32NoMUnit,
+		Rv32NoCsrs,
+		Rv32NoCustomInstruction,
+		RESET_PC
+	>
+
+	// Elaboration-only ISA coverage and timing checks for this qualified preset.
+	coverage: RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iBitmanipDecoder.CAPABILITIES,
+		Rv32iBitmanipIntegerUnit.CAPABILITIES, Rv32PipelineEngine.CAPABILITIES,
+		Rv32iOperations.INTEGER_CAPABILITY, Rv32PipelineEngine.CAPABILITIES>
+	timing: RvPipelineContract<
+		Rv32DualReadRegisterBank.READ_PORTS,
+		Rv32DualReadRegisterBank.READ_LATENCY,
+		Rv32DualReadRegisterBank.INDEPENDENT_WRITE,
+		Rv32DualReadRegisterBank.WRITE_FORWARDING
+	>
+
+	/**
+	 * Selects all owned providers at elaboration and borrows the caller's buses.
+	 */
+	new(fetch: flip IRv32FetchPort, loadStore: flip IRv32LoadStorePort)
+	{
+		core = new Rv32PipelineCore<
+			Rv32DualReadRegisterBank<REGISTER_FILE_STYLE>,
+			Rv32iBitmanipDecoder,
+			Rv32iBitmanipIntegerUnit,
+			Rv32NoMUnit,
+			Rv32NoCsrs,
+			Rv32NoCustomInstruction,
+			RESET_PC
+		>(fetch, loadStore)
+		coverage = new RvOperationCoverage<Rv32iDecode.CAPABILITIES, Rv32iBitmanipDecoder.CAPABILITIES,
+			Rv32iBitmanipIntegerUnit.CAPABILITIES, Rv32PipelineEngine.CAPABILITIES,
+			Rv32iOperations.INTEGER_CAPABILITY, Rv32PipelineEngine.CAPABILITIES>()
+		timing = new RvPipelineContract<
+			Rv32DualReadRegisterBank.READ_PORTS,
+			Rv32DualReadRegisterBank.READ_LATENCY,
+			Rv32DualReadRegisterBank.INDEPENDENT_WRITE,
+			Rv32DualReadRegisterBank.WRITE_FORWARDING
+		>()
+	}
+
+	/**
+	 * Pure forwarding preserves the general core's control and retirement contract.
+	 */
+	process Connect[]()
+	{
+		core.run = run
+		core.stepRequest = stepRequest
+		core.restartRequest = restartRequest
+		stepAck = core.stepAck
+		restartAck = core.restartAck
+		idle = core.idle
+		halted = core.halted
+		pc = core.pc
+		faultCause = core.faultCause
+		faultValue = core.faultValue
+		trapped = core.trapped
+		trapPc = core.trapPc
+		trapCause = core.trapCause
+		trapValue = core.trapValue
+		retired = core.retired
+		retiredPc = core.retiredPc
+		retiredInstruction = core.retiredInstruction
+		retiredRd = core.retiredRd
+		retiredValue = core.retiredValue
+	}
+}

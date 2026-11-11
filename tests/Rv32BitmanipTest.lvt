@@ -1,0 +1,231 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Contracts
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+
+/** Decode and semantic vectors cover every implemented Zba, Zbb and Zbs operation. */
+@Test
+component Rv32BitmanipTest
+{
+	decoder: Rv32iBitmanipDecoder
+	integer: Rv32iBitmanipIntegerUnit
+
+	new()
+	{
+		decoder = new Rv32iBitmanipDecoder()
+		integer = new Rv32iBitmanipIntegerUnit()
+	}
+
+	fn CheckDecode(word: uint, operation: uint)
+	{
+		decoder.instruction = word as logic[32]
+		Simulation.Wait(1)
+		assert RvDecoded.IsLegal(decoder.control as uint)
+		assert (RvDecoded.Operation(decoder.control as uint) & Rv32iOperations.ALU_MASK)
+			== operation
+	}
+
+	fn Check(operation: uint, left: uint, right: uint, expected: uint)
+	{
+		integer.operation = operation as logic[6]
+		integer.left = left as logic[32]
+		integer.right = right as logic[32]
+		Simulation.Wait(1)
+		assert integer.result as uint == expected
+	}
+
+	@Test
+	fn Encodings()
+	{
+		CheckDecode(0x2020a1b3, Rv32BitmanipOperations.SH1ADD)
+		CheckDecode(0x2020c1b3, Rv32BitmanipOperations.SH2ADD)
+		CheckDecode(0x2020e1b3, Rv32BitmanipOperations.SH3ADD)
+		CheckDecode(0x4020f1b3, Rv32BitmanipOperations.ANDN)
+		CheckDecode(0x4020e1b3, Rv32BitmanipOperations.ORN)
+		CheckDecode(0x4020c1b3, Rv32BitmanipOperations.XNOR)
+		CheckDecode(0x0a20c1b3, Rv32BitmanipOperations.MIN)
+		CheckDecode(0x0a20d1b3, Rv32BitmanipOperations.MINU)
+		CheckDecode(0x0a20e1b3, Rv32BitmanipOperations.MAX)
+		CheckDecode(0x0a20f1b3, Rv32BitmanipOperations.MAXU)
+		CheckDecode(0x602091b3, Rv32BitmanipOperations.ROL)
+		CheckDecode(0x6020d1b3, Rv32BitmanipOperations.ROR)
+		CheckDecode(0x0800c1b3, Rv32BitmanipOperations.ZEXT_H)
+		CheckDecode(0x60009193, Rv32BitmanipOperations.CLZ)
+		CheckDecode(0x60109193, Rv32BitmanipOperations.CTZ)
+		CheckDecode(0x60209193, Rv32BitmanipOperations.CPOP)
+		CheckDecode(0x60409193, Rv32BitmanipOperations.SEXT_B)
+		CheckDecode(0x60509193, Rv32BitmanipOperations.SEXT_H)
+		CheckDecode(0x6070d193, Rv32BitmanipOperations.ROR)
+		CheckDecode(0x2870d193, Rv32BitmanipOperations.ORC_B)
+		CheckDecode(0x6980d193, Rv32BitmanipOperations.REV8)
+		CheckDecode(0x482091b3, Rv32BitmanipOperations.BCLR)
+		CheckDecode(0x48209193, Rv32BitmanipOperations.BCLR)
+		CheckDecode(0x4820d1b3, Rv32BitmanipOperations.BEXT)
+		CheckDecode(0x4820d193, Rv32BitmanipOperations.BEXT)
+		CheckDecode(0x682091b3, Rv32BitmanipOperations.BINV)
+		CheckDecode(0x68209193, Rv32BitmanipOperations.BINV)
+		CheckDecode(0x282091b3, Rv32BitmanipOperations.BSET)
+		CheckDecode(0x28209193, Rv32BitmanipOperations.BSET)
+	}
+
+	@Test
+	fn Semantics()
+	{
+		Check(Rv32BitmanipOperations.SH1ADD, 3, 5, 11)
+		Check(Rv32BitmanipOperations.SH2ADD, 3, 5, 17)
+		Check(Rv32BitmanipOperations.SH3ADD, 3, 5, 29)
+		Check(Rv32BitmanipOperations.ANDN, 0xf0f0, 0xff00, 0x00f0)
+		Check(Rv32BitmanipOperations.ORN, 0, 0xffff0000, 0x0000ffff)
+		Check(Rv32BitmanipOperations.XNOR, 0x55aa55aa, 0x0f0f0f0f, 0xa55aa55a)
+		Check(Rv32BitmanipOperations.CLZ, 0x00100000, 0, 11)
+		Check(Rv32BitmanipOperations.CTZ, 0x00100000, 0, 20)
+		Check(Rv32BitmanipOperations.CPOP, 0xf0f00001, 0, 9)
+		Check(Rv32BitmanipOperations.MAX, 0xffffffff, 1, 1)
+		Check(Rv32BitmanipOperations.MAXU, 0xffffffff, 1, 0xffffffff)
+		Check(Rv32BitmanipOperations.MIN, 0xffffffff, 1, 0xffffffff)
+		Check(Rv32BitmanipOperations.MINU, 0xffffffff, 1, 1)
+		Check(Rv32BitmanipOperations.SEXT_B, 0x80, 0, 0xffffff80)
+		Check(Rv32BitmanipOperations.SEXT_H, 0x8000, 0, 0xffff8000)
+		Check(Rv32BitmanipOperations.ZEXT_H, 0xffffabcd, 0, 0xabcd)
+		Check(Rv32BitmanipOperations.ROL, 0x80000001, 1, 3)
+		Check(Rv32BitmanipOperations.ROR, 3, 1, 0x80000001)
+		Check(Rv32BitmanipOperations.ORC_B, 0x00120001, 0, 0x00ff00ff)
+		Check(Rv32BitmanipOperations.REV8, 0x12345678, 0, 0x78563412)
+		Check(Rv32BitmanipOperations.BCLR, 0xff, 3, 0xf7)
+		Check(Rv32BitmanipOperations.BEXT, 0x80, 7, 1)
+		Check(Rv32BitmanipOperations.BINV, 0, 31, 0x80000000)
+		Check(Rv32BitmanipOperations.BSET, 0, 5, 0x20)
+	}
+}
+
+/** Dependent bit-manipulation operations shared by both engine integration tests. */
+public class Rv32BitmanipProgram
+{
+	public const WORDS: uint[6] = [
+		0x00300093, // addi x1, x0, 3
+		0x00500113, // addi x2, x0, 5
+		0x2020a1b3, // sh1add x3, x1, x2
+		0x28519213, // bseti x4, x3, 5
+		0x401272b3, // andn x5, x4, x1
+		0x00100073  // ebreak
+	]
+}
+
+/** Runs the combined Zba, Zbb and Zbs preset through the sequential engine. */
+@Test
+component Rv32BitmanipSequentialEngineTest
+{
+	fetch: RvFetchRom<16, 4>
+	data: RvLoadStoreRam<16, 4>
+	core: Rv32iBitmanipSequentialCore
+	observed: uint[6]
+	retired: uint
+
+	new()
+	{
+		fetch = new RvFetchRom<16, 4>()
+		data = new RvLoadStoreRam<16, 4>()
+		core = new Rv32iBitmanipSequentialCore(fetch, data)
+	}
+
+	process Observe()
+	{
+		state {
+			if (core.retired == 0b1) {
+				retired++
+
+				if (core.retiredRd as uint < 6 && core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	@Test
+	fn Dependencies()
+	{
+		core.run = 0b0
+		Simulation.Wait(24)
+
+		for (var index: uint = 0; index < Rv32BitmanipProgram.WORDS.Length as uint; index++) {
+			state {
+				fetch.programWrite = 0b1
+				fetch.programIndex = index as logic[4]
+				fetch.programData = Rv32BitmanipProgram.WORDS[index] as logic[32]
+			}
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+
+		core.run = 0b1
+		Simulation.Wait(100)
+		assert core.halted == 0b1 && core.faultCause as uint == 3
+		assert retired == 5
+		assert observed[3] == 11
+		assert observed[4] == 43
+		assert observed[5] == 40
+	}
+}
+
+/** Runs the combined Zba, Zbb and Zbs preset through the pipeline engine. */
+@Test
+component Rv32BitmanipPipelineEngineTest
+{
+	fetch: RvFetchRom<16, 4>
+	data: RvLoadStoreRam<16, 4>
+	core: Rv32iBitmanipPipelineCore
+	observed: uint[6]
+	retired: uint
+
+	new()
+	{
+		fetch = new RvFetchRom<16, 4>()
+		data = new RvLoadStoreRam<16, 4>()
+		core = new Rv32iBitmanipPipelineCore(fetch, data)
+	}
+
+	process Observe()
+	{
+		state {
+			if (core.retired == 0b1) {
+				retired++
+
+				if (core.retiredRd as uint < 6 && core.retiredRd != 0) {
+					observed[core.retiredRd as uint] = core.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	@Test
+	fn Dependencies()
+	{
+		core.run = 0b0
+		Simulation.Wait(24)
+
+		for (var index: uint = 0; index < Rv32BitmanipProgram.WORDS.Length as uint; index++) {
+			state {
+				fetch.programWrite = 0b1
+				fetch.programIndex = index as logic[4]
+				fetch.programData = Rv32BitmanipProgram.WORDS[index] as logic[32]
+			}
+		}
+
+		state {
+			fetch.programWrite = 0b0
+		}
+
+		core.run = 0b1
+		Simulation.Wait(100)
+		assert core.halted == 0b1 && core.faultCause as uint == 3
+		assert retired == 5
+		assert observed[3] == 11
+		assert observed[4] == 43
+		assert observed[5] == 40
+	}
+}
