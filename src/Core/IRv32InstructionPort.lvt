@@ -1,0 +1,23 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * One-clock-domain, one-outstanding architectural instruction transaction.
+ * The provider frames a two- or four-byte instruction from the physical fetch
+ * service and expands supported compressed encodings for the normal decoder.
+ * rawInstruction preserves the original encoding, zero-extended for 16-bit
+ * instructions. Hold request/address until ready, then release for one edge.
+ */
+interface IRv32InstructionPort
+{
+	request: in logic
+	address: in logic[32]
+
+	ready: out logic
+	error: out logic
+	instruction: out logic[32]
+	rawInstruction: out logic[32]
+	length: out logic[3]
+
+	synchronize: in logic
+	synchronized: out logic
+}

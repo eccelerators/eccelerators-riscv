@@ -19,6 +19,23 @@ lanes, with lane zero selecting bits 7..0. A zero store mask has no effect.
 Providers must reject errors before irreversible effects. There is no transaction
 cancellation, retry or rollback protocol.
 
+Engines consume architectural instructions through
+[`IRv32InstructionPort`](../src/Core/IRv32InstructionPort.lvt). Their generic
+instruction front end owns this boundary and borrows the physical word fetch
+port. `Rv32WordInstructionFetch` forwards fixed-width instructions without
+state. `Rv32cInstructionFetch` selects halfwords, caches one physical word,
+assembles a 32-bit instruction that crosses a word boundary, and expands RV32C
+integer encodings through `Rv32cDecode`. It publishes the canonical instruction,
+original encoding and length together. Physical memories and fetch buses remain
+word-oriented and do not implement ISA decoding.
+
+The front end participates in fetch synchronization. A compressed front end
+drains an outstanding assembly and invalidates its buffered word before it
+acknowledges FENCE.I. Redirected physical transactions remain non-cancellable;
+the engine discards their framed result as it does for fixed-width fetches. Both
+engines also invalidate front-end state during initialization and software
+restart, before host provisioning may resume.
+
 The fetch port also carries `synchronize`/`synchronized` for Zifencei. A provider
 must accept synchronization only after its earlier fetch transaction has completed,
 make every instruction-side view observe data effects ordered before FENCE.I, and

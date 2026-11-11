@@ -6,8 +6,10 @@ The [preset declarations](../src/Presets) expose these structural parameters:
 |---|---|---|
 | `MULTIPLIER` | required on Zmmul presets | `Rv32IterativeMultiplier` or `Rv32DspMultiplier` |
 | `DIVIDER` | required on full-M presets | A provider such as `Rv32IterativeDivider` |
-| `RESET_PC` | `0` | Four-byte-aligned reset and restart address |
+| `RESET_PC` | `0` | Reset and restart address satisfying the selected instruction alignment |
 | `REGISTER_FILE_STYLE` | `MemoryStyle.Block` | Register-file storage mapping request |
+| `INSTRUCTION_ALIGNMENT` | `RvInstructionAlignment.Word` | Architectural word or halfword PC alignment |
+| `INSTRUCTIONS` | `Rv32WordInstructionFetch` | Framing provider over the physical fetch port |
 
 The base presets implement RV32I. RV32E presets use the same execution contracts
 with sixteen architectural registers and reject instructions naming x16 through
@@ -15,6 +17,10 @@ x31. Zmmul presets add MUL, MULH, MULHSU and MULHU. Full-M presets add DIV, DIVU
 REM and REMU. Bit-manipulation presets combine Zba, Zbb and Zbs through typed
 decoder and integer-unit overlays. Zifencei presets add ordered instruction-fetch
 synchronization.
+RV32IC presets select `RvInstructionAlignment.Halfword` and
+`Rv32cInstructionFetch`. The front end expands supported compressed integer
+instructions into canonical RV32I words, while preserving their original
+encoding and two-byte length for traps and retirement.
 Machine presets additionally select Zicsr, machine exceptions, MRET and both
 same-clock `timerPending` and `externalPending` inputs. Named machine presets use
 hart ID zero; use explicit composition for another hart ID or CSR provider.
@@ -71,9 +77,11 @@ does not report full M. Compile software for the actual selected extensions.
 ## Software and fault policy
 
 Use the `ilp32` ABI and initialize stack, data and BSS according to the application's
-linker map. Instructions are fixed-width, little-endian RV32; instruction addresses
-are four-byte aligned. Misaligned halfword/word accesses fault. Loads into x0 still
-perform memory access checks and any permitted device read.
+linker map. Instructions are little-endian RV32. Presets without C require
+four-byte-aligned instruction addresses. RV32IC presets admit mixed 16-bit and
+32-bit instructions on two-byte boundaries. Misaligned data halfword/word accesses
+still fault. Loads into x0 still perform memory access checks and any permitted
+device read.
 
 FENCE is ordered by the drained/ordered memory path. Zifencei presets issue the
 fetch synchronization handshake after older data effects complete and resume only

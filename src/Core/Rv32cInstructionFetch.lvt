@@ -1,0 +1,167 @@
+namespace Eccelerators.RiscV.Core
+
+using Eccelerators.RiscV.Isa
+
+/**
+ * RV32C architectural front end over aligned physical word fetches. One cached
+ * word serves both halfwords; a 32-bit instruction beginning in the upper
+ * halfword is assembled after fetching the following word.
+ */
+component Rv32cInstructionFetch : IRv32InstructionPort
+{
+	const IDLE: uint = 0
+	const FIRST_WAIT: uint = 1
+	const FIRST_RELEASE: uint = 2
+	const SECOND_WAIT: uint = 3
+	const SECOND_RELEASE: uint = 4
+	const RESPONSE: uint = 5
+
+	fetch: IRv32FetchPort
+	phase: uint
+	requestAddress: uint
+	firstWord: uint
+	cacheValid: bool
+	cacheAddress: uint
+	cacheWord: uint
+	responseInstruction: logic[32]
+	responseRaw: logic[32]
+	responseLength: logic[3]
+	responseError: logic
+
+	new(fetch: flip IRv32FetchPort)
+	{
+		this.fetch = fetch
+	}
+
+	process Drive[]()
+	{
+		fetch.request = 0b0
+		fetch.address = (requestAddress & 0xfffffffc) as logic[32]
+		fetch.synchronize = synchronize
+
+		if (phase == FIRST_WAIT) {
+			fetch.request = 0b1
+		} elif (phase == SECOND_WAIT) {
+			fetch.request = 0b1
+			fetch.address = ((requestAddress & 0xfffffffc) + 4) as logic[32]
+		}
+
+		ready = 0b0
+		error = responseError
+		instruction = responseInstruction
+		rawInstruction = responseRaw
+		length = responseLength
+		synchronized = 0b0
+
+		if (phase == RESPONSE) {
+			ready = 0b1
+		}
+
+		if (phase == IDLE && !cacheValid && fetch.synchronized == 0b1) {
+			synchronized = 0b1
+		}
+	}
+
+	process Advance()
+	{
+		state {
+			if (synchronize == 0b1) {
+				cacheValid = false
+			}
+
+			match (phase)
+			{
+				IDLE =>
+				{
+					if (request == 0b1) {
+						requestAddress = address as uint
+						responseError = 0b0
+
+						if ((address as uint & 1) != 0) {
+							responseError = 0b1
+							responseInstruction = 0
+							responseRaw = 0
+							responseLength = 2
+							phase = RESPONSE
+						} elif (cacheValid && cacheAddress == (address as uint & 0xfffffffc)) {
+							firstWord = cacheWord
+							phase = FIRST_RELEASE
+						} else {
+							phase = FIRST_WAIT
+						}
+					}
+				}
+				FIRST_WAIT =>
+				{
+					if (fetch.ready == 0b1) {
+						responseError = fetch.error
+						firstWord = fetch.instruction as uint
+						cacheValid = fetch.error == 0b0
+						cacheAddress = requestAddress & 0xfffffffc
+						cacheWord = fetch.instruction as uint
+						phase = FIRST_RELEASE
+					}
+				}
+				FIRST_RELEASE =>
+				{
+					if (responseError == 0b1) {
+						responseInstruction = 0
+						responseRaw = 0
+						responseLength = 2
+						phase = RESPONSE
+					} else {
+						var halfword = firstWord & 0xffff
+
+						if ((requestAddress & 2) != 0) {
+							halfword = firstWord >> 16
+						}
+
+						if ((halfword & 3) != 3) {
+							responseRaw = halfword as logic[32]
+							responseInstruction = Rv32cDecode.Expand(halfword) as logic[32]
+							responseLength = 2
+							phase = RESPONSE
+						} elif ((requestAddress & 2) == 0) {
+							responseRaw = firstWord as logic[32]
+							responseInstruction = firstWord as logic[32]
+							responseLength = 4
+							phase = RESPONSE
+						} else {
+							phase = SECOND_WAIT
+						}
+					}
+				}
+				SECOND_WAIT =>
+				{
+					if (fetch.ready == 0b1) {
+						var assembled = ((fetch.instruction as uint & 0xffff) << 16)
+							| (firstWord >> 16)
+						responseError = fetch.error
+						responseRaw = assembled as logic[32]
+						responseInstruction = assembled as logic[32]
+						responseLength = 4
+						cacheValid = fetch.error == 0b0
+						cacheAddress = (requestAddress & 0xfffffffc) + 4
+						cacheWord = fetch.instruction as uint
+						phase = SECOND_RELEASE
+					}
+				}
+				SECOND_RELEASE =>
+				{
+					phase = RESPONSE
+				}
+				RESPONSE =>
+				{
+					if (request == 0b0) {
+						phase = IDLE
+					}
+				}
+				_ =>
+				{
+					phase = IDLE
+					cacheValid = false
+				}
+			}
+		}
+	}
+}

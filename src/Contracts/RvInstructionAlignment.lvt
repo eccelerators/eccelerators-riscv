@@ -1,0 +1,32 @@
+namespace Eccelerators.RiscV.Contracts
+
+/**
+ * Architectural instruction-address alignment. RISC-V calls the corresponding
+ * bit counts IALIGN=16 and IALIGN=32; byte counts are derived explicitly below.
+ */
+enum RvInstructionAlignment
+{
+	Halfword
+	Word
+}
+
+/**
+ * Pure conversions for architectural instruction alignment.
+ */
+public class RvInstructionAlignmentInfo
+{
+	public static fn Bytes[](alignment: RvInstructionAlignment) uint
+	{
+		match alignment
+		{
+			RvInstructionAlignment.Halfword =>
+			{
+				return 2
+			}
+			RvInstructionAlignment.Word =>
+			{
+				return 4
+			}
+		}
+	}
+}

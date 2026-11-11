@@ -13,7 +13,7 @@ cohesive providers while the engines retain architectural commit.
 Version **0.3.0** removes the scheduled reference layer and uses separate
 instruction-fetch and load/store ports with a system-level composition. The
 unreleased sources add shared machine composition and structural presets for
-full M, Zba/Zbb/Zbs, RV32E and Zifencei.
+full M, Zba/Zbb/Zbs, RV32E, Zifencei and RV32C.
 
 ## Choose a core
 
@@ -24,6 +24,7 @@ and data providers implementing `flip IRv32FetchPort` and
 | Features | Sequential engine | Pipeline engine |
 |---|---|---|
 | RV32I | `Rv32iSequentialCore` | `Rv32iPipelineCore` |
+| RV32I + C | `Rv32icSequentialCore` | `Rv32icPipelineCore` |
 | RV32I + Zmmul | `Rv32iZmmulSequentialCore` | `Rv32iZmmulPipelineCore` |
 | RV32I + M | `Rv32iMSequentialCore` | `Rv32iMPipelineCore` |
 | RV32I + Zba + Zbb + Zbs | `Rv32iBitmanipSequentialCore` | `Rv32iBitmanipPipelineCore` |
@@ -101,8 +102,10 @@ Software must target the ISA selected by the core. RV32I variants use the `ilp32
 ABI; RV32E uses `ilp32e`. Zmmul includes multiplication without division, while M
 adds DIV, DIVU, REM and REMU. Machine cores implement a documented machine-mode
 subset with MRET, direct traps, timer and external interrupts. Compressed
-instructions, atomics, floating point, vectors, lower privilege modes, MMU,
-caches and architectural debug are absent. These cores do not boot Linux.
+integer instructions are available through the RV32IC presets and preserve
+their original encoding in retirement and fault reporting. Atomics, floating
+point, vectors, lower privilege modes, MMU, caches and architectural debug are
+absent. These cores do not boot Linux.
 
 ## Documentation and tests
 

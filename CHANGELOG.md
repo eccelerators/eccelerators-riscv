@@ -26,6 +26,9 @@ All notable changes to `Eccelerators.RiscV` are recorded here.
   presets with reserved-register enforcement.
 - Add Zifencei decoding and an ordered fetch-synchronization handshake, including
   pipeline invalidation of prefetched instructions.
+- Add the `IRv32InstructionPort` framing boundary, RV32C integer decompression,
+  cached cross-word instruction assembly and named RV32IC sequential and pipeline
+  presets.
 
 ### Changed
 
@@ -42,6 +45,9 @@ All notable changes to `Eccelerators.RiscV` are recorded here.
 - Generalize the engine multiplication boundary to `IRv32MPort`, preserving typed
   Zmmul providers while allowing full-M compositions. Make architectural register
   count an explicit engine specialization restricted to RV32I or RV32E.
+- Make instruction framing and architectural alignment engine specializations;
+  fixed-width cores retain the default word front end while RV32IC cores select
+  halfword alignment and the compressed front end.
 
 ### Removed
 

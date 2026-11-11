@@ -18,7 +18,7 @@ Capabilities remain elaboration-time coverage checks, not a runtime registry.
 | RV32E | RV32 execution engines and most semantics | Implemented with 16-register storage, legality checks and named presets |
 | Zifencei | Ordered commit and `IRv32FetchPort` synchronization | Implemented by typed decoder overlays and named presets |
 | A | Ordered commit and load/store addressing | Atomic memory transaction, reservation ownership and memory-order contract |
-| C | Integer semantics and later pipeline stages | Halfword fetch assembly, instruction length, cross-word fetch and precise PC/fault handling |
+| C | `IRv32InstructionPort`, `Rv32cInstructionFetch` and existing RV32I semantics | Implemented for RV32C integer forms with named sequential and pipeline presets |
 | F/D | Integer control and memory framework where compatible | Floating-point register state, rounding/status CSRs, execution and commit ports |
 | RV64 | Composition ideas and some control structure | A width-specific contract family, 64-bit state and RV64 decode/semantics |
 | Custom result-only instructions | `IRv32CustomInstructionPort` | Provider recognition, execution and qualification tests |
@@ -42,6 +42,9 @@ combines a multiplier and divider without adding division hardware to Zmmul core
 Zba, Zbb and Zbs use typed overlays so a custom composition can select each subset
 independently. RV32E is a base-ISA choice represented by dedicated decoders,
 register banks and presets rather than an arbitrary runtime register count.
+RV32C is an instruction-front-end choice. It preserves the aligned physical-word
+fetch contract, publishes instruction length and raw encoding to either engine,
+and expands compressed integer forms before the normal decoder composition.
 
 An extension is supported only after decode, execution, architectural state,
 faults, software-visible reporting and both relevant engine integrations are

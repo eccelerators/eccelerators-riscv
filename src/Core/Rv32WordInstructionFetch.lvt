@@ -1,0 +1,28 @@
+namespace Eccelerators.RiscV.Core
+
+/**
+ * Fixed-width architectural front end. It preserves the physical word-fetch
+ * transaction and reports every instruction as an unmodified four-byte value.
+ */
+component Rv32WordInstructionFetch : IRv32InstructionPort
+{
+	fetch: IRv32FetchPort
+
+	new(fetch: flip IRv32FetchPort)
+	{
+		this.fetch = fetch
+	}
+
+	process Connect[]()
+	{
+		fetch.request = request
+		fetch.address = address
+		fetch.synchronize = synchronize
+		ready = fetch.ready
+		error = fetch.error
+		instruction = fetch.instruction
+		rawInstruction = fetch.instruction
+		length = 4
+		synchronized = fetch.synchronized
+	}
+}

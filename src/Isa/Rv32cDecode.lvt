@@ -1,0 +1,226 @@
+namespace Eccelerators.RiscV.Isa
+
+/**
+ * Pure RV32C integer decompression into canonical RV32I encodings. Unsupported
+ * floating-point forms and reserved encodings return zero. Architectural hints
+ * expand to ADDI x0, x0, 0 so they retire without effects.
+ */
+public class Rv32cDecode
+{
+	const OP_IMM: uint = 0x13
+	const OP: uint = 0x33
+	const LOAD: uint = 0x03
+	const STORE: uint = 0x23
+	const BRANCH: uint = 0x63
+	const JALR: uint = 0x67
+	const JAL: uint = 0x6f
+	const LUI: uint = 0x37
+	const SYSTEM: uint = 0x73
+	const NOP: uint = 0x00000013
+
+	public static fn RegisterPrime[](instruction: uint, shift: int) uint
+	{
+		return 8 + ((instruction >> shift) & 7)
+	}
+
+	public static fn SignExtend[](value: uint, bits: int) uint
+	{
+		var sign: uint = (1 << (bits - 1)) as uint
+		return (value ^ sign) - sign
+	}
+
+	public static fn I[](opcode: uint, rd: uint, funct3: uint, rs1: uint, immediate: uint) uint
+	{
+		return ((immediate & 0xfff) << 20) | ((rs1 & 31) << 15)
+			| ((funct3 & 7) << 12) | ((rd & 31) << 7) | opcode
+	}
+
+	public static fn R[](rd: uint, funct3: uint, rs1: uint, rs2: uint, funct7: uint) uint
+	{
+		return ((funct7 & 127) << 25) | ((rs2 & 31) << 20) | ((rs1 & 31) << 15)
+			| ((funct3 & 7) << 12) | ((rd & 31) << 7) | OP
+	}
+
+	public static fn S[](funct3: uint, rs1: uint, rs2: uint, immediate: uint) uint
+	{
+		return (((immediate >> 5) & 127) << 25) | ((rs2 & 31) << 20) | ((rs1 & 31) << 15)
+			| ((funct3 & 7) << 12) | ((immediate & 31) << 7) | STORE
+	}
+
+	public static fn B[](funct3: uint, rs1: uint, rs2: uint, immediate: uint) uint
+	{
+		return (((immediate >> 12) & 1) << 31) | (((immediate >> 5) & 63) << 25)
+			| ((rs2 & 31) << 20) | ((rs1 & 31) << 15) | ((funct3 & 7) << 12)
+			| (((immediate >> 1) & 15) << 8) | (((immediate >> 11) & 1) << 7) | BRANCH
+	}
+
+	public static fn J[](rd: uint, immediate: uint) uint
+	{
+		return (((immediate >> 20) & 1) << 31) | (((immediate >> 1) & 1023) << 21)
+			| (((immediate >> 11) & 1) << 20) | (((immediate >> 12) & 255) << 12)
+			| ((rd & 31) << 7) | JAL
+	}
+
+	public static fn Expand[](instruction: uint) uint
+	{
+		var quadrant = instruction & 3
+		var funct3 = (instruction >> 13) & 7
+		var rd = (instruction >> 7) & 31
+		var rs2 = (instruction >> 2) & 31
+		var immediate = 0 as uint
+
+		if (quadrant == 0) {
+			if (funct3 == 0) {
+				immediate = (((instruction >> 7) & 15) << 6) | (((instruction >> 11) & 3) << 4)
+					| (((instruction >> 5) & 1) << 3) | (((instruction >> 6) & 1) << 2)
+
+				if (immediate != 0) {
+					return I(OP_IMM, RegisterPrime(instruction, 2), 0, 2, immediate)
+				}
+			} elif (funct3 == 2) {
+				immediate = (((instruction >> 5) & 1) << 6) | (((instruction >> 10) & 7) << 3)
+					| (((instruction >> 6) & 1) << 2)
+				return I(LOAD, RegisterPrime(instruction, 2), 2,
+					RegisterPrime(instruction, 7), immediate)
+			} elif (funct3 == 6) {
+				immediate = (((instruction >> 5) & 1) << 6) | (((instruction >> 10) & 7) << 3)
+					| (((instruction >> 6) & 1) << 2)
+				return S(2, RegisterPrime(instruction, 7), RegisterPrime(instruction, 2), immediate)
+			}
+		} elif (quadrant == 1) {
+			immediate = SignExtend((((instruction >> 12) & 1) << 5) | ((instruction >> 2) & 31), 6)
+
+			if (funct3 == 0) {
+				if (rd == 0) {
+					return NOP
+				}
+
+				return I(OP_IMM, rd, 0, rd, immediate)
+			} elif (funct3 == 1 || funct3 == 5) {
+				var offset = (((instruction >> 12) & 1) << 11) | (((instruction >> 11) & 1) << 4)
+					| (((instruction >> 9) & 3) << 8) | (((instruction >> 8) & 1) << 10)
+					| (((instruction >> 7) & 1) << 6) | (((instruction >> 6) & 1) << 7)
+					| (((instruction >> 3) & 7) << 1) | (((instruction >> 2) & 1) << 5)
+				offset = SignExtend(offset, 12)
+				return J((funct3 == 1) as uint, offset)
+			} elif (funct3 == 2) {
+				if (rd == 0) {
+					return NOP
+				}
+
+				return I(OP_IMM, rd, 0, 0, immediate)
+			} elif (funct3 == 3) {
+				if (rd == 2) {
+					var stackImmediate = (((instruction >> 12) & 1) << 9)
+						| (((instruction >> 6) & 1) << 4) | (((instruction >> 5) & 1) << 6)
+						| (((instruction >> 3) & 3) << 7) | (((instruction >> 2) & 1) << 5)
+					stackImmediate = SignExtend(stackImmediate, 10)
+
+					if (stackImmediate != 0) {
+						return I(OP_IMM, 2, 0, 2, stackImmediate)
+					}
+				} elif (rd != 0 && rd != 2 && immediate != 0) {
+					return (immediate << 12) | (rd << 7) | LUI
+				} elif (rd == 0 && immediate != 0) {
+					return NOP
+				}
+			} elif (funct3 == 4) {
+				var subop = (instruction >> 10) & 3
+				var prime = RegisterPrime(instruction, 7)
+
+				if (subop == 0 || subop == 1) {
+					if (((instruction >> 12) & 1) != 0) {
+						return 0
+					}
+
+					var shift = (instruction >> 2) & 31
+
+					if (shift == 0) {
+						return NOP
+					}
+
+					return I(OP_IMM, prime, 5, prime, shift | (subop << 10))
+				} elif (subop == 2) {
+					return I(OP_IMM, prime, 7, prime, immediate)
+				} elif (((instruction >> 12) & 1) == 0) {
+					var arithmetic = (instruction >> 5) & 3
+					var operation = 0 as uint
+					var funct7 = 0 as uint
+
+					if (arithmetic == 0) {
+						funct7 = 32
+					} elif (arithmetic == 1) {
+						operation = 4
+					} elif (arithmetic == 2) {
+						operation = 6
+					} else {
+						operation = 7
+					}
+
+					return R(prime, operation, prime, RegisterPrime(instruction, 2), funct7)
+				}
+			} elif (funct3 == 6 || funct3 == 7) {
+				var branchOffset = (((instruction >> 12) & 1) << 8)
+					| (((instruction >> 10) & 3) << 3) | (((instruction >> 5) & 3) << 6)
+					| (((instruction >> 3) & 3) << 1) | (((instruction >> 2) & 1) << 5)
+				var branchOperation = 0 as uint
+				branchOffset = SignExtend(branchOffset, 9)
+
+				if (funct3 == 7) {
+					branchOperation = 1
+				}
+
+				return B(branchOperation, RegisterPrime(instruction, 7), 0, branchOffset)
+			}
+		} elif (quadrant == 2) {
+			if (funct3 == 0) {
+				if (((instruction >> 12) & 1) != 0) {
+					return 0
+				}
+
+				var shiftAmount = (instruction >> 2) & 31
+
+				if (rd == 0 || shiftAmount == 0) {
+					return NOP
+				}
+
+				return I(OP_IMM, rd, 1, rd, shiftAmount)
+			} elif (funct3 == 2) {
+				if (rd == 0) {
+					return 0
+				}
+
+				immediate = (((instruction >> 12) & 1) << 5) | (((instruction >> 4) & 7) << 2)
+					| (((instruction >> 2) & 3) << 6)
+				return I(LOAD, rd, 2, 2, immediate)
+			} elif (funct3 == 4) {
+				var high = (instruction >> 12) & 1
+
+				if (high == 0 && rs2 == 0 && rd != 0) {
+					return I(JALR, 0, 0, rd, 0)
+				} elif (high == 0 && rs2 != 0) {
+					if (rd == 0) {
+						return NOP
+					}
+
+					return R(rd, 0, 0, rs2, 0)
+				} elif (high != 0 && rd == 0 && rs2 == 0) {
+					return 0x00100073
+				} elif (high != 0 && rs2 == 0 && rd != 0) {
+					return I(JALR, 1, 0, rd, 0)
+				} elif (high != 0 && rs2 != 0) {
+					if (rd == 0) {
+						return NOP
+					}
+
+					return R(rd, 0, rd, rs2, 0)
+				}
+			} elif (funct3 == 6) {
+				immediate = (((instruction >> 9) & 15) << 2) | (((instruction >> 7) & 3) << 6)
+				return S(2, 2, rs2, immediate)
+			}
+		}
+
+		return 0
+	}
+}

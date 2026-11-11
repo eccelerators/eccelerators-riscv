@@ -3,6 +3,7 @@ namespace Eccelerators.RiscV.Pipeline
 using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Machine
 using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Contracts
 
 /**
  * Pipeline specialization of the general owned-provider core. It binds the
@@ -17,10 +18,12 @@ component Rv32PipelineCore<
 	CSRS: IRv32CsrPort & new(),
 	CUSTOM: IRv32CustomInstructionPort & new(),
 	RESET_PC: uint = 0,
-	REGISTER_COUNT: uint = 32
+	REGISTER_COUNT: uint = 32,
+	INSTRUCTION_ALIGNMENT: RvInstructionAlignment = RvInstructionAlignment.Word,
+	INSTRUCTIONS: IRv32InstructionPort & new(flip IRv32FetchPort) = Rv32WordInstructionFetch
 > : Rv32Core<
 	IRv32DualReadRegisterPort,
-	Rv32PipelineEngine<RESET_PC, false, REGISTER_COUNT>,
+	Rv32PipelineEngine<RESET_PC, false, REGISTER_COUNT, INSTRUCTION_ALIGNMENT, INSTRUCTIONS>,
 	REGISTERS,
 	DECODER,
 	INTEGER,

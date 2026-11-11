@@ -11,9 +11,11 @@
 | [Platform information](platform-info.md) | Software-visible composition identity and implementation choices |
 | [Custom components](custom-components.md) | Explicit composition and extension contracts |
 | [ISA extension boundaries](isa-extensions.md) | Reuse map for standard and custom extensions |
+| [Operating-system target](os-target.md) | Single-core Linux ISA, platform, boot and board contract |
 | [Testing](testing.md) | Functional tests and release validation |
 
 Declaration comments in [src](../src) specify the detailed signal and timing
-contracts. The guides describe implemented behavior; a storage hint or capability
-declaration does not establish resource usage, timing closure or ISA certification
-for a new composition.
+contracts. The operating-system target is an explicit qualification contract for
+planned work; the other guides describe implemented behavior. A storage hint or
+capability declaration does not establish resource usage, timing closure or ISA
+certification for a new composition.

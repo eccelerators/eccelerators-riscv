@@ -1,0 +1,53 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+
+/**
+ * Independent RV32C expansion vectors cover every supported integer family,
+ * architectural hints and representative reserved encodings.
+ */
+@Test
+component Rv32cDecodeTest
+{
+	@Test
+	fn TestCommonExpansions()
+	{
+		assert Rv32cDecode.Expand(0x0001) == 0x00000013
+		assert Rv32cDecode.Expand(0x0800) == 0x01010413
+		assert Rv32cDecode.Expand(0x4000) == 0x00042403
+		assert Rv32cDecode.Expand(0xc000) == 0x00842023
+		assert Rv32cDecode.Expand(0x4095) == 0x00500093
+		assert Rv32cDecode.Expand(0x0085) == 0x00108093
+		assert Rv32cDecode.Expand(0x2001) == 0x000000ef
+		assert Rv32cDecode.Expand(0xa001) == 0x0000006f
+		assert Rv32cDecode.Expand(0x6141) == 0x01010113
+		assert Rv32cDecode.Expand(0x6185) == 0x000011b7
+		assert Rv32cDecode.Expand(0x8005) == 0x00145413
+		assert Rv32cDecode.Expand(0x8405) == 0x40145413
+		assert Rv32cDecode.Expand(0x8805) == 0x00147413
+		assert Rv32cDecode.Expand(0x8c01) == 0x40840433
+		assert Rv32cDecode.Expand(0x8c21) == 0x00844433
+		assert Rv32cDecode.Expand(0x8c41) == 0x00846433
+		assert Rv32cDecode.Expand(0x8c61) == 0x00847433
+		assert Rv32cDecode.Expand(0xc001) == 0x00040063
+		assert Rv32cDecode.Expand(0xe001) == 0x00041063
+		assert Rv32cDecode.Expand(0x0086) == 0x00109093
+		assert Rv32cDecode.Expand(0x4082) == 0x00012083
+		assert Rv32cDecode.Expand(0x808a) == 0x002000b3
+		assert Rv32cDecode.Expand(0x9002) == 0x00100073
+		assert Rv32cDecode.Expand(0x8082) == 0x00008067
+		assert Rv32cDecode.Expand(0x9082) == 0x000080e7
+		assert Rv32cDecode.Expand(0x908a) == 0x002080b3
+		assert Rv32cDecode.Expand(0xc006) == 0x00112023
+	}
+
+	@Test
+	fn TestReservedAndHints()
+	{
+		assert Rv32cDecode.Expand(0x0000) == 0
+		assert Rv32cDecode.Expand(0x2000) == 0
+		assert Rv32cDecode.Expand(0x4002) == 0
+		assert Rv32cDecode.Expand(0x8002) == 0
+		assert Rv32cDecode.Expand(0x0005) == 0x00000013
+	}
+}

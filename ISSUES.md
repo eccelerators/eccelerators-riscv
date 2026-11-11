@@ -27,25 +27,32 @@ dependency.
 - [ ] I08 — Add an RV32E reduced-register base option.
 - [x] I03 — Add the Zifencei instruction-fetch fence extension.
 
-### Phase 3 — Initial multicore and shared state
+### Phase 3 — Single-core operating-system path
 
-- [ ] M01 — Compose and qualify two independently controlled cores.
-- [ ] A04 — Define progress, timeout and recovery behavior for stalled providers.
-- [ ] M02 — Add arbitration for shared memory and peripherals.
-- [ ] M03 — Add interprocessor communication and interrupt delivery.
-- [ ] M04 — Establish shared-memory synchronization and ordering guarantees.
-- [ ] I05 — Add the standard A atomic-instruction extension.
-
-### Phase 4 — Larger architectural changes
-
+- [x] OS01 — Define the first concrete OS target and its resource budget.
 - [ ] I04 — Add the standard C compressed-instruction extension.
+- [ ] I05 — Add the standard A atomic-instruction extension.
+- [ ] OS02 — Add user and supervisor privilege modes.
+- [ ] OS03 — Add Sv32 virtual memory and precise page faults.
 - [ ] A03 — Introduce an optional memory protocol for higher throughput.
+- [ ] A04 — Define progress, timeout and recovery behavior for stalled providers.
+- [ ] OS04 — Compose an OS platform with external memory and standard devices.
+- [ ] OS05 — Add SBI firmware and boot single-core Linux.
+
+### Phase 4 — Performance and optional architectural state
+
+- [ ] OS06 — Add and qualify caches for useful single-core OS performance.
 - [ ] I06 — Add the standard F single-precision floating-point extension.
 - [ ] I07 — Add the standard D double-precision floating-point extension.
 
-### Phase 5 — Operating-system-capable systems
+### Phase 5 — Multicore and operating-system SMP
 
-- [ ] M05 — Define the path to cached and operating-system-capable SMP.
+- [ ] M01 — Compose and qualify two independently controlled cores.
+- [ ] M02 — Add arbitration for shared memory and peripherals.
+- [ ] M03 — Add interprocessor communication and interrupt delivery.
+- [ ] M04 — Establish shared-memory synchronization and ordering guarantees.
+- [ ] OS07 — Add SBI multicore services and coherent execution mechanisms.
+- [ ] OS08 — Qualify repeatable Linux SMP boot and concurrent workloads.
 
 ## Direction and order
 
@@ -62,14 +69,22 @@ Factor shared machine-mode ownership through A09 before extending that compositi
 with the full M extension. Add the remaining compact ISA improvements before changing
 fetch framing or architectural state.
 
-Begin multicore with independent systems in M01. Define stalled-provider behavior in
-A04 before qualifying shared devices, then add arbitration, communication and memory
-ordering through M02, M03 and M04. Standard atomics in I05 depend on that shared-memory
-foundation. I03 must precede instruction caches, while I04 changes fetch framing and
-I06/I07 introduce separate architectural state. A03 remains driven by measured
-bandwidth needs and is not a prerequisite for a small multicore system. M05 is the
-long-term integration path after the required ISA, memory and multicore contracts are
-qualified.
+Define one measurable single-core OS target in OS01 before adding architecture for an
+unspecified software stack. Add C and A, then introduce U/S privilege and Sv32 through
+OS02 and OS03. Use measured external-memory and workload needs to drive A03 rather
+than replacing the compact ports unconditionally. Resolve provider liveness in A04
+before OS04 qualifies a platform whose external devices can stall. OS05 is the first
+OS milestone: a repeatable single-core Linux boot through SBI, without waiting for
+caches or multicore.
+
+I03 must precede instruction caches. OS06 adds caches only after the uncached platform
+is correct and measures whether they make the OS practically useful. F and D add
+separate architectural state and are optional for the first integer Linux target.
+Begin multicore independently in M01, then establish arbitration, communication and
+memory ordering through M02, M03 and M04. OS07 adds the firmware, remote-fence and
+cache-coherence mechanisms needed by an OS, and OS08 is the final Linux SMP
+qualification. Keep uncached bare-metal multicore and single-core OS configurations
+usable independently of the SMP result.
 
 Keep small cores economical. New capabilities must not impose unused hardware on
 base presets. Separate sequential and pipeline controllers where their scheduling
@@ -412,6 +427,25 @@ ordering across delayed stores, and the documented cacheless implementation.
 
 ### I04 — C compressed instructions
 
+**Status:** Functionally implemented; FPGA qualification remains open.
+`IRv32InstructionPort` separates architectural instruction framing from the
+aligned physical-word fetch contract. Both engines own a generic front end and
+default to the zero-state `Rv32WordInstructionFetch`, preserving existing core
+constructors. `Rv32cInstructionFetch` caches one word, frames both halfword
+positions, assembles cross-word 32-bit instructions, preserves raw encodings and
+invalidates buffered state for FENCE.I. `Rv32cDecode` expands the RV32C integer
+forms into the existing RV32I semantic vocabulary and rejects reserved or
+unsupported floating-point encodings.
+
+Named `Rv32icSequentialCore` and `Rv32icPipelineCore` presets select
+`RvInstructionAlignment.Halfword`; ordinary presets retain word alignment.
+Directed decompression vectors and a mixed-width program pass in both engines,
+covering dependencies, raw retirement, a boundary-spanning instruction, a taken
+compressed branch, compressed link-address generation and an illegal compressed
+fault. Existing 34-test sequential and 34-test pipeline suites also pass through
+the fixed-width adapter. Resource, CPI and routed timing measurements remain
+before this item can close.
+
 **Constraint:** Fetch, PC progression, alignment faults and decode currently assume a
 32-bit instruction at a four-byte boundary. C permits mixed 16-bit and 32-bit
 instructions on two-byte boundaries.
@@ -428,16 +462,21 @@ routed timing in both engines.
 ### I05 — A atomic instructions
 
 **Constraint:** The current load/store protocol cannot express an indivisible
-read-modify-write transaction or an LR/SC reservation, especially with multiple cores
-and shared devices.
+read-modify-write transaction or an LR/SC reservation. A Linux-capable ISA needs
+standard atomics before multicore is introduced, while a later shared fabric must
+preserve the same atomicity against every hart and DMA-capable master.
 
 **Work:** Define atomic memory ownership, ordering and reservation invalidation before
-adding LR/SC and AMO decode/execution. Integrate arbitration from M02 and the memory
-ordering model from M04; do not emulate atomicity inside a core while another bus
-master can intervene.
+adding LR/SC and AMO decode/execution. Qualify the initial implementation on the
+single-core OS memory path and expose the ownership/invalidation contract required by
+future arbitration. M02 and M04 must enforce that contract when additional masters
+are added; do not emulate atomicity inside a core while another bus master can
+intervene.
 
-**Acceptance:** Verify all RV32A operations, reservation success/failure, competing
-cores, interrupts and memory errors. Run multicore lock and atomic-counter workloads.
+**Acceptance:** Verify all RV32A operations, reservation success/failure, interrupts,
+memory errors and single-core lock primitives. Document the multi-master contract.
+M04 separately qualifies competing cores, invalidation and atomic-counter workloads
+before any SMP claim.
 
 ### I06 — F single-precision floating point
 
@@ -482,6 +521,114 @@ from physical register-file style and from arbitrary register-count parameters.
 
 **Acceptance:** Run RV32E architectural and ABI-oriented programs, prove illegal
 register encodings trap, and compare register-file, LUT and timing savings with RV32I.
+
+## Operating-system-capable systems
+
+The first OS milestone is a repeatable single-core Linux boot. It does not depend on
+cache coherence or multiple harts. The target definition fixes the exact ISA,
+privilege, memory, firmware and board contract before implementation begins. Small
+machine-mode and RTOS presets remain independent and do not acquire OS-only hardware.
+
+### OS01 — Concrete OS target
+
+**Status:** Completed. `docs/os-target.md` fixes one single-hart
+`rv32imac_zicsr_zifencei_zicntr` Linux configuration, the `ilp32` ABI,
+privileged architecture 1.12, Sv32, eight PMP entries, standard platform
+devices and a 64 MiB physical map. It assigns boot responsibilities to the
+FPGA CLI, OpenSBI and Linux and pins Linux v6.18, OpenSBI v1.9 and Buildroot
+2026.08.1. The dependency matrix identifies the reusable component boundary
+and owning roadmap item for every missing capability.
+
+The target first qualifies on a Tang Primer 25K with its external SDRAM module.
+Explicit timing, utilization, bandwidth and boot-time gates move qualification
+to the Tang Mega 138K and its onboard DDR3 without changing the core, device
+or software-visible memory contracts. A sparse simulation platform provides the
+same addresses and variable-latency memory before either board is required.
+
+**Work:** Define the first supported OS configuration, including RV32 ISA string,
+privileged architecture version, ABI, Tang Primer 25K clock and resource budget,
+external-memory capacity and bandwidth, physical address map, interrupt architecture,
+console, boot payload and Linux/initramfs versions. Choose which responsibilities
+belong to hardware, machine firmware and the FPGA CLI. Record the minimum usable
+performance target and identify components that remain reusable from the small cores.
+
+**Acceptance:** Publish one dependency matrix and boot contract with no unresolved
+choice that changes the core interfaces. Include a resource-risk estimate and a
+smaller simulation platform for architectural work before external-memory hardware
+is available.
+
+### OS02 — User and supervisor privilege modes
+
+**Constraint:** Current machine cores implement a machine-only subset. Linux normally
+runs in supervisor mode and requires user-mode isolation, delegated traps and
+supervisor-visible interrupt and status state.
+
+**Work:** Add U/S privilege tracking, M/S trap entry and return, `SRET`, `WFI`,
+exception and interrupt delegation, supervisor CSR views and the required machine
+CSR state. Define PMP behavior for resident machine firmware and make privilege a
+cohesive provider contract rather than scattering mode checks through devices.
+
+**Acceptance:** Run directed privilege-transition, delegation, CSR-access, interrupt,
+PMP and precise-exception tests. Boot an S-mode payload through M-mode firmware and
+prove that U-mode accesses cannot escape their configured permissions.
+
+### OS03 — Sv32 virtual memory
+
+**Constraint:** The current fetch and load/store addresses are physical. A protected
+RV32 Linux system needs `satp`, Sv32 page-table translation, permission checks and
+precise page-fault reporting.
+
+**Work:** Add instruction and data translation contracts, TLBs, a page-table walker,
+`SFENCE.VMA`, ASID handling and Sv32 permission, accessed and dirty-bit behavior.
+Integrate translation with privilege state, fetch synchronization and architectural
+fault ordering. Keep the cache and translation boundaries separate so an uncached
+MMU can be qualified first.
+
+**Acceptance:** Test page sizes, ASIDs, permissions, U/S access rules, global mappings,
+TLB replacement and invalidation, malformed walks, access faults and instruction,
+load and store page faults. Run an S-mode virtual-memory payload that switches address
+spaces and handles copy-on-write-style faults.
+
+### OS04 — Single-core OS platform
+
+**Constraint:** BRAM-only examples lack the memory capacity and standard platform
+devices needed for a useful Linux image.
+
+**Work:** Compose the OS-qualified core with external memory, boot storage or host
+provisioning, UART, timer, software-interrupt source and external-interrupt controller.
+Define the physical memory map, device-tree description, reset ownership and firmware
+reservation. Use A03 only where measurements show that the compact transaction ports
+cannot meet the selected memory target.
+
+**Acceptance:** Stress external memory and every interrupt path independently before
+booting an OS. Validate the device tree against the implemented address map, prove
+that reserved firmware memory is protected, and record board resources, bandwidth
+and routed timing.
+
+### OS05 — SBI firmware and single-core Linux boot
+
+**Work:** Provide or port machine firmware implementing the SBI services required by
+the selected Linux configuration. Load firmware, kernel, device tree and initramfs;
+enter supervisor mode with the specified hart ID, device-tree pointer and disabled
+address translation. Keep firmware sources and reproducible image-generation steps
+separate from generated binaries.
+
+**Acceptance:** Repeatedly boot the pinned Linux image to a UART shell on simulation
+and the Tang Primer 25K. Exercise timer interrupts, user processes, virtual memory,
+the initramfs and orderly shutdown or reset. Record boot time and workload behavior;
+do not require caches or a second hart for completion.
+
+### OS06 — Useful cached single-core performance
+
+**Work:** Add optional instruction and data caches after the uncached OS path is
+correct. Define cacheability metadata, write policy, eviction errors, DMA visibility,
+FENCE and FENCE.I behavior, and cache maintenance needed by the selected platform.
+Preserve uncached and small-core compositions through typed providers.
+
+**Acceptance:** Verify replacement, aliases, self-modifying code, DMA visibility and
+fault ordering. Compare Linux boot time and representative workloads against the
+uncached core, together with FPGA resources and routed timing. Retain the caches only
+when measured performance justifies their cost.
 
 ## Multicore systems
 
@@ -531,26 +678,39 @@ the firmware protocol and how it avoids lost messages.
 **Work:** Specify observable ordering across cores, device accesses and any DMA.
 Define FENCE behavior for the actual fabric. Provide a qualified synchronization
 mechanism, initially a hardware semaphore or mailbox if appropriate. Add standard
-atomic operations when required by software, including indivisibility at shared
-memory and reservation invalidation if LR/SC is selected. Bus arbitration alone
-does not make a load followed by a store atomic.
+I05 atomic operations to the shared fabric, including indivisibility at memory and
+reservation invalidation for LR/SC. Bus arbitration alone does not make a load
+followed by a store atomic.
 
 **Acceptance:** Test producer/consumer communication, mutual exclusion and memory
 ordering under contention. For implemented atomic instructions, test competing
 masters and failure paths. State the supported ISA and software assumptions.
 
-### M05 — Cached and operating-system-capable SMP
+### OS07 — Multicore OS mechanisms
 
-**Work:** Define a staged architecture for private/shared caches, coherence or
-explicitly managed noncoherent regions, DMA visibility and instruction visibility.
-Specify privileged memory metadata, MMU/TLB behavior, interprocessor invalidation,
-interrupts, timers, hart startup and firmware/OS interfaces for a chosen target.
-Identify which existing components remain reusable and which need replacement.
+**Constraint:** Independent harts and shared arbitration do not provide the firmware,
+remote invalidation or cache behavior required by an SMP operating system.
 
-**Acceptance:** First produce a concrete target and dependency plan. Qualify cache
-and memory-consistency behavior before claiming coherent SMP. Claim OS support
-only after repeatable boot and concurrent workload tests on that target. Keep
-uncached bare-metal multicore usable independently of this work.
+**Work:** Add per-hart startup state, machine software interrupts and the SBI HSM,
+IPI and remote-fence services required by the selected Linux target. Define coherent
+private caches, a shared cache, or an explicitly qualified alternative; include
+reservation invalidation, TLB shootdown, instruction visibility and DMA interaction.
+
+**Acceptance:** Start, stop and restart secondary harts through SBI. Verify IPIs,
+remote `FENCE.I`, remote `SFENCE.VMA`, TLB shootdowns, atomic contention and cache/DMA
+visibility. Record whole-system resources and timing while keeping the uncached
+bare-metal multicore configuration available.
+
+### OS08 — Linux SMP qualification
+
+**Work:** Extend the OS05 boot flow and device tree to the qualified hart topology.
+Make boot-hart ownership, secondary-hart release, per-hart timers and interrupt
+routing reproducible on the selected FPGA target.
+
+**Acceptance:** Repeatedly boot Linux with all intended harts online in simulation
+and on the Tang Primer 25K. Run concurrent process, locking, memory-pressure, IPI and
+shared-I/O workloads without coherency failures. Claim SMP support only with the
+pinned software versions, configuration, measurements and limitations recorded.
 
 ## Completion evidence
 

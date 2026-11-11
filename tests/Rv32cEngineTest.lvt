@@ -1,0 +1,138 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Presets
+
+/**
+ * Mixed-width execution uses both engines, both halfword positions and a
+ * 32-bit instruction assembled across adjacent physical fetch words.
+ */
+@Test
+component Rv32cEngineTest
+{
+	sequentialFetch: RvFetchRom<16, 6>
+	sequentialData: RvLoadStoreRam<16, 6>
+	sequential: Rv32icSequentialCore
+	pipelineFetch: RvFetchRom<16, 6>
+	pipelineData: RvLoadStoreRam<16, 6>
+	pipeline: Rv32icPipelineCore
+	sequentialValues: uint[32]
+	pipelineValues: uint[32]
+	sequentialPc: uint[16]
+	pipelinePc: uint[16]
+	sequentialWord: uint[16]
+	pipelineWord: uint[16]
+	sequentialCount: uint
+	pipelineCount: uint
+
+	new()
+	{
+		sequentialFetch = new RvFetchRom<16, 6>()
+		sequentialData = new RvLoadStoreRam<16, 6>()
+		sequential = new Rv32icSequentialCore(sequentialFetch, sequentialData)
+		pipelineFetch = new RvFetchRom<16, 6>()
+		pipelineData = new RvLoadStoreRam<16, 6>()
+		pipeline = new Rv32icPipelineCore(pipelineFetch, pipelineData)
+	}
+
+	process Observe()
+	{
+		state {
+			if (sequential.retired == 0b1) {
+				sequentialPc[sequentialCount] = sequential.retiredPc as uint
+				sequentialWord[sequentialCount] = sequential.retiredInstruction as uint
+
+				if (sequential.retiredRd != 0) {
+					sequentialValues[sequential.retiredRd as uint] = sequential.retiredValue as uint
+				}
+
+				sequentialCount++
+			}
+
+			if (pipeline.retired == 0b1) {
+				pipelinePc[pipelineCount] = pipeline.retiredPc as uint
+				pipelineWord[pipelineCount] = pipeline.retiredInstruction as uint
+
+				if (pipeline.retiredRd != 0) {
+					pipelineValues[pipeline.retiredRd as uint] = pipeline.retiredValue as uint
+				}
+
+				pipelineCount++
+			}
+		}
+	}
+
+	fn Load(index: uint, word: uint)
+	{
+		state {
+			sequentialFetch.programWrite = 0b1
+			sequentialFetch.programIndex = index as logic[6]
+			sequentialFetch.programData = word as logic[32]
+			pipelineFetch.programWrite = 0b1
+			pipelineFetch.programIndex = index as logic[6]
+			pipelineFetch.programData = word as logic[32]
+		}
+
+		state {
+			sequentialFetch.programWrite = 0b0
+			pipelineFetch.programWrite = 0b0
+		}
+	}
+
+	@Test
+	fn TestMixedWidthExecution()
+	{
+		sequential.run = 0b0
+		pipeline.run = 0b0
+		Simulation.Wait(50)
+		assert sequential.idle == 0b1 && pipeline.idle == 0b1
+		Load(0, 0x00854095)
+		Load(1, 0x00308113)
+		Load(2, 0x01930001)
+		Load(3, 0x01850041)
+		Load(4, 0xe0114405)
+		Load(5, 0x20114205)
+		Load(6, 0x00854285)
+		Load(7, 0x00010000)
+		sequential.run = 0b1
+		pipeline.run = 0b1
+		var elapsed: uint = 0
+
+		while ((sequential.halted == 0b0 || pipeline.halted == 0b0) && elapsed < 2000) {
+			state {
+				elapsed++
+			}
+		}
+
+		sequential.run = 0b0
+		pipeline.run = 0b0
+		assert elapsed < 2000
+		assert sequential.halted == 0b1 && pipeline.halted == 0b1
+		assert sequential.faultCause as uint == 2 && pipeline.faultCause as uint == 2
+		assert sequential.faultValue as uint == 0 && pipeline.faultValue as uint == 0
+		assert sequentialCount == 10 && pipelineCount == 10
+		assert sequentialValues[1] == 25 && pipelineValues[1] == 25
+		assert sequentialValues[2] == 9 && pipelineValues[2] == 9
+		assert sequentialValues[3] == 14 && pipelineValues[3] == 14
+		assert sequentialValues[4] == 0 && pipelineValues[4] == 0
+		assert sequentialValues[5] == 0 && pipelineValues[5] == 0
+		assert sequentialValues[8] == 1 && pipelineValues[8] == 1
+		CheckTrace(0, 0, 0x4095)
+		CheckTrace(1, 2, 0x0085)
+		CheckTrace(2, 4, 0x00308113)
+		CheckTrace(3, 8, 0x0001)
+		CheckTrace(4, 10, 0x00410193)
+		CheckTrace(5, 14, 0x0185)
+		CheckTrace(6, 16, 0x4405)
+		CheckTrace(7, 18, 0xe011)
+		CheckTrace(8, 22, 0x2011)
+		CheckTrace(9, 26, 0x0085)
+	}
+
+	fn CheckTrace(index: uint, pc: uint, instruction: uint)
+	{
+		assert sequentialPc[index] == pc && pipelinePc[index] == pc
+		assert sequentialWord[index] == instruction && pipelineWord[index] == instruction
+	}
+}

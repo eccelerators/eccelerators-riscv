@@ -19,9 +19,16 @@ using Eccelerators.RiscV.Machine
  * provider ties interruptEligible low, making delivery inert).
  */
 component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
-	REGISTER_COUNT: uint = 32> : IRv32ControlPort
+	REGISTER_COUNT: uint = 32,
+	INSTRUCTION_ALIGNMENT: RvInstructionAlignment = RvInstructionAlignment.Word,
+	INSTRUCTIONS: IRv32InstructionPort & new(flip IRv32FetchPort) = Rv32WordInstructionFetch
+> : IRv32ControlPort
 {
-	static assert (RESET_PC & 3) == 0, "Pipeline reset PC must be word aligned"
+	static if (INSTRUCTION_ALIGNMENT == RvInstructionAlignment.Halfword) {
+		static assert (RESET_PC & 1) == 0, "Pipeline reset PC must be halfword aligned"
+	} else {
+		static assert (RESET_PC & 3) == 0, "Pipeline reset PC must be word aligned"
+	}
 	static assert REGISTER_COUNT == 16 || REGISTER_COUNT == 32,
 		"Architectural register count must select RV32E or RV32I"
 
@@ -35,7 +42,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 
 	// Exclusive borrowed providers; the application owns their lifetime.
 	registers: IRv32DualReadRegisterPort
-	fetch: IRv32FetchPort
+	instructions: INSTRUCTIONS
 	loadStore: IRv32LoadStorePort
 	decoder: IRv32DecodePort
 	integer: IRv32IntegerPort
@@ -63,6 +70,8 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 	fKilled: bool
 	fPc: uint
 	fWord: uint
+	fRaw: uint
+	fLength: uint
 	fError: bool
 
 	// Decode holds identity and, when execute stalls, its synchronous operand pair.
@@ -70,6 +79,8 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 	dPhase: uint
 	dPc: uint
 	dWord: uint
+	dRaw: uint
+	dLength: uint
 	dError: bool
 	dLeft: uint
 	dRight: uint
@@ -78,6 +89,8 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 	xValid: bool
 	xPc: uint
 	xWord: uint
+	xRaw: uint
+	xLength: uint
 	xControl: uint
 	xImmediate: uint
 	xLeft: uint
@@ -88,6 +101,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 	cValid: bool
 	cPc: uint
 	cWord: uint
+	cRaw: uint
 	cNext: uint
 	cValue: uint
 	cStoreValue: uint
@@ -159,7 +173,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 		custom: flip IRv32CustomInstructionPort)
 	{
 		this.registers = registers
-		this.fetch = fetch
+		instructions = new INSTRUCTIONS(fetch)
 		this.loadStore = loadStore
 		this.decoder = decoder
 		this.integer = integer
@@ -194,7 +208,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 
 		var arithmetic = integer.result as uint
 		xResult = arithmetic
-		xNext = xPc + 4
+		xNext = xPc + xLength
 		xFault = false
 		xCause = 0
 		xRedirect = false
@@ -207,7 +221,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 			|| (xKind == Rv32TrapOperations.RETURN_KIND && !MACHINE_TRAPS)) {
 			xFault = true
 			xCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[4]
-			xResult = xWord
+			xResult = xRaw
 		} else {
 			match (xKind)
 			{
@@ -223,9 +237,10 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 
 					if (xRedirect) {
 						xNext = target
-						xResult = xPc + 4
+						xResult = xPc + xLength
 
-						if ((target & 3) != 0) {
+						if ((INSTRUCTION_ALIGNMENT == RvInstructionAlignment.Halfword && (target & 1) != 0)
+							|| (INSTRUCTION_ALIGNMENT == RvInstructionAlignment.Word && (target & 3) != 0)) {
 							xFault = true
 							xCause = Rv32iOperations.INSTRUCTION_MISALIGNED as logic[4]
 							xResult = target
@@ -309,7 +324,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 		cComplete = cValid && (cFault || (cMemory && !dataGap && loadStore.ready == 0b1)
 			|| (cMultiply && !multiplyGap && multiplier.ready == 0b1)
 			|| (cCustom && !customGap && custom.ready == 0b1)
-			|| (cInstructionFence && fetch.synchronized == 0b1)
+			|| (cInstructionFence && instructions.synchronized == 0b1)
 			|| (!cMemory && !cMultiply && !cCustom && !cInstructionFence))
 		cFailed = cFault || (cMemory && loadStore.error == 0b1) || (cCsr && csrs.illegal == 0b1)
 			|| (cCustom && custom.fault == 0b1)
@@ -377,16 +392,20 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 			registers.writeEnable = 0b1
 		}
 
-		fetch.request = 0b0
-		fetch.address = fPc as logic[32]
-		fetch.synchronize = 0b0
+		instructions.request = 0b0
+		instructions.address = fPc as logic[32]
+		instructions.synchronize = 0b0
 
 		if (fBusy) {
-			fetch.request = 0b1
+			instructions.request = 0b1
 		}
 
 		if (cValid && cInstructionFence && !cFault) {
-			fetch.synchronize = 0b1
+			instructions.synchronize = 0b1
+		}
+
+		if (!initialized) {
+			instructions.synchronize = 0b1
 		}
 
 		loadStore.request = 0b0
@@ -568,10 +587,10 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 
 							if (cCustom) {
 								stopCause = custom.faultCause
-								stopValue = cWord
+								stopValue = cRaw
 							} elif (cCsr) {
 								stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
-								stopValue = cWord
+								stopValue = cRaw
 							} elif (cKind as uint == Rv32iOperations.STORE) {
 								stopCause = Rv32iOperations.STORE_ACCESS as logic[32]
 							}
@@ -588,7 +607,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 					} else {
 						retirementPulse = 0b1
 						commitPc = cPc as logic[32]
-						commitWord = cWord as logic[32]
+						commitWord = cRaw as logic[32]
 						commitRd = 0
 						commitValue = 0
 
@@ -632,6 +651,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 					cValid = true
 					cPc = xPc
 					cWord = xWord
+					cRaw = xRaw
 					cNext = xNext
 					cValue = xResult
 					cStoreValue = xRight
@@ -650,6 +670,8 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 					xValid = true
 					xPc = dPc
 					xWord = dWord
+					xRaw = dRaw
+					xLength = dLength
 					xControl = control
 					xImmediate = decoder.immediate as uint
 					xError = dError
@@ -685,24 +707,32 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 					dValid = true
 					dPc = fPc
 					dWord = fWord
+					dRaw = fRaw
+					dLength = fLength
 					dError = fError
 					dPhase = READ_WAIT
 					fValid = false
 				}
 
-				if (fBusy && fetch.ready == 0b1) {
+				if (fBusy && instructions.ready == 0b1) {
 					fBusy = false
 					fGap = true
 					fValid = !fKilled && !flush
-					fWord = fetch.instruction as uint
-					fError = fetch.error == 0b1
+					fWord = instructions.instruction as uint
+					fRaw = instructions.rawInstruction as uint
+					fLength = instructions.length as uint
+					fError = instructions.error == 0b1
+
+					if (!fKilled && !flush) {
+						fetchPc = fPc + instructions.length as uint
+					}
+
 					fKilled = false
 				}
 
 				if (launch) {
 					fBusy = true
 					fPc = fetchPc
-					fetchPc = fetchPc + 4
 
 					if (run == 0b0) {
 						stepActive = true

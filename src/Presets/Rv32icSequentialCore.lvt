@@ -1,0 +1,27 @@
+namespace Eccelerators.RiscV.Presets
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Storage
+using Eccelerators.RiscV.Contracts
+using Livt.IO
+
+/**
+ * Named RV32IC sequential composition. The compressed instruction front end
+ * frames mixed-width streams and reuses the ordinary RV32I decoder and units.
+ */
+component Rv32icSequentialCore<RESET_PC: uint = 0,
+	REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block> : Rv32SequentialCore<
+	Rv32RegisterBank<REGISTER_FILE_STYLE>,
+	Rv32iDecoder,
+	Rv32iIntegerUnit,
+	Rv32NoMUnit,
+	Rv32NoCsrs,
+	Rv32NoCustomInstruction,
+	RESET_PC,
+	32,
+	RvInstructionAlignment.Halfword,
+	Rv32cInstructionFetch
+> {}

@@ -2,6 +2,7 @@ namespace Eccelerators.RiscV.Sequential
 
 using Eccelerators.RiscV.Core
 using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Contracts
 
 /** Sequential specialization of the shared machine-mode composition. */
 component Rv32SequentialMachineCore<
@@ -13,10 +14,12 @@ component Rv32SequentialMachineCore<
 	MULTIPLIER: IRv32MPort & new(),
 	CUSTOM: IRv32CustomInstructionPort & new(),
 	RESET_PC: uint = 0,
-	REGISTER_COUNT: uint = 32
+	REGISTER_COUNT: uint = 32,
+	INSTRUCTION_ALIGNMENT: RvInstructionAlignment = RvInstructionAlignment.Word,
+	INSTRUCTIONS: IRv32InstructionPort & new(flip IRv32FetchPort) = Rv32WordInstructionFetch
 > : Rv32MachineCore<
 		IRv32RegisterPort,
-		Rv32SequentialEngine<RESET_PC, true, REGISTER_COUNT>,
+		Rv32SequentialEngine<RESET_PC, true, REGISTER_COUNT, INSTRUCTION_ALIGNMENT, INSTRUCTIONS>,
 		REGISTERS,
 		BASE_DECODER,
 		ZICSR,

@@ -16,9 +16,16 @@ using Eccelerators.RiscV.Machine
  * provider ties interruptEligible low, making delivery inert).
  */
 component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
-	REGISTER_COUNT: uint = 32> : IRv32ControlPort
+	REGISTER_COUNT: uint = 32,
+	INSTRUCTION_ALIGNMENT: RvInstructionAlignment = RvInstructionAlignment.Word,
+	INSTRUCTIONS: IRv32InstructionPort & new(flip IRv32FetchPort) = Rv32WordInstructionFetch
+> : IRv32ControlPort
 {
-	static assert (RESET_PC & 3) == 0, "Reset PC must be word aligned"
+	static if (INSTRUCTION_ALIGNMENT == RvInstructionAlignment.Halfword) {
+		static assert (RESET_PC & 1) == 0, "Reset PC must be halfword aligned"
+	} else {
+		static assert (RESET_PC & 3) == 0, "Reset PC must be word aligned"
+	}
 	static assert REGISTER_COUNT == 16 || REGISTER_COUNT == 32,
 		"Architectural register count must select RV32E or RV32I"
 
@@ -44,7 +51,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 
 	// Exclusive borrowed implementation instances, with substitutable decode/multiply ports.
 	registers: IRv32RegisterPort
-	fetch: IRv32FetchPort
+	instructions: INSTRUCTIONS
 	loadStore: IRv32LoadStorePort
 	decoder: IRv32DecodePort
 	integer: IRv32IntegerPort
@@ -57,6 +64,8 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 	clearIndex: uint
 	programCounter: uint
 	instruction: uint
+	rawInstruction: uint
+	instructionLength: uint
 	leftValue: uint
 	rightValue: uint
 	resultValue: uint
@@ -93,7 +102,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 		custom: flip IRv32CustomInstructionPort)
 	{
 		this.registers = registers
-		this.fetch = fetch
+		instructions = new INSTRUCTIONS(fetch)
 		this.loadStore = loadStore
 		this.decoder = decoder
 		this.integer = integer
@@ -150,7 +159,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 		kind = RvDecoded.Operation(control) >> Rv32iOperations.KIND_SHIFT
 		funct3 = (instruction >> 12) & 7
 		pc = programCounter as logic[32]
-		retiredInstruction = instruction as logic[32]
+		retiredInstruction = rawInstruction as logic[32]
 		idle = 0b0
 		halted = 0b0
 
@@ -162,16 +171,20 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 			halted = 0b1
 		}
 
-		fetch.request = 0b0
-		fetch.address = programCounter as logic[32]
-		fetch.synchronize = 0b0
+		instructions.request = 0b0
+		instructions.address = programCounter as logic[32]
+		instructions.synchronize = 0b0
 
 		if (phase == FETCH) {
-			fetch.request = 0b1
+			instructions.request = 0b1
 		}
 
 		if (phase == INSTRUCTION_FENCE_WAIT) {
-			fetch.synchronize = 0b1
+			instructions.synchronize = 0b1
+		}
+
+		if (phase == BOOT) {
+			instructions.synchronize = 0b1
 		}
 
 		// Copy values before pure calls so state registers keep direct publication.
@@ -347,13 +360,15 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 				}
 				FETCH =>
 				{
-					if (fetch.ready == 0b1) {
-						if (fetch.error == 0b1) {
+					if (instructions.ready == 0b1) {
+						if (instructions.error == 0b1) {
 							stopCause = Rv32iOperations.INSTRUCTION_ACCESS as logic[32]
 							stopValue = programCounter as logic[32]
 							phase = EXCEPTION
 						} else {
-							instruction = fetch.instruction as uint
+							instruction = instructions.instruction as uint
+							rawInstruction = instructions.rawInstruction as uint
+							instructionLength = instructions.length as uint
 							phase = DECODE
 						}
 					}
@@ -362,7 +377,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 				{
 					if (!RvDecoded.IsLegal(control) || (!MACHINE_TRAPS && kind == Rv32TrapOperations.RETURN_KIND)) {
 						stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
-						stopValue = instruction as logic[32]
+						stopValue = rawInstruction as logic[32]
 						phase = EXCEPTION
 					} else {
 						phase = READ_FIRST
@@ -395,7 +410,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 				EXECUTE =>
 				{
 					var arithmetic = integer.result as uint
-					nextPc = programCounter + 4
+					nextPc = programCounter + instructionLength
 					resultValue = arithmetic
 					phase = COMMIT
 
@@ -411,7 +426,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 						{
 							if (csrs.illegal == 0b1) {
 								stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
-								stopValue = instruction as logic[32]
+								stopValue = rawInstruction as logic[32]
 								phase = EXCEPTION
 							}
 						}
@@ -435,19 +450,21 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 								target = target & 0xfffffffe
 							}
 
-							if ((target & 3) != 0) {
+							if ((INSTRUCTION_ALIGNMENT == RvInstructionAlignment.Halfword && (target & 1) != 0)
+								|| (INSTRUCTION_ALIGNMENT == RvInstructionAlignment.Word && (target & 3) != 0)) {
 								stopCause = Rv32iOperations.INSTRUCTION_MISALIGNED as logic[32]
 								stopValue = target as logic[32]
 								phase = EXCEPTION
 							} else {
 								nextPc = target
-								resultValue = programCounter + 4
+								resultValue = programCounter + instructionLength
 							}
 						}
 						Rv32iOperations.BRANCH =>
 						{
 							if (Rv32iSemantics.Branch(funct3, operand1, operand2)) {
-								if ((arithmetic & 3) != 0) {
+								if ((INSTRUCTION_ALIGNMENT == RvInstructionAlignment.Halfword && (arithmetic & 1) != 0)
+									|| (INSTRUCTION_ALIGNMENT == RvInstructionAlignment.Word && (arithmetic & 3) != 0)) {
 									stopCause = Rv32iOperations.INSTRUCTION_MISALIGNED as logic[32]
 									stopValue = arithmetic as logic[32]
 									phase = EXCEPTION
@@ -503,7 +520,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 					if (custom.ready == 0b1) {
 						if (custom.fault == 0b1) {
 							stopCause = custom.faultCause
-							stopValue = instruction as logic[32]
+							stopValue = rawInstruction as logic[32]
 							phase = EXCEPTION
 						} else {
 							resultValue = custom.result as uint
@@ -513,7 +530,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 				}
 				INSTRUCTION_FENCE_WAIT =>
 				{
-					if (fetch.synchronized == 0b1) {
+					if (instructions.synchronized == 0b1) {
 						phase = COMMIT
 					}
 				}
@@ -568,7 +585,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 				_ =>
 				{
 					stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
-					stopValue = instruction as logic[32]
+					stopValue = rawInstruction as logic[32]
 					phase = EXCEPTION
 				}
 			}
