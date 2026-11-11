@@ -21,6 +21,8 @@ RV32IC presets select `RvInstructionAlignment.Halfword` and
 `Rv32cInstructionFetch`. The front end expands supported compressed integer
 instructions into canonical RV32I words, while preserving their original
 encoding and two-byte length for traps and retirement.
+RV32IA presets select `Rv32iaDecoder`. Both engines issue the same explicit
+atomic memory transactions from their ordered memory/commit boundary.
 Machine presets additionally select Zicsr, machine exceptions, MRET and both
 same-clock `timerPending` and `externalPending` inputs. Named machine presets use
 hart ID zero; use explicit composition for another hart ID or CSR provider.

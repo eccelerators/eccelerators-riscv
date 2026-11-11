@@ -1,0 +1,69 @@
+namespace Eccelerators.RiscV.Isa
+
+/** Pure 32-bit read-modify-write semantics shared by memories and tests. */
+public class Rv32AtomicSemantics
+{
+	/** Returns the word stored by an AMO; LR and SC are handled by reservation logic. */
+	public static fn Result[](operation: uint, original: uint, operand: uint) uint
+	{
+		match (operation)
+		{
+			Rv32AtomicOperations.ADD =>
+			{
+				return original + operand
+			}
+			Rv32AtomicOperations.SWAP =>
+			{
+				return operand
+			}
+			Rv32AtomicOperations.XOR =>
+			{
+				return original ^ operand
+			}
+			Rv32AtomicOperations.OR =>
+			{
+				return original | operand
+			}
+			Rv32AtomicOperations.AND =>
+			{
+				return original & operand
+			}
+			Rv32AtomicOperations.MIN =>
+			{
+				if ((original ^ 0x80000000) < (operand ^ 0x80000000)) {
+					return original
+				}
+
+				return operand
+			}
+			Rv32AtomicOperations.MAX =>
+			{
+				if ((original ^ 0x80000000) > (operand ^ 0x80000000)) {
+					return original
+				}
+
+				return operand
+			}
+			Rv32AtomicOperations.MIN_UNSIGNED =>
+			{
+				if (original < operand) {
+					return original
+				}
+
+				return operand
+			}
+			Rv32AtomicOperations.MAX_UNSIGNED =>
+			{
+				if (original > operand) {
+					return original
+				}
+
+				return operand
+			}
+			_ =>
+			{
+				return original
+			}
+		}
+	}
+}

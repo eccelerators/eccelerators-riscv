@@ -69,6 +69,14 @@ component Rv32LoadStoreBus<A_BASE: uint = 0, A_SIZE: uint = 16, B_BASE: uint = 0
 		slotB.byteEnable = byteEnable
 		slotA.writeData = writeData
 		slotB.writeData = writeData
+		slotA.atomic = atomic
+		slotB.atomic = atomic
+		slotA.atomicOperation = atomicOperation
+		slotB.atomicOperation = atomicOperation
+		slotA.acquire = acquire
+		slotB.acquire = acquire
+		slotA.release = release
+		slotB.release = release
 
 		if (hitA) {
 			slotA.request = request

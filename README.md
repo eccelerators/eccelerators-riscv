@@ -13,7 +13,7 @@ cohesive providers while the engines retain architectural commit.
 Version **0.3.0** removes the scheduled reference layer and uses separate
 instruction-fetch and load/store ports with a system-level composition. The
 unreleased sources add shared machine composition and structural presets for
-full M, Zba/Zbb/Zbs, RV32E, Zifencei and RV32C.
+full M, Zba/Zbb/Zbs, RV32E, Zifencei, RV32C and RV32A.
 
 ## Choose a core
 
@@ -24,6 +24,7 @@ and data providers implementing `flip IRv32FetchPort` and
 | Features | Sequential engine | Pipeline engine |
 |---|---|---|
 | RV32I | `Rv32iSequentialCore` | `Rv32iPipelineCore` |
+| RV32I + A | `Rv32iaSequentialCore` | `Rv32iaPipelineCore` |
 | RV32I + C | `Rv32icSequentialCore` | `Rv32icPipelineCore` |
 | RV32I + Zmmul | `Rv32iZmmulSequentialCore` | `Rv32iZmmulPipelineCore` |
 | RV32I + M | `Rv32iMSequentialCore` | `Rv32iMPipelineCore` |
@@ -64,6 +65,11 @@ engine architecture. `IRv32CustomInstructionPort` supports bounded, result-only
 custom instructions with variable latency and synchronous faults;
 `Rv32XqdivInstruction` is the qualified example. See
 [custom components](docs/custom-components.md).
+
+RVA cores require a data provider that implements the atomic fields of
+`IRv32LoadStorePort`. `RvLoadStoreRam` provides single-port LR/SC reservations
+and indivisible AMOs. Shared-memory systems must preserve the ownership and
+invalidation rules in [the atomic-memory contract](docs/atomic-memory.md).
 
 The application owns memories, firmware provisioning, peripherals and clock/reset.
 See [core selection](docs/cores.md) and [integration](docs/integration.md) before

@@ -111,7 +111,7 @@ operation or a device transaction while the hart runs.
 | Zifencei | Existing instruction-fetch fence provider | Reuse unchanged | Complete |
 | Zicntr | Existing cycle and retirement accounting | Add privilege enables and standard counter views | OS02 |
 | C | RV32C decompression, mixed-width instruction framing and engine length tracking | Measure FPGA resources, CPI and routed timing | I04 |
-| A | Existing load/store and variable-latency engine boundaries | Add LR/SC, AMOs and an atomic physical-memory contract | I05 |
+| A | RV32A decode, engine dispatch and atomic single-port RAM contract | Qualify traps, external memory and future multi-master arbitration | I05 |
 | M/S/U and PMP | Existing machine trap and CSR ownership | Add cohesive privilege/PMP provider and delegation | OS02 |
 | Sv32 | Existing fetch and load/store ports | Add translation ports, TLBs and a page-table walker | OS03 |
 | External RAM | Existing physical fetch/load-store behavior | Add optional accepted-request/response protocol and board adapters | A03, OS04 |

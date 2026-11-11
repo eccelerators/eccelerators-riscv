@@ -29,6 +29,9 @@ All notable changes to `Eccelerators.RiscV` are recorded here.
 - Add the `IRv32InstructionPort` framing boundary, RV32C integer decompression,
   cached cross-word instruction assembly and named RV32IC sequential and pipeline
   presets.
+- Add complete RV32A word decode and AMO semantics, memory-owned LR/SC
+  reservations, atomic RAM transactions and named RV32IA sequential and pipeline
+  presets.
 
 ### Changed
 
@@ -48,6 +51,8 @@ All notable changes to `Eccelerators.RiscV` are recorded here.
 - Make instruction framing and architectural alignment engine specializations;
   fixed-width cores retain the default word front end while RV32IC cores select
   halfword alignment and the compressed front end.
+- Extend `IRv32LoadStorePort` with explicit atomic operation and acquire/release
+  attributes. RAM implements atomics; MMIO devices reject them before effects.
 
 ### Removed
 

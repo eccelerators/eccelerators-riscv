@@ -1,13 +1,15 @@
 namespace Eccelerators.RiscV.Storage
 
 using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Isa
 using Livt.IO
 
 /**
  * Exclusive, synchronous little-endian RAM with one outstanding word transaction.
  * Holds completion until request falls. Byte writes use read/modify/write and are
- * atomic relative to this sole port. Out-of-range or unaligned requests fault
- * before a RAM access. Reset retains payload; initialize every location read.
+ * atomic relative to this sole port. RV32A operations and one reservation are
+ * implemented at the memory boundary. Out-of-range or unaligned requests fault
+ * before a RAM access. Reset retains payload but clears the reservation.
  * The composition root may provision whole words only while the CPU is idle and
  * request is low. Programming and execution must never overlap. No bus arbitration.
  */
@@ -38,10 +40,15 @@ component RvLoadStoreRam<WORDS: int = 1024, ADDRESS_BITS: int = 10,
 	phase: uint
 	responseError: logic
 	responseData: logic[32]
+	reservationValid: bool
+	reservationAddress: logic[32]
 
 	// Combinational address validity and expanded byte enables.
 	validAddress: bool
 	mask: uint
+	storeConditional: bool
+	storeConditionalSuccess: bool
+	validAtomicOperation: bool
 
 	/**
 	 * Creates exactly one synchronous payload memory.
@@ -57,6 +64,12 @@ component RvLoadStoreRam<WORDS: int = 1024, ADDRESS_BITS: int = 10,
 	process Drive[]()
 	{
 		validAddress = (address as uint & 3) == 0 && ((address as uint - BASE) >> 2) < (WORDS as uint)
+		storeConditional = atomic == 0b1
+			&& atomicOperation as uint == Rv32AtomicOperations.STORE_CONDITIONAL
+		storeConditionalSuccess = storeConditional && reservationValid
+			&& reservationAddress == address
+		validAtomicOperation = atomic == 0b0
+			|| Rv32AtomicOperations.IsOperation(atomicOperation as uint)
 		mask = 0
 
 		if ((byteEnable as uint & 1) != 0) {
@@ -88,13 +101,32 @@ component RvLoadStoreRam<WORDS: int = 1024, ADDRESS_BITS: int = 10,
 		storage.address = ((address as uint - BASE) >> 2) as logic[ADDRESS_BITS]
 		storage.writeData = writeData
 
-		if (phase == IDLE && request == 0b1 && validAddress) {
-			storage.enable = true
-			storage.writeEnable = write == 0b1 && byteEnable as uint == ALL_LANES
+		if (phase == IDLE && request == 0b1 && validAddress && validAtomicOperation) {
+			if (atomic == 0b1) {
+				if (storeConditional && storeConditionalSuccess) {
+					storage.enable = true
+					storage.writeEnable = true
+				} elif (!storeConditional) {
+					storage.enable = true
+				}
+			} else {
+				storage.enable = true
+				storage.writeEnable = write == 0b1 && byteEnable as uint == ALL_LANES
+			}
 		} elif (phase == WRITE_BACK) {
 			storage.enable = true
 			storage.writeEnable = true
-			storage.writeData = (((storage.readData as uint) & ~mask) | ((writeData as uint) & mask)) as logic[32]
+
+			if (atomic == 0b1) {
+				storage.writeData = Rv32AtomicSemantics.Result(
+					atomicOperation as uint,
+					storage.readData as uint,
+					writeData as uint
+				) as logic[32]
+			} else {
+				storage.writeData = (((storage.readData as uint) & ~mask)
+					| ((writeData as uint) & mask)) as logic[32]
+			}
 		} elif (phase == IDLE && request == 0b0 && programWrite == 0b1) {
 			storage.enable = true
 			storage.writeEnable = true
@@ -109,6 +141,10 @@ component RvLoadStoreRam<WORDS: int = 1024, ADDRESS_BITS: int = 10,
 	process Advance()
 	{
 		state {
+			if (phase == IDLE && request == 0b0 && programWrite == 0b1) {
+				reservationValid = false
+			}
+
 			match (phase)
 			{
 				IDLE =>
@@ -116,12 +152,39 @@ component RvLoadStoreRam<WORDS: int = 1024, ADDRESS_BITS: int = 10,
 					if (request == 0b1) {
 						responseError = 0b0
 
-						if (!validAddress) {
+						if (!validAddress || !validAtomicOperation) {
 							responseError = 0b1
+
+							if (storeConditional) {
+								reservationValid = false
+							}
+
 							phase = RESPONSE
+						} elif (atomic == 0b1) {
+							if (storeConditional) {
+								responseData = 1
+
+								if (storeConditionalSuccess) {
+									responseData = 0
+								}
+
+								reservationValid = false
+								phase = RESPONSE
+							} else {
+								if (atomicOperation as uint != Rv32AtomicOperations.LOAD_RESERVED) {
+									reservationValid = false
+								}
+
+								phase = CAPTURE
+							}
 						} elif (write == 0b1 && byteEnable as uint == ALL_LANES) {
+							reservationValid = false
 							phase = RESPONSE
 						} else {
+							if (write == 0b1) {
+								reservationValid = false
+							}
+
 							phase = CAPTURE
 						}
 					}
@@ -131,7 +194,14 @@ component RvLoadStoreRam<WORDS: int = 1024, ADDRESS_BITS: int = 10,
 					responseData = storage.readData
 					phase = RESPONSE
 
-					if (write == 0b1) {
+					if (atomic == 0b1) {
+						if (atomicOperation as uint == Rv32AtomicOperations.LOAD_RESERVED) {
+							reservationValid = true
+							reservationAddress = address
+						} else {
+							phase = WRITE_BACK
+						}
+					} elif (write == 0b1) {
 						phase = WRITE_BACK
 					}
 				}

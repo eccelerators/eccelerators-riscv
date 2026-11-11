@@ -39,19 +39,21 @@ component RvUartDevice<BASE: uint = 0x40000000> : IRv32LoadStorePort
 
 		var location: uint = 0
 		var store: bool = false
+		var atomicAccess: bool = false
 		var lanes: logic[4] = 0
 		var payload: byte = 0
 
 		state {
 			location = address as uint
 			store = write == 0b1
+			atomicAccess = atomic == 0b1
 			lanes = byteEnable
 			payload = writeData as byte
 			error = 0b0
 			readData = 0
 		}
 
-		if (location < BASE || location - BASE >= 12 || (location & 3) != 0) {
+		if (atomicAccess || location < BASE || location - BASE >= 12 || (location & 3) != 0) {
 			error = 0b1
 		} elif (store) {
 			if (location != BASE || (lanes & 0b1110) != 0) {

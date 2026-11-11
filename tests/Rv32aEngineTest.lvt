@@ -1,0 +1,141 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Presets
+using Eccelerators.RiscV.Storage
+
+/** Shared program covering AMO results, LR/SC and reservation invalidation. */
+public class Rv32aProgram
+{
+	public const WORDS: uint[14] = [
+		0x04000093, // addi x1, x0, 64
+		0x00500113, // addi x2, x0, 5
+		0x0620a1af, // amoadd.w.aqrl x3, x2, (x1)
+		0x0820a22f, // amoswap.w x4, x2, (x1)
+		0x1000a2af, // lr.w x5, (x1)
+		0x00900313, // addi x6, x0, 9
+		0x1860a3af, // sc.w x7, x6, (x1)
+		0x1820a42f, // sc.w x8, x2, (x1)
+		0x0000a483, // lw x9, 0(x1)
+		0x1000a52f, // lr.w x10, (x1)
+		0x0020a023, // sw x2, 0(x1), invalidating the reservation
+		0x1860a5af, // sc.w x11, x6, (x1)
+		0x0000a603, // lw x12, 0(x1)
+		0x00100073  // ebreak
+	]
+}
+
+/** Both execution engines must expose identical architectural atomic behavior. */
+@Test
+component Rv32aEngineTest
+{
+	sequentialFetch: RvFetchRom<32, 5>
+	sequentialData: RvLoadStoreRam<32, 5>
+	sequential: Rv32iaSequentialCore
+	pipelineFetch: RvFetchRom<32, 5>
+	pipelineData: RvLoadStoreRam<32, 5>
+	pipeline: Rv32iaPipelineCore
+	sequentialValues: uint[13]
+	pipelineValues: uint[13]
+	sequentialRetired: uint
+	pipelineRetired: uint
+
+	new()
+	{
+		sequentialFetch = new RvFetchRom<32, 5>()
+		sequentialData = new RvLoadStoreRam<32, 5>()
+		sequential = new Rv32iaSequentialCore(sequentialFetch, sequentialData)
+		pipelineFetch = new RvFetchRom<32, 5>()
+		pipelineData = new RvLoadStoreRam<32, 5>()
+		pipeline = new Rv32iaPipelineCore(pipelineFetch, pipelineData)
+	}
+
+	process Observe()
+	{
+		state {
+			if (sequential.retired == 0b1) {
+				sequentialRetired++
+
+				if (sequential.retiredRd != 0 && sequential.retiredRd as uint < 13) {
+					sequentialValues[sequential.retiredRd as uint] = sequential.retiredValue as uint
+				}
+			}
+
+			if (pipeline.retired == 0b1) {
+				pipelineRetired++
+
+				if (pipeline.retiredRd != 0 && pipeline.retiredRd as uint < 13) {
+					pipelineValues[pipeline.retiredRd as uint] = pipeline.retiredValue as uint
+				}
+			}
+		}
+	}
+
+	fn Load()
+	{
+		for (var index: uint = 0; index < Rv32aProgram.WORDS.Length as uint; index++) {
+			state {
+				sequentialFetch.programWrite = 0b1
+				sequentialFetch.programIndex = index as logic[5]
+				sequentialFetch.programData = Rv32aProgram.WORDS[index] as logic[32]
+				pipelineFetch.programWrite = 0b1
+				pipelineFetch.programIndex = index as logic[5]
+				pipelineFetch.programData = Rv32aProgram.WORDS[index] as logic[32]
+			}
+		}
+
+		state {
+			sequentialFetch.programWrite = 0b0
+			pipelineFetch.programWrite = 0b0
+			sequentialData.programWrite = 0b1
+			sequentialData.programIndex = 16
+			sequentialData.programData = 10
+			pipelineData.programWrite = 0b1
+			pipelineData.programIndex = 16
+			pipelineData.programData = 10
+		}
+
+		state {
+			sequentialData.programWrite = 0b0
+			pipelineData.programWrite = 0b0
+		}
+	}
+
+	@Test
+	fn AtomicProgram()
+	{
+		sequential.run = 0b0
+		pipeline.run = 0b0
+		Simulation.Wait(40)
+		Load()
+		sequential.run = 0b1
+		pipeline.run = 0b1
+		var elapsed: uint = 0
+
+		while ((sequential.halted == 0b0 || pipeline.halted == 0b0) && elapsed < 1000) {
+			state {
+				elapsed++
+			}
+		}
+
+		assert sequential.halted == 0b1 && pipeline.halted == 0b1
+		assert sequential.faultCause as uint == Rv32iOperations.BREAKPOINT
+		assert pipeline.faultCause as uint == Rv32iOperations.BREAKPOINT
+		assert sequentialRetired == 13 && pipelineRetired == 13
+
+		for (var index: uint = 0; index < 13; index++) {
+			assert sequentialValues[index] == pipelineValues[index]
+		}
+
+		assert sequentialValues[3] == 10
+		assert sequentialValues[4] == 15
+		assert sequentialValues[5] == 5
+		assert sequentialValues[7] == 0
+		assert sequentialValues[8] == 1
+		assert sequentialValues[9] == 9
+		assert sequentialValues[10] == 9
+		assert sequentialValues[11] == 1
+		assert sequentialValues[12] == 5
+	}
+}

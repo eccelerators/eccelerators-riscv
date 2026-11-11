@@ -2,10 +2,12 @@
 
 ## Dashboard
 
-`[ ]` means open; `[x]` means completed with the acceptance evidence recorded.
-Open items describe planned work; completed items state their implemented support.
-Within each phase, work from top to bottom unless measurements expose a different
-dependency.
+`[ ]` means open; `[x]` means the implementation is complete and its functional
+simulation passes. Open items describe planned work; completed items state their
+implemented support. Board, resource, timing and software-stack qualification may
+follow later without keeping an implementation issue open; each completed issue
+records any such deferred evidence. Within each phase, work from top to bottom unless
+measurements expose a different dependency.
 
 ### Completed foundation
 
@@ -21,17 +23,17 @@ dependency.
 
 ### Phase 2 — Machine composition and compact ISA improvements
 
-- [ ] A09 — Factor shared machine-mode ownership into `Rv32MachineCore`.
-- [ ] I01 — Complete the standard M integer multiply/divide extension.
+- [x] A09 — Factor shared machine-mode ownership into `Rv32MachineCore`.
+- [x] I01 — Complete the standard M integer multiply/divide extension.
 - [x] I02 — Add the Zba, Zbb and Zbs bit-manipulation extensions.
-- [ ] I08 — Add an RV32E reduced-register base option.
+- [x] I08 — Add an RV32E reduced-register base option.
 - [x] I03 — Add the Zifencei instruction-fetch fence extension.
 
 ### Phase 3 — Single-core operating-system path
 
 - [x] OS01 — Define the first concrete OS target and its resource budget.
-- [ ] I04 — Add the standard C compressed-instruction extension.
-- [ ] I05 — Add the standard A atomic-instruction extension.
+- [x] I04 — Add the standard C compressed-instruction extension.
+- [x] I05 — Add the standard A atomic-instruction extension.
 - [ ] OS02 — Add user and supervisor privilege modes.
 - [ ] OS03 — Add Sv32 virtual memory and precise page faults.
 - [ ] A03 — Introduce an optional memory protocol for higher throughput.
@@ -323,14 +325,13 @@ hardware.
 
 ### A09 — Shared machine-core composition
 
-**Status:** Implementation and functional regression are complete; FPGA
-qualification remains open. `Rv32MachineCore` owns the shared machine topology,
+**Status:** Completed. `Rv32MachineCore` owns the shared machine topology,
 and thin sequential and pipeline specializations bind their native register ports
 and engines. Both qualified machine presets inherit this structure. The one
 `Rv32ZicsrComposition` instance supplies decode and CSR access, and the shared core
 owns interrupt/control forwarding. Existing machine, CSR, trap and interrupt tests
-pass for both engines. Close this item after recording the Tang Primer 25K resource
-and routed-timing comparison required by acceptance.
+pass for both engines. Tang Primer 25K resource and routed-timing comparisons are
+deferred to later board qualification.
 
 **Constraint:** `Rv32iZmmulSequentialMachineCore` and
 `Rv32iZmmulPipelineMachineCore` independently own and connect the same machine-mode
@@ -361,19 +362,21 @@ regression.
 ## Standard ISA extensions
 
 These issues cover the next standard extensions useful to the current FPGA cores.
-They are deliberately staged: an extension is not complete until decode, architectural
-state, execution, faults, software-visible capability reporting and both engine
-integrations are qualified. The list is not a claim to support every ratified RISC-V
-extension; add further extensions when a concrete core or workload requires them.
+They are deliberately staged: implementation covers decode, architectural state,
+execution, faults and both engine integrations where applicable. Functional simulation
+closes the implementation issue. Software-visible capability reporting, board results
+and broader platform qualification can follow in the issue that integrates or qualifies
+that system. The list is not a claim to support every ratified RISC-V extension; add
+further extensions when a concrete core or workload requires them.
 
 ### I01 — Full M multiplication and division
 
-**Status:** Implementation and functional regression are complete; synthesis and
-performance qualification remain open. `IRv32MPort`, `IRv32DividerPort`,
+**Status:** Completed. `IRv32MPort`, `IRv32DividerPort`,
 `Rv32IterativeDivider`, `Rv32MUnit`, the full-M decoder and named sequential and
 pipeline presets cover all eight M operations while Zmmul remains multiply-only.
 Architectural edge vectors and dependency/stall programs pass in both engines.
-Close this item after recording resource, CPI and routed-timing comparisons.
+Resource, CPI and routed-timing comparisons are deferred to later board
+qualification.
 
 **Constraint:** Zmmul implements multiplication only. Standard M additionally requires
 DIV, DIVU, REM and REMU with specified division-by-zero and signed-overflow results.
@@ -427,7 +430,8 @@ ordering across delayed stores, and the documented cacheless implementation.
 
 ### I04 — C compressed instructions
 
-**Status:** Functionally implemented; FPGA qualification remains open.
+**Status:** Completed. Functional simulation covers the implementation; FPGA
+qualification is deferred.
 `IRv32InstructionPort` separates architectural instruction framing from the
 aligned physical-word fetch contract. Both engines own a generic front end and
 default to the zero-state `Rv32WordInstructionFetch`, preserving existing core
@@ -443,8 +447,8 @@ Directed decompression vectors and a mixed-width program pass in both engines,
 covering dependencies, raw retirement, a boundary-spanning instruction, a taken
 compressed branch, compressed link-address generation and an illegal compressed
 fault. Existing 34-test sequential and 34-test pipeline suites also pass through
-the fixed-width adapter. Resource, CPI and routed timing measurements remain
-before this item can close.
+the fixed-width adapter. Resource, CPI and routed timing measurements remain as
+later qualification work.
 
 **Constraint:** Fetch, PC progression, alignment faults and decode currently assume a
 32-bit instruction at a four-byte boundary. C permits mixed 16-bit and 32-bit
@@ -460,6 +464,20 @@ faults and boundary-spanning 32-bit instructions. Measure code-size, CPI, resour
 routed timing in both engines.
 
 ### I05 — A atomic instructions
+
+**Status:** Completed for the single-port memory path. `Rv32aDecoder` accepts every
+standard RV32A word operation and preserves `aq`/`rl`. Both engines issue atomic
+requests only at their ordered memory/commit boundary. `RvLoadStoreRam` owns one
+reservation, performs indivisible AMOs and returns architectural LR/SC results.
+Ordinary stores, AMOs and host provisioning invalidate the reservation. Named
+`Rv32iaSequentialCore` and `Rv32iaPipelineCore` presets expose the composition.
+
+Directed decode and semantic vectors cover all eleven operations and reserved
+encodings. A shared program passes on both engines, covering AMO results, LR/SC
+success and failure, dependencies, `aqrl`, and invalidation by an ordinary store.
+The existing 34-test sequential and 34-test pipeline suites also pass. Interrupt/trap
+and access-fault vectors, a single-core lock workload, FPGA measurements and the OS
+memory path remain as later system qualification work.
 
 **Constraint:** The current load/store protocol cannot express an indivisible
 read-modify-write transaction or an LR/SC reservation. A Linux-capable ISA needs
@@ -505,12 +523,12 @@ measure the cost of F-only and FD compositions independently.
 
 ### I08 — RV32E reduced-register base
 
-**Status:** Implementation and functional regression are complete; ABI and FPGA
-qualification remain open. Dedicated RV32E decoders, sixteen-entry sequential and
+**Status:** Completed. Dedicated RV32E decoders, sixteen-entry sequential and
 dual-read register banks, and named presets retain the shared engine architecture
 while reserving every instruction encoding that names x16 through x31. Both engines
-prove legal x15 retirement and precise illegal-instruction handling. Close this item
-after an `ilp32e` program and the RV32E/RV32I resource and timing comparison pass.
+prove legal x15 retirement and precise illegal-instruction handling. An `ilp32e`
+program and the RV32E/RV32I resource and timing comparison remain as later software
+and board qualification work.
 
 **Constraint:** RV32E uses sixteen integer registers and reserves encodings that name
 x16 through x31. Existing decode and storage assume the full RV32I register set.

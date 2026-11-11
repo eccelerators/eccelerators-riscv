@@ -48,7 +48,7 @@ component RvExternalInterrupts<SOURCES: int = 2, BASE: uint = 0x40000200> : IRv3
 		readData = responseData
 		externalPending = (((sources as uint) & enabled) != 0) as logic
 		offset = (address as uint) - BASE
-		validAccess = (offset == PENDING || offset == ENABLE || offset == ACTIVE)
+		validAccess = atomic == 0b0 && (offset == PENDING || offset == ENABLE || offset == ACTIVE)
 			&& (write == 0b0 || offset == ENABLE)
 		mask = 0
 

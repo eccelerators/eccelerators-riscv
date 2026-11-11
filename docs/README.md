@@ -6,6 +6,7 @@
 | [Core selection](cores.md) | Presets, generics and execution behavior |
 | [System composition](system.md) | Default memories, explicit routing and UART |
 | [Integration](integration.md) | Memory protocol, register storage, reset and controls |
+| [Atomic memory](atomic-memory.md) | LR/SC ownership, AMO indivisibility and multi-master obligations |
 | [Machine support](machine.md) | CSR map, exceptions, MRET and interrupts |
 | [Peripherals](peripherals.md) | Timer and external interrupt components |
 | [Platform information](platform-info.md) | Software-visible composition identity and implementation choices |

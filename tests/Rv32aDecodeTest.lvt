@@ -1,0 +1,92 @@
+namespace Eccelerators.RiscV.Tests
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Contracts
+
+/** Directed RV32A decode and read-modify-write semantic checks. */
+@Test
+component Rv32aDecodeTest
+{
+	base: Rv32iDecoder
+	decoder: Rv32aDecoder
+
+	new()
+	{
+		base = new Rv32iDecoder()
+		decoder = new Rv32aDecoder(base)
+	}
+
+	/** Every standard word operation decodes to the atomic family. */
+	@Test
+	fn Operations()
+	{
+		var operations: uint[11] = [
+			Rv32AtomicOperations.ADD,
+			Rv32AtomicOperations.SWAP,
+			Rv32AtomicOperations.LOAD_RESERVED,
+			Rv32AtomicOperations.STORE_CONDITIONAL,
+			Rv32AtomicOperations.XOR,
+			Rv32AtomicOperations.OR,
+			Rv32AtomicOperations.AND,
+			Rv32AtomicOperations.MIN,
+			Rv32AtomicOperations.MAX,
+			Rv32AtomicOperations.MIN_UNSIGNED,
+			Rv32AtomicOperations.MAX_UNSIGNED
+		]
+
+		for (var index: uint = 0; index < operations.Length as uint; index++) {
+			var operation = operations[index]
+			var source2: uint = 2
+
+			if (operation == Rv32AtomicOperations.LOAD_RESERVED) {
+				source2 = 0
+			}
+
+			decoder.instruction = ((operation << 27) | (1 << 26) | (1 << 25)
+				| (source2 << 20) | (1 << 15) | (2 << 12) | (3 << 7)
+				| Rv32AtomicOperations.OPCODE) as logic[32]
+			state {}
+			var control = decoder.control as uint
+			assert RvDecoded.IsLegal(control)
+			assert RvDecoded.Operation(control)
+				== ((Rv32AtomicOperations.KIND << Rv32iOperations.KIND_SHIFT) | operation)
+			assert RvDecoded.Rd(control) == 3 && RvDecoded.Rs1(control) == 1
+			assert RvDecoded.HasSource1(control) && RvDecoded.HasDestinationWrite(control)
+			assert RvDecoded.HasSource2(control)
+				== (operation != Rv32AtomicOperations.LOAD_RESERVED)
+		}
+	}
+
+	/** Reserved widths, operations and a nonzero LR rs2 remain illegal. */
+	@Test
+	fn ReservedEncodings()
+	{
+		decoder.instruction = 0x1020a1af
+		state {}
+		assert decoder.control as uint == 0
+
+		decoder.instruction = 0x100091af
+		state {}
+		assert decoder.control as uint == 0
+
+		decoder.instruction = 0x7a20a1af
+		state {}
+		assert decoder.control as uint == 0
+	}
+
+	/** Signed and unsigned min/max plus logical and arithmetic AMOs are exact. */
+	@Test
+	fn Semantics()
+	{
+		assert Rv32AtomicSemantics.Result(Rv32AtomicOperations.ADD, 7, 5) == 12
+		assert Rv32AtomicSemantics.Result(Rv32AtomicOperations.SWAP, 7, 5) == 5
+		assert Rv32AtomicSemantics.Result(Rv32AtomicOperations.XOR, 0x55, 0x0f) == 0x5a
+		assert Rv32AtomicSemantics.Result(Rv32AtomicOperations.OR, 0x50, 0x0f) == 0x5f
+		assert Rv32AtomicSemantics.Result(Rv32AtomicOperations.AND, 0x55, 0x0f) == 5
+		assert Rv32AtomicSemantics.Result(Rv32AtomicOperations.MIN, 0xffffffff, 1) == 0xffffffff
+		assert Rv32AtomicSemantics.Result(Rv32AtomicOperations.MAX, 0xffffffff, 1) == 1
+		assert Rv32AtomicSemantics.Result(Rv32AtomicOperations.MIN_UNSIGNED, 0xffffffff, 1) == 1
+		assert Rv32AtomicSemantics.Result(Rv32AtomicOperations.MAX_UNSIGNED, 0xffffffff, 1) == 0xffffffff
+	}
+}

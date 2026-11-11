@@ -34,6 +34,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 
 	// Semantic families implemented by the controller, excluding the borrowed ALU.
 	public const CAPABILITIES: uint = Rv32iOperations.MEMORY_CAPABILITY | Rv32iOperations.CONTROL_CAPABILITY
+	public const ATOMIC_CAPABILITIES: uint = Rv32AtomicOperations.CAPABILITY
 
 	// Decode response lifecycle; a stalled captured pair must not be read again.
 	const READ_WAIT: uint = 0
@@ -142,6 +143,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 	xCause: logic[4]
 	xRedirect: bool
 	cMemory: bool
+	cAtomic: bool
 	cMultiply: bool
 	cCustom: bool
 	cCsr: bool
@@ -196,6 +198,10 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 		integer.left = xLeft as logic[32]
 		integer.right = xImmediate as logic[32]
 
+		if (xKind == Rv32AtomicOperations.KIND) {
+			integer.operation = Rv32iOperations.ADD as logic[6]
+		}
+
 		if (xKind == Rv32iOperations.REGISTER) {
 			integer.right = xRight as logic[32]
 		}
@@ -247,13 +253,16 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 						}
 					}
 				}
-				Rv32iOperations.LOAD, Rv32iOperations.STORE =>
+				Rv32iOperations.LOAD, Rv32iOperations.STORE, Rv32AtomicOperations.KIND =>
 				{
 					if (Rv32iSemantics.Misaligned(arithmetic, xWidth)) {
 						xFault = true
 						xCause = Rv32iOperations.LOAD_MISALIGNED as logic[4]
 
-						if (xKind == Rv32iOperations.STORE) {
+						if (xKind == Rv32iOperations.STORE
+							|| (xKind == Rv32AtomicOperations.KIND
+								&& (RvDecoded.Operation(control) & 31)
+									!= Rv32AtomicOperations.LOAD_RESERVED)) {
 							xCause = Rv32iOperations.STORE_MISALIGNED as logic[4]
 						}
 					}
@@ -315,7 +324,9 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 		var csrInstruction = cWord
 		var csrOperand = cOperand
 		var csrDestination = cRd as uint
+		cAtomic = cKind as uint == Rv32AtomicOperations.KIND
 		cMemory = cKind as uint == Rv32iOperations.LOAD || cKind as uint == Rv32iOperations.STORE
+			|| cAtomic
 		cMultiply = cKind as uint == Rv32MultiplyOperations.KIND
 		cCustom = cKind as uint == Rv32CustomInstructionOperations.KIND
 		cCsr = cKind as uint == Rv32CsrOperations.KIND
@@ -331,7 +342,7 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 		cWrite = cComplete && !cFailed && cWrites && cRd != 0
 		cResult = cValue
 
-		if (cKind as uint == Rv32iOperations.LOAD) {
+		if (cKind as uint == Rv32iOperations.LOAD || cAtomic) {
 			cResult = Rv32iSemantics.Load(loadStore.readData as uint, addressValue, width)
 		} elif (cMultiply) {
 			cResult = multiplier.result as uint
@@ -413,6 +424,10 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 		loadStore.write = 0b0
 		loadStore.byteEnable = Rv32iSemantics.StoreMask(addressValue, width) as logic[4]
 		loadStore.writeData = (cStoreValue << (((cValue & 3) * 8) as int)) as logic[32]
+		loadStore.atomic = cAtomic as logic
+		loadStore.atomicOperation = ((cWord >> 27) & 31) as logic[5]
+		loadStore.acquire = ((cWord >> 26) & 1) as logic
+		loadStore.release = ((cWord >> 25) & 1) as logic
 
 		if (cValid && cMemory && !cFault && !dataGap) {
 			loadStore.request = 0b1
@@ -420,6 +435,11 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 
 		if (cKind as uint == Rv32iOperations.STORE) {
 			loadStore.write = 0b1
+		}
+
+		if (cAtomic) {
+			loadStore.byteEnable = 15
+			loadStore.writeData = cStoreValue as logic[32]
 		}
 
 		multiplier.request = 0b0
@@ -591,7 +611,9 @@ component Rv32PipelineEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 							} elif (cCsr) {
 								stopCause = Rv32iOperations.ILLEGAL_INSTRUCTION as logic[32]
 								stopValue = cRaw
-							} elif (cKind as uint == Rv32iOperations.STORE) {
+							} elif (cKind as uint == Rv32iOperations.STORE
+								|| (cAtomic && ((cWord >> 27) & 31)
+									!= Rv32AtomicOperations.LOAD_RESERVED)) {
 								stopCause = Rv32iOperations.STORE_ACCESS as logic[32]
 							}
 						}

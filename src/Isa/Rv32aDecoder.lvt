@@ -1,0 +1,70 @@
+namespace Eccelerators.RiscV.Isa
+
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Contracts
+
+/** Combinational A-extension overlay for RV32 word atomics. */
+component Rv32aDecoder : IRv32DecodePort
+{
+	public const CAPABILITIES: uint = Rv32AtomicOperations.CAPABILITY
+
+	base: IRv32DecodePort
+
+	new(base: flip IRv32DecodePort)
+	{
+		this.base = base
+	}
+
+	process Decode[]()
+	{
+		base.instruction = instruction
+		control = base.control
+		immediate = base.immediate
+		var word = instruction as uint
+		var operation = (word >> 27) & 31
+		var source2 = operation != Rv32AtomicOperations.LOAD_RESERVED
+		var legal = (word & 127) == Rv32AtomicOperations.OPCODE
+			&& ((word >> 12) & 7) == Rv32AtomicOperations.WORD_WIDTH
+			&& Rv32AtomicOperations.IsOperation(operation)
+
+		if (operation == Rv32AtomicOperations.LOAD_RESERVED && ((word >> 20) & 31) != 0) {
+			legal = false
+		}
+
+		if (legal) {
+			control = RvDecoded.Pack(
+				(Rv32AtomicOperations.KIND << Rv32iOperations.KIND_SHIFT) | operation,
+				(word >> 7) & 31,
+				(word >> 15) & 31,
+				(word >> 20) & 31,
+				true,
+				source2,
+				true,
+				true
+			) as logic[32]
+			immediate = 0
+		}
+	}
+}
+
+/** No-argument RV32I + A decoder composition for general cores. */
+component Rv32iaDecoder : IRv32DecodePort
+{
+	public const CAPABILITIES: uint = Rv32iDecode.CAPABILITIES | Rv32AtomicOperations.CAPABILITY
+
+	base: Rv32iDecoder
+	extension: Rv32aDecoder
+
+	new()
+	{
+		base = new Rv32iDecoder()
+		extension = new Rv32aDecoder(base)
+	}
+
+	process Connect[]()
+	{
+		extension.instruction = instruction
+		control = extension.control
+		immediate = extension.immediate
+	}
+}

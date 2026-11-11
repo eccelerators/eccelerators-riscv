@@ -40,7 +40,7 @@ component RvPlatformInfo<BASE: uint = 0x40000400, COMPOSITION_ID: uint = 0,
 	process Decode[]()
 	{
 		offset = (address as uint) - BASE
-		validRead = write == 0b0 && (address as uint) >= BASE
+		validRead = atomic == 0b0 && write == 0b0 && (address as uint) >= BASE
 			&& offset <= RvPlatformInfoValues.CLOCK_HZ_OFFSET && (offset & 3) == 0
 		selected = 0
 

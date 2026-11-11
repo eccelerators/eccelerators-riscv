@@ -62,7 +62,7 @@ component RvMachineTimer<BASE: uint = 0x40000100, TICK_DIVISOR: uint = 50,
 		timerPending = (timeHigh > ~compareHighInverted
 			|| (timeHigh == ~compareHighInverted && timeLow >= ~compareLowInverted)) as logic
 		offset = (address as uint) - BASE
-		validAddress = offset < 16 && (offset & 3) == 0
+		validAddress = atomic == 0b0 && offset < 16 && (offset & 3) == 0
 		mask = 0
 
 		if ((byteEnable as uint & 1) != 0) {

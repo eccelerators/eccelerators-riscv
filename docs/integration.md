@@ -6,7 +6,8 @@ Both engines borrow separate instruction and data providers through
 [`IRv32FetchPort`](../src/Core/IRv32FetchPort.lvt) and
 [`IRv32LoadStorePort`](../src/Core/IRv32LoadStorePort.lvt). Each port carries
 one outstanding aligned 32-bit word transaction in one clock domain. Fetch has
-no write signals; write direction, byte enables and write data apply only to load/store.
+no write signals; write direction, byte enables, write data and atomic attributes
+apply only to the data port.
 
 1. Hold request, address, write direction, byte enable and write data stable until
    an edge with `ready = 1`.
@@ -18,6 +19,13 @@ transaction exactly once. Reads ignore the byte enable; stores use little-endian
 lanes, with lane zero selecting bits 7..0. A zero store mask has no effect.
 Providers must reject errors before irreversible effects. There is no transaction
 cancellation, retry or rollback protocol.
+
+An atomic request sets `atomic`, supplies one `Rv32AtomicOperations` value and
+carries the instruction's `acquire` and `release` bits. LR and AMOs return the
+original word. SC returns zero after a successful conditional write and one when
+the reservation does not match. Atomic requests require word alignment and ignore
+ordinary write direction and byte enables. See [atomic memory](atomic-memory.md)
+for reservation ownership and multi-master requirements.
 
 Engines consume architectural instructions through
 [`IRv32InstructionPort`](../src/Core/IRv32InstructionPort.lvt). Their generic
@@ -56,6 +64,11 @@ and a separate provisioning channel. Full-word writes use one RAM operation;
 partial writes use read/modify/write. Payload RAM survives reset and has no
 promised initial contents. Initialize every location read, including untouched
 bytes before a partial write.
+
+The RAM also implements the RV32A word operations. It holds one reservation for
+its sole requester, clears it on stores, AMOs and host provisioning, and performs
+each AMO inside the same exclusive RAM transaction. MMIO providers reject atomic
+requests before effects.
 
 Provision only while execution is disabled, the CPU is idle and requests have
 drained. The provisioning channel does not arbitrate concurrent CPU access.

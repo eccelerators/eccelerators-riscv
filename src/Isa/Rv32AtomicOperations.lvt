@@ -1,0 +1,34 @@
+namespace Eccelerators.RiscV.Isa
+
+/**
+ * RV32A decode and memory-operation vocabulary. Operation values retain the
+ * architectural funct5 encoding so traces and interconnects remain recognizable.
+ */
+public class Rv32AtomicOperations
+{
+	public const CAPABILITY: uint = 512
+	public const KIND: uint = 18
+	public const OPCODE: uint = 0x2f
+	public const WORD_WIDTH: uint = 2
+
+	public const ADD: uint = 0x00
+	public const SWAP: uint = 0x01
+	public const LOAD_RESERVED: uint = 0x02
+	public const STORE_CONDITIONAL: uint = 0x03
+	public const XOR: uint = 0x04
+	public const OR: uint = 0x08
+	public const AND: uint = 0x0c
+	public const MIN: uint = 0x10
+	public const MAX: uint = 0x14
+	public const MIN_UNSIGNED: uint = 0x18
+	public const MAX_UNSIGNED: uint = 0x1c
+
+	/** Returns whether funct5 identifies a standard RV32A word operation. */
+	public static fn IsOperation[](operation: uint) bool
+	{
+		return operation == ADD || operation == SWAP || operation == LOAD_RESERVED
+			|| operation == STORE_CONDITIONAL || operation == XOR || operation == OR
+			|| operation == AND || operation == MIN || operation == MAX
+			|| operation == MIN_UNSIGNED || operation == MAX_UNSIGNED
+	}
+}

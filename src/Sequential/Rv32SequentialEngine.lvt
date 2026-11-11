@@ -31,6 +31,7 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 
 	// Semantic operation families owned by the controller, separate from integer execution.
 	public const CAPABILITIES: uint = Rv32iOperations.MEMORY_CAPABILITY | Rv32iOperations.CONTROL_CAPABILITY
+	public const ATOMIC_CAPABILITIES: uint = Rv32AtomicOperations.CAPABILITY
 
 	// Controller phases. Boot clears the bank; stopped waits for an explicit restart.
 	const BOOT: uint = 0
@@ -198,6 +199,10 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 		loadStore.write = 0b0
 		loadStore.byteEnable = Rv32iSemantics.StoreMask(addressValue, width) as logic[4]
 		loadStore.writeData = (rightValue << (((memoryAddress & 3) * 8) as int)) as logic[32]
+		loadStore.atomic = 0b0
+		loadStore.atomicOperation = (RvDecoded.Operation(control) & 31) as logic[5]
+		loadStore.acquire = ((instruction >> 26) & 1) as logic
+		loadStore.release = ((instruction >> 25) & 1) as logic
 
 		if (phase == MEMORY) {
 			loadStore.request = 0b1
@@ -205,6 +210,12 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 
 		if (kind == Rv32iOperations.STORE) {
 			loadStore.write = 0b1
+		}
+
+		if (kind == Rv32AtomicOperations.KIND) {
+			loadStore.atomic = 0b1
+			loadStore.byteEnable = 15
+			loadStore.writeData = rightValue as logic[32]
 		}
 
 		registers.enable = 0b0
@@ -298,6 +309,10 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 		integer.operation = (RvDecoded.Operation(control) & Rv32iOperations.ALU_MASK) as logic[6]
 		integer.left = leftValue as logic[32]
 		integer.right = decoder.immediate
+
+		if (kind == Rv32AtomicOperations.KIND) {
+			integer.operation = Rv32iOperations.ADD as logic[6]
+		}
 
 		if (kind == Rv32iOperations.REGISTER) {
 			integer.right = rightValue as logic[32]
@@ -473,12 +488,15 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 								}
 							}
 						}
-						Rv32iOperations.LOAD, Rv32iOperations.STORE =>
+						Rv32iOperations.LOAD, Rv32iOperations.STORE, Rv32AtomicOperations.KIND =>
 						{
 							memoryAddress = arithmetic
 
 							if (Rv32iSemantics.Misaligned(arithmetic, funct3)) {
-								if (kind == Rv32iOperations.LOAD) {
+								if (kind == Rv32iOperations.LOAD
+									|| (kind == Rv32AtomicOperations.KIND
+										&& (RvDecoded.Operation(control) & 31)
+											== Rv32AtomicOperations.LOAD_RESERVED)) {
 									stopCause = Rv32iOperations.LOAD_MISALIGNED as logic[32]
 									stopValue = arithmetic as logic[32]
 									phase = EXCEPTION
@@ -538,7 +556,10 @@ component Rv32SequentialEngine<RESET_PC: uint = 0, MACHINE_TRAPS: bool = false,
 				{
 					if (loadStore.ready == 0b1) {
 						if (loadStore.error == 0b1) {
-							if (kind == Rv32iOperations.LOAD) {
+							if (kind == Rv32iOperations.LOAD
+								|| (kind == Rv32AtomicOperations.KIND
+									&& (RvDecoded.Operation(control) & 31)
+										== Rv32AtomicOperations.LOAD_RESERVED)) {
 								stopCause = Rv32iOperations.LOAD_ACCESS as logic[32]
 								stopValue = memoryAddress as logic[32]
 								phase = EXCEPTION

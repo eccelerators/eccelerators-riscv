@@ -1,0 +1,27 @@
+namespace Eccelerators.RiscV.Presets
+
+using Eccelerators.RiscV.Isa
+using Eccelerators.RiscV.Core
+using Eccelerators.RiscV.Machine
+using Eccelerators.RiscV.Sequential
+using Eccelerators.RiscV.Storage
+using Livt.IO
+
+/** Named RV32IA sequential composition with memory-owned atomicity. */
+component Rv32iaSequentialCore<RESET_PC: uint = 0,
+	REGISTER_FILE_STYLE: MemoryStyle = MemoryStyle.Block> : Rv32SequentialCore<
+	Rv32RegisterBank<REGISTER_FILE_STYLE>,
+	Rv32iaDecoder,
+	Rv32iIntegerUnit,
+	Rv32NoMUnit,
+	Rv32NoCsrs,
+	Rv32NoCustomInstruction,
+	RESET_PC
+>
+{
+	static assert Rv32iaDecoder.CAPABILITIES
+		== (Rv32iDecode.CAPABILITIES | Rv32AtomicOperations.CAPABILITY),
+		"RV32IA decoder coverage is incomplete"
+	static assert Rv32SequentialEngine.ATOMIC_CAPABILITIES == Rv32AtomicOperations.CAPABILITY,
+		"Sequential engine lacks atomic dispatch"
+}
